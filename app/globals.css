@@ -100,6 +100,21 @@ body {
   font-family: var(--font-sans);
 }
 
+.command-scene {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: .62;
+  overflow: hidden;
+}
+
+body > main { position: relative; z-index: 1; }
+
+@media (max-width: 900px) {
+  .command-scene { opacity: .28; }
+}
+
 .command-grid {
   background-image: url('/command-decor.svg'), radial-gradient(circle at 50% 8%, rgba(239,68,68,.12), transparent 28%), linear-gradient(rgba(125,145,165,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(125,145,165,.045) 1px, transparent 1px);
   background-size: cover, auto, 34px 34px, 34px 34px;

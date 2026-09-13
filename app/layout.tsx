@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import CommandScene from "./command-scene";
 
 export const metadata: Metadata = {
   title: "5K Fivethousand Command Center",
@@ -17,7 +18,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="th">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased"><CommandScene />{children}</body>
     </html>
   );
 }
