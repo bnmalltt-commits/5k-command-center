@@ -52,6 +52,15 @@ export const partyActivityMembers = sqliteTable("party_activity_members", {
   memberId: integer("member_id").notNull().references(() => members.id),
 }, (table) => [uniqueIndex("idx_party_activity_member_once").on(table.partyActivityId, table.memberId)]);
 
+// Favorites belong to the member choosing a party, so each person can keep a
+// different shortlist without changing the other members' views.
+export const memberFavorites = sqliteTable("member_favorites", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerMemberId: integer("owner_member_id").notNull().references(() => members.id),
+  favoriteMemberId: integer("favorite_member_id").notNull().references(() => members.id),
+  createdAt: text("created_at").notNull(),
+}, (table) => [uniqueIndex("idx_member_favorite_once").on(table.ownerMemberId, table.favoriteMemberId)]);
+
 export const pointLedger = sqliteTable("point_ledger", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   memberId: integer("member_id").notNull().references(() => members.id),

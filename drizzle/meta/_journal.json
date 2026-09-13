@@ -15,6 +15,13 @@
       "when": 1789300529116,
       "tag": "0001_yummy_bishop",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1789300787646,
+      "tag": "0002_groovy_pixie",
+      "breakpoints": true
     }
   ]
 }
