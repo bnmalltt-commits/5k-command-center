@@ -109,7 +109,7 @@ body {
   overflow: hidden;
 }
 
-body > main { position: relative; z-index: 1; }
+body > main { position: relative; z-index: 1; background-color: transparent !important; }
 
 @media (max-width: 900px) {
   .command-scene { opacity: .28; }

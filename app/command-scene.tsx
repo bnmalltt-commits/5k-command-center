@@ -22,7 +22,7 @@ function OrbitalCore() {
   });
 
   return (
-    <group position={[1.8, 0.2, -0.5]} scale={1.55}>
+    <group position={[2.65, 1.05, -0.5]} scale={1.7}>
       <pointLight color="#ff263c" intensity={9} distance={7} />
       <ambientLight intensity={0.28} />
       <mesh ref={core}>
