@@ -1,11 +1,11 @@
 import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
+
 const date = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 const now = () => new Date().toISOString();
 export async function POST(request: Request) {
   try {
-    const user = await getChatGPTUser(); if (!user) return Response.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
-    const me = await env.DB.prepare("SELECT * FROM members WHERE external_user_id = ?").bind(user.userId).first<any>(); if (!me) return Response.json({ error: "ไม่พบสมาชิก" }, { status: 403 });
+    const session = request.headers.get("cookie")?.match(/(?:^|;\s*)fivek_session=([^;]+)/); if (!session) return Response.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
+    const me = await env.DB.prepare("SELECT members.* FROM sessions JOIN members ON members.id=sessions.member_id WHERE sessions.token=? AND sessions.expires_at>? AND members.active=1").bind(session[1], now()).first<any>(); if (!me) return Response.json({ error: "ไม่พบสมาชิก" }, { status: 403 });
     const form = await request.formData(); const file = form.get("image"); const type = String(form.get("type"));
     if (!(file instanceof File) || !file.size) throw new Error("กรุณาเลือกรูปหลักฐาน");
     if (!file.type.startsWith("image/") || file.size > 8 * 1024 * 1024) throw new Error("ใช้รูปภาพขนาดไม่เกิน 8 MB");
@@ -17,3 +17,4 @@ export async function POST(request: Request) {
     return Response.json({ ok: true });
   } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "อัปโหลดไม่สำเร็จ" }, { status: 400 }); }
 }
+

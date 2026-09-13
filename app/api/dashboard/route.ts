@@ -1,13 +1,14 @@
 import { env } from "cloudflare:workers";
-import { getChatGPTUser } from "@/app/chatgpt-auth";
 
 const thaiDate = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 const now = () => new Date().toISOString();
 const json = (data: unknown, status = 200) => Response.json(data, { status });
 
-async function currentMember() {
-  const user = await getChatGPTUser();
-  if (!user) return null;
+async function currentMember(request: Request) {
+  const c=request.headers.get("cookie")?.match(/(?:^|;\s*)fivek_session=([^;]+)/); if(!c)return null;
+  const member=await env.DB.prepare("SELECT * FROM sessions JOIN members ON members.id=sessions.member_id WHERE sessions.token=? AND sessions.expires_at>? AND members.active=1").bind(c[1],now()).first<any>();
+  return member;
+  /*
   const existing = await env.DB.prepare("SELECT * FROM members WHERE external_user_id = ?").bind(user.userId).first<any>();
   if (existing) {
     if (!existing.email) await env.DB.prepare("UPDATE members SET email = ? WHERE id = ?").bind(user.email.toLowerCase(), existing.id).run();
@@ -24,19 +25,19 @@ async function currentMember() {
   if ((count?.total || 0) > 0) throw new Error("แอดมินยังไม่ได้เพิ่มอีเมลนี้เป็นสมาชิก");
   await env.DB.prepare("INSERT INTO members (username, external_user_id, email, display_name, role, active, created_at) VALUES (?, ?, ?, ?, 'admin', 1, ?)")
     .bind(`${username}-${suffix}`, user.userId, user.email.toLowerCase(), user.fullName || user.displayName, now()).run();
-  return env.DB.prepare("SELECT * FROM members WHERE external_user_id = ?").bind(user.userId).first<any>();
+  return env.DB.prepare("SELECT * FROM members WHERE external_user_id = ?").bind(user.userId).first<any>();*/
 }
 
-async function requireMember() {
-  const member = await currentMember();
+async function requireMember(request: Request) {
+  const member = await currentMember(request);
   if (!member) throw new Error("กรุณาเข้าสู่ระบบก่อนใช้งาน");
   return member;
 }
-async function requireAdmin() { const member = await requireMember(); if (member.role !== "admin") throw new Error("เฉพาะแอดมินเท่านั้น"); return member; }
+async function requireAdmin(request: Request) { const member = await requireMember(request); if (member.role !== "admin") throw new Error("เฉพาะแอดมินเท่านั้น"); return member; }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const me = await requireMember();
+    const me = await requireMember(request);
     const date = thaiDate();
     const [members, airdrops, partyActivities, favorites, leaderboard] = await Promise.all([
       env.DB.prepare("SELECT id, display_name, role, active FROM members WHERE active = 1 ORDER BY display_name").all(),
@@ -53,7 +54,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const me = await requireMember();
+    const me = await requireMember(request);
     const body = await request.json<any>();
     if (body.action === "favorite") {
       const id = Number(body.memberId); if (!id || id === me.id) throw new Error("เลือกสมาชิกไม่ถูกต้อง");
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
       return json({ ok: true });
     }
     if (body.action === "approve") {
-      await requireAdmin(); const id = Number(body.id); const points = body.type === "party" ? 1 : 3;
+      await requireAdmin(request); const id = Number(body.id); const points = body.type === "party" ? 1 : 3;
       const table = body.type === "party" ? "party_activities" : "airdrop_submissions";
       const target = await env.DB.prepare(`SELECT id, status FROM ${table} WHERE id = ?`).bind(id).first<any>();
       if (!target || target.status !== "pending") throw new Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
@@ -70,8 +71,9 @@ export async function POST(request: Request) {
       const statements = [env.DB.prepare(`UPDATE ${table} SET status = 'approved', approved_by = ? WHERE id = ?`).bind(me.id, id), ...recipients.results.filter(Boolean).map((r:any) => env.DB.prepare("INSERT OR IGNORE INTO point_ledger (member_id, source, source_id, points, note, created_at) VALUES (?, ?, ?, ?, ?, ?)").bind(r.member_id, body.type, id, points, body.type === "party" ? "ปาร์ตี้ตรวจผ่าน" : "แอร์ดรอปตรวจผ่าน", now()))];
       await env.DB.batch(statements); return json({ ok: true });
     }
-    if (body.action === "reject") { const admin = await requireAdmin(); const table = body.type === "party" ? "party_activities" : "airdrop_submissions"; await env.DB.prepare(`UPDATE ${table} SET status = 'rejected', approved_by = ? WHERE id = ? AND status = 'pending'`).bind(admin.id, Number(body.id)).run(); return json({ ok: true }); }
-    if (body.action === "member") { await requireAdmin(); const name = String(body.name || "").trim(); const email = String(body.email || "").trim().toLowerCase(); if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("กรอกชื่อและอีเมลสมาชิกให้ถูกต้อง"); const username = email.split("@")[0].replace(/[^a-z0-9]+/g,"-") + "-" + Date.now().toString().slice(-5); await env.DB.prepare("INSERT INTO members (username, email, display_name, role, active, created_at) VALUES (?, ?, ?, 'member', 1, ?)").bind(username, email, name, now()).run(); return json({ ok: true }); }
+    if (body.action === "reject") { const admin = await requireAdmin(request); const table = body.type === "party" ? "party_activities" : "airdrop_submissions"; await env.DB.prepare(`UPDATE ${table} SET status = 'rejected', approved_by = ? WHERE id = ? AND status = 'pending'`).bind(admin.id, Number(body.id)).run(); return json({ ok: true }); }
+    if (body.action === "member") { await requireAdmin(request); const name = String(body.name || "").trim(); const email = String(body.email || "").trim().toLowerCase(); if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("กรอกชื่อและอีเมลสมาชิกให้ถูกต้อง"); const username = email.split("@")[0].replace(/[^a-z0-9]+/g,"-") + "-" + Date.now().toString().slice(-5); await env.DB.prepare("INSERT INTO members (username, email, display_name, role, active, created_at) VALUES (?, ?, ?, 'member', 1, ?)").bind(username, email, name, now()).run(); return json({ ok: true }); }
     throw new Error("คำสั่งไม่ถูกต้อง");
   } catch (error) { return json({ error: error instanceof Error ? error.message : "บันทึกไม่สำเร็จ" }, 400); }
 }
+

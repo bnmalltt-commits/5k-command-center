@@ -76,3 +76,10 @@ export const pointLedger = sqliteTable("point_ledger", {
   note: text("note"),
   createdAt: text("created_at").notNull(),
 }, (table) => [uniqueIndex("idx_point_ledger_once").on(table.memberId, table.source, table.sourceId)]);
+
+export const sessions = sqliteTable("sessions", {
+  token: text("token").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => members.id),
+  expiresAt: text("expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+});

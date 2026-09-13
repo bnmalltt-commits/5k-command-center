@@ -36,6 +36,13 @@
       "when": 1789302628907,
       "tag": "0004_real_hellfire_club",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1789303236880,
+      "tag": "0005_long_vivisector",
+      "breakpoints": true
     }
   ]
 }
