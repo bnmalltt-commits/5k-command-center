@@ -33,7 +33,7 @@ export const airdropSubmissions = sqliteTable("airdrop_submissions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   memberId: integer("member_id").notNull().references(() => members.id),
   activityDate: text("activity_date").notNull(),
-  roundTime: text("round_time", { enum: ["20:00", "22:00"] }).notNull(),
+  roundTime: text("round_time", { enum: ["20:00", "23:00"] }).notNull(),
   imageKey: text("image_key").notNull(),
   status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
   approvedBy: integer("approved_by").references(() => members.id),
