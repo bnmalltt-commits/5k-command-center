@@ -57,6 +57,13 @@
       "when": 1789333907533,
       "tag": "0007_sour_bloodstorm",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1789335575967,
+      "tag": "0008_fluffy_microchip",
+      "breakpoints": true
     }
   ]
 }

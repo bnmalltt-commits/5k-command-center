@@ -20,6 +20,8 @@ export const parties = sqliteTable("parties", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   shopName: text("shop_name"),
+  ownerMemberId: integer("owner_member_id").references(() => members.id),
+  status: text("status", { enum: ["open", "locked", "completed"] }).notNull().default("completed"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
 });
 
@@ -51,6 +53,16 @@ export const partyActivities = sqliteTable("party_activities", {
   submittedByMemberId: integer("submitted_by_member_id").references(() => members.id),
   createdAt: text("created_at").notNull(),
 });
+
+export const partyInvites = sqliteTable("party_invites", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  partyId: integer("party_id").notNull().references(() => parties.id),
+  inviterMemberId: integer("inviter_member_id").notNull().references(() => members.id),
+  inviteeMemberId: integer("invitee_member_id").notNull().references(() => members.id),
+  status: text("status", { enum: ["pending", "accepted", "rejected"] }).notNull().default("pending"),
+  createdAt: text("created_at").notNull(),
+  respondedAt: text("responded_at"),
+}, (table) => [uniqueIndex("idx_party_invites_once").on(table.partyId, table.inviteeMemberId)]);
 
 // A party is assembled for one activity; its 5 members are snapshotted here so
 // members can form a different party for the next activity without changing history.
