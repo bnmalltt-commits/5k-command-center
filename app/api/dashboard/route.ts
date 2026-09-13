@@ -9,12 +9,21 @@ async function currentMember() {
   const user = await getChatGPTUser();
   if (!user) return null;
   const existing = await env.DB.prepare("SELECT * FROM members WHERE external_user_id = ?").bind(user.userId).first<any>();
-  if (existing) return existing;
+  if (existing) {
+    if (!existing.email) await env.DB.prepare("UPDATE members SET email = ? WHERE id = ?").bind(user.email.toLowerCase(), existing.id).run();
+    return existing;
+  }
+  const invited = await env.DB.prepare("SELECT * FROM members WHERE lower(email) = lower(?) AND external_user_id IS NULL").bind(user.email).first<any>();
+  if (invited) {
+    await env.DB.prepare("UPDATE members SET external_user_id = ? WHERE id = ?").bind(user.userId, invited.id).run();
+    return { ...invited, external_user_id: user.userId };
+  }
   const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM members").first<{ total: number }>();
   const username = (user.email.split("@")[0] || "member").slice(0, 30);
   const suffix = user.userId.slice(-6);
-  await env.DB.prepare("INSERT INTO members (username, external_user_id, display_name, role, active, created_at) VALUES (?, ?, ?, ?, 1, ?)")
-    .bind(`${username}-${suffix}`, user.userId, user.fullName || user.displayName, (count?.total || 0) === 0 ? "admin" : "member", now()).run();
+  if ((count?.total || 0) > 0) throw new Error("แอดมินยังไม่ได้เพิ่มอีเมลนี้เป็นสมาชิก");
+  await env.DB.prepare("INSERT INTO members (username, external_user_id, email, display_name, role, active, created_at) VALUES (?, ?, ?, ?, 'admin', 1, ?)")
+    .bind(`${username}-${suffix}`, user.userId, user.email.toLowerCase(), user.fullName || user.displayName, now()).run();
   return env.DB.prepare("SELECT * FROM members WHERE external_user_id = ?").bind(user.userId).first<any>();
 }
 
@@ -62,7 +71,7 @@ export async function POST(request: Request) {
       await env.DB.batch(statements); return json({ ok: true });
     }
     if (body.action === "reject") { const admin = await requireAdmin(); const table = body.type === "party" ? "party_activities" : "airdrop_submissions"; await env.DB.prepare(`UPDATE ${table} SET status = 'rejected', approved_by = ? WHERE id = ? AND status = 'pending'`).bind(admin.id, Number(body.id)).run(); return json({ ok: true }); }
-    if (body.action === "member") { await requireAdmin(); const name = String(body.name || "").trim(); if (!name) throw new Error("กรอกชื่อสมาชิก"); const username = name.toLowerCase().replace(/[^a-z0-9]+/g,"-") + "-" + Date.now().toString().slice(-5); await env.DB.prepare("INSERT INTO members (username, display_name, role, active, created_at) VALUES (?, ?, 'member', 1, ?)").bind(username, name, now()).run(); return json({ ok: true }); }
+    if (body.action === "member") { await requireAdmin(); const name = String(body.name || "").trim(); const email = String(body.email || "").trim().toLowerCase(); if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("กรอกชื่อและอีเมลสมาชิกให้ถูกต้อง"); const username = email.split("@")[0].replace(/[^a-z0-9]+/g,"-") + "-" + Date.now().toString().slice(-5); await env.DB.prepare("INSERT INTO members (username, email, display_name, role, active, created_at) VALUES (?, ?, ?, 'member', 1, ?)").bind(username, email, name, now()).run(); return json({ ok: true }); }
     throw new Error("คำสั่งไม่ถูกต้อง");
   } catch (error) { return json({ error: error instanceof Error ? error.message : "บันทึกไม่สำเร็จ" }, 400); }
 }

@@ -4,6 +4,7 @@ export const members = sqliteTable("members", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   username: text("username").notNull(),
   externalUserId: text("external_user_id"),
+  email: text("email"),
   displayName: text("display_name").notNull(),
   role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
@@ -11,6 +12,7 @@ export const members = sqliteTable("members", {
 }, (table) => [
   uniqueIndex("idx_members_username").on(table.username),
   uniqueIndex("idx_members_external_user").on(table.externalUserId),
+  uniqueIndex("idx_members_email").on(table.email),
 ]);
 
 export const parties = sqliteTable("parties", {
