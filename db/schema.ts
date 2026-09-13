@@ -8,6 +8,7 @@ export const members = sqliteTable("members", {
   displayName: text("display_name").notNull(),
   role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  lastSeenAt: text("last_seen_at"),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("idx_members_username").on(table.username),

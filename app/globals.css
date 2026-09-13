@@ -124,6 +124,7 @@ body {
 .command-rail { min-width: 0; }
 .command-rail .command-panel { background: linear-gradient(160deg, rgba(20,23,29,.98), rgba(8,10,13,.98)); }
 .status-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 999px; background: #39e56d; box-shadow: 0 0 12px rgba(57,229,109,.7); }
+.status-dot-offline { background: #475569; box-shadow: none; }
 .command-hero { position: relative; overflow: hidden; border-color: rgba(239,68,68,.42); }
 .command-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, transparent 0 80%, rgba(239,68,68,.06) 80% 80.2%, transparent 80.2%), linear-gradient(180deg, transparent 0 75%, rgba(239,68,68,.08) 75% 75.5%, transparent 75.5%); }
 .red-action { border: 1px solid rgba(255,120,120,.5); text-transform: uppercase; letter-spacing: .03em; }

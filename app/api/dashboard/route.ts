@@ -8,8 +8,8 @@ async function requireMember(request:Request){const member=await currentMember(r
 async function requireAdmin(request:Request){const member=await requireMember(request);if(member.role!=="admin")throw Error("เฉพาะแอดมินเท่านั้น");return member;}
 const validType=(type:unknown)=>{if(type!=="airdrop"&&type!=="party")throw Error("ประเภทไม่ถูกต้อง");return type;};
 
-export async function GET(request:Request){try{const me=await requireMember(request),date=thaiDate();const [members,airdrops,parties,favorites,leaderboard,managed]=await Promise.all([
- env.DB.prepare("SELECT id,display_name,role FROM members WHERE active=1 ORDER BY display_name").all(),
+export async function GET(request:Request){try{const me=await requireMember(request),date=thaiDate();await env.DB.prepare("UPDATE members SET last_seen_at=? WHERE id=?").bind(now(),me.id).run();const onlineSince=new Date(Date.now()-5*60*1000).toISOString();const [members,airdrops,parties,favorites,leaderboard,managed]=await Promise.all([
+ env.DB.prepare("SELECT id,display_name,role,CASE WHEN last_seen_at IS NOT NULL AND last_seen_at>=? THEN 1 ELSE 0 END AS online FROM members WHERE active=1 ORDER BY display_name").bind(onlineSince).all(),
  env.DB.prepare("SELECT id,activity_date,round_time,status,image_key,created_at FROM airdrop_submissions WHERE member_id=? ORDER BY activity_date DESC,round_time DESC LIMIT 30").bind(me.id).all(),
  env.DB.prepare("SELECT pa.id,pa.status,pa.image_key,pa.activity_date,pa.created_at,GROUP_CONCAT(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all(),
  env.DB.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
