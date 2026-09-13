@@ -7,6 +7,7 @@ const json = (data: unknown, status = 200) => Response.json(data, { status });
 async function currentMember(request: Request) {
   const c=request.headers.get("cookie")?.match(/(?:^|;\s*)fivek_session=([^;]+)/); if(!c)return null;
   const member=await env.DB.prepare("SELECT * FROM sessions JOIN members ON members.id=sessions.member_id WHERE sessions.token=? AND sessions.expires_at>? AND members.active=1").bind(c[1],now()).first<any>();
+  if(member){const admins=await env.DB.prepare("SELECT COUNT(*) AS total FROM members WHERE role='admin' AND active=1").first<any>();if(Number(admins?.total||0)===0){await env.DB.prepare("UPDATE members SET role='admin' WHERE id=?").bind(member.id).run();member.role="admin";}}
   return member;
   /*
   const existing = await env.DB.prepare("SELECT * FROM members WHERE external_user_id = ?").bind(user.userId).first<any>();
