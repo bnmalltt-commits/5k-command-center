@@ -472,3 +472,72 @@ main > div.relative.mx-auto::after {
 .score-card p, .score-card small { color: #94a3b8; font-size: .7rem; font-weight: 700; }
 .score-card strong { display: block; margin: .25rem 0; font-family: var(--font-mono); font-size: 2rem; line-height: 1; }
 .score-card.red { border-color: rgba(239,68,68,.25); background: rgba(127,29,29,.15); }
+
+.ranking-panel {
+  padding: 1rem;
+  border-color: rgba(239,68,68,.42);
+  background: linear-gradient(145deg, rgba(13,17,21,.98), rgba(5,7,10,.98));
+}
+
+.ranking-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: .75rem;
+  padding-bottom: .85rem;
+  border-bottom: 1px solid rgba(148,163,184,.16);
+}
+
+.ranking-panel__tools { display: flex; align-items: center; gap: .7rem; color: #94a3b8; }
+.ranking-filter { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid rgba(148,163,184,.28); border-radius: .45rem; padding: .42rem .55rem; color: #cbd5e1; font-size: .68rem; font-weight: 800; white-space: nowrap; }
+.ranking-list { display: grid; gap: .45rem; margin-top: .85rem; }
+
+.ranking-row {
+  display: flex;
+  align-items: center;
+  gap: .55rem;
+  min-height: 62px;
+  padding: .62rem .58rem;
+  border: 1px solid rgba(148,163,184,.17);
+  border-radius: .55rem;
+  background: linear-gradient(105deg, rgba(16,22,27,.9), rgba(8,11,14,.94));
+  transition: transform .18s ease, border-color .18s ease, background .18s ease;
+}
+
+.ranking-row:hover { transform: translateX(2px); border-color: rgba(239,68,68,.46); }
+.ranking-row--leader { min-height: 76px; border-color: rgba(239,68,68,.8); background: linear-gradient(105deg, rgba(84,17,25,.76), rgba(14,17,21,.96) 65%); box-shadow: inset 0 0 24px rgba(239,68,68,.1), 0 0 18px rgba(239,68,68,.1); }
+.rank-badge { display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 auto; border: 1px solid rgba(148,163,184,.35); border-radius: .55rem; color: #dbe4ef; background: rgba(15,23,32,.9); font-family: var(--font-mono); font-size: .9rem; font-weight: 900; }
+.rank-badge--1 { border-color: #fbbf24; color: #2d1900; background: linear-gradient(145deg, #ffe08a, #c47b11); box-shadow: 0 0 14px rgba(251,191,36,.24); }
+.rank-badge--2 { border-color: #cbd5e1; color: #1f2937; background: linear-gradient(145deg, #f8fafc, #7d8b9c); }
+.rank-badge--3 { border-color: #f0b38a; color: #321507; background: linear-gradient(145deg, #ffd1af, #a75f35); }
+.ranking-status { width: 8px; height: 8px; }
+.ranking-row__main { min-width: 0; flex: 1; }
+.ranking-row__top { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+.ranking-name { min-width: 0; overflow: hidden; color: #eef2f7; font-size: .88rem; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.ranking-score { display: inline-flex; align-items: baseline; gap: .25rem; flex: 0 0 auto; font-family: var(--font-mono); }
+.ranking-score strong { color: #e7edf5; font-size: 1.05rem; line-height: 1; }
+.ranking-score small { color: #9aa8b8; font-size: .58rem; font-weight: 900; }
+.ranking-row--leader .ranking-score strong { color: #ff3e50; font-size: 1.42rem; text-shadow: 0 0 14px rgba(239,68,68,.35); }
+.ranking-progress { display: block; height: 4px; margin-top: .5rem; overflow: hidden; border-radius: 999px; background: rgba(71,85,105,.38); }
+.ranking-progress span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #ff3046, #ff7783); box-shadow: 0 0 10px rgba(255,48,70,.55); }
+.ranking-row:not(.ranking-row--leader) .ranking-progress span { background: linear-gradient(90deg, #c9d2dd, #687789); box-shadow: none; }
+.ranking-footer { display: flex; align-items: center; gap: .55rem; margin-top: .9rem; color: #677588; font-family: var(--font-mono); font-size: .5rem; font-weight: 800; letter-spacing: .12em; white-space: nowrap; }
+.ranking-footer span { height: 1px; flex: 1; background: linear-gradient(90deg, transparent, rgba(239,68,68,.65)); }
+.ranking-footer span:last-child { background: linear-gradient(90deg, rgba(239,68,68,.65), transparent); }
+.ranking-footer b { color: #ef4444; }
+.ranking-panel--compact { padding: 1rem; }
+.ranking-panel--compact .ranking-panel__header h2 { font-size: 1.05rem; }
+.ranking-panel--compact .ranking-row { min-height: 56px; padding: .5rem .45rem; }
+.ranking-panel--compact .rank-badge { width: 27px; height: 27px; border-radius: .42rem; font-size: .75rem; }
+.ranking-panel--compact .ranking-name { font-size: .78rem; }
+.ranking-panel--compact .ranking-score strong { font-size: .94rem; }
+.ranking-panel--compact .ranking-score small { font-size: .5rem; }
+.ranking-panel--compact .ranking-row--leader { min-height: 66px; }
+.ranking-panel--compact .ranking-row--leader .ranking-score strong { font-size: 1.18rem; }
+
+@media (max-width: 520px) {
+  .ranking-filter { display: none; }
+  .ranking-panel { padding: .85rem; }
+  .ranking-row { gap: .4rem; }
+  .ranking-footer { font-size: .43rem; letter-spacing: .08em; }
+}
