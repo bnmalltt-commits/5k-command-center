@@ -44,6 +44,14 @@ export const partyActivities = sqliteTable("party_activities", {
   createdAt: text("created_at").notNull(),
 });
 
+// A party is assembled for one activity; its 5 members are snapshotted here so
+// members can form a different party for the next activity without changing history.
+export const partyActivityMembers = sqliteTable("party_activity_members", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  partyActivityId: integer("party_activity_id").notNull().references(() => partyActivities.id),
+  memberId: integer("member_id").notNull().references(() => members.id),
+}, (table) => [uniqueIndex("idx_party_activity_member_once").on(table.partyActivityId, table.memberId)]);
+
 export const pointLedger = sqliteTable("point_ledger", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   memberId: integer("member_id").notNull().references(() => members.id),
