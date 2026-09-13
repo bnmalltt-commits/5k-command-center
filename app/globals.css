@@ -101,9 +101,9 @@ body {
 }
 
 .command-grid {
-  background-image: linear-gradient(rgba(255,255,255,.025) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px);
-  background-size: 34px 34px;
-  mask-image: linear-gradient(to bottom, black, transparent 70%);
+  background-image: radial-gradient(circle at 50% 8%, rgba(239,68,68,.12), transparent 28%), linear-gradient(rgba(125,145,165,.045) 1px, transparent 1px), linear-gradient(90deg, rgba(125,145,165,.045) 1px, transparent 1px);
+  background-size: auto, 34px 34px, 34px 34px;
+  mask-image: linear-gradient(to bottom, black 0%, rgba(0,0,0,.9) 66%, transparent 100%);
 }
 
 .command-hero {
@@ -118,17 +118,233 @@ body {
   box-shadow: 0 12px 35px rgba(0,0,0,.2), inset 0 1px 0 rgba(255,255,255,.035);
 }
 
-.command-panel { position: relative; overflow: hidden; border-color: rgba(255, 65, 76, .2); }
+.command-panel { position: relative; overflow: hidden; border-color: rgba(255, 65, 76, .28); }
 .command-panel::before { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(135deg, rgba(255,255,255,.035), transparent 24%, transparent 78%, rgba(239,68,68,.06)); }
-.command-panel::after { content: ""; position: absolute; top: 0; right: 0; width: 42px; height: 2px; background: #ef4444; box-shadow: -10px 0 #7f1d1d; }
+.command-panel::after { content: ""; position: absolute; top: 0; right: 0; width: 62px; height: 2px; background: #ef4444; box-shadow: -14px 0 #7f1d1d; }
+.command-panel > * { position: relative; z-index: 1; }
 .command-rail { min-width: 0; }
 .command-rail .command-panel { background: linear-gradient(160deg, rgba(20,23,29,.98), rgba(8,10,13,.98)); }
 .status-dot { width: 9px; height: 9px; flex: 0 0 auto; border-radius: 999px; background: #39e56d; box-shadow: 0 0 12px rgba(57,229,109,.7); }
 .status-dot-offline { background: #475569; box-shadow: none; }
-.command-hero { position: relative; overflow: hidden; border-color: rgba(239,68,68,.42); }
+.command-hero { position: relative; overflow: hidden; border-color: rgba(239,68,68,.5); min-height: 152px; }
 .command-hero::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(90deg, transparent 0 80%, rgba(239,68,68,.06) 80% 80.2%, transparent 80.2%), linear-gradient(180deg, transparent 0 75%, rgba(239,68,68,.08) 75% 75.5%, transparent 75.5%); }
 .red-action { border: 1px solid rgba(255,120,120,.5); text-transform: uppercase; letter-spacing: .03em; }
 @media (min-width: 1280px) { .command-panel { border-radius: 14px; } }
+
+.command-header {
+  position: relative;
+  min-height: 76px;
+  background: linear-gradient(180deg, rgba(12,15,20,.95), rgba(7,8,11,.72));
+}
+
+.command-header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0 18%, #ef3340 18% 42%, transparent 42% 69%, #ef3340 69% 76%, transparent 76%);
+  opacity: .9;
+}
+
+.command-top-nav {
+  color: #6f7e91;
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+}
+
+.command-top-nav span:nth-child(2n) { color: #ef4444; }
+
+.brand-lockup {
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.brand-lockup strong { color: #f43f4c; font-size: 1.3rem; }
+.brand-lockup small { color: #b9c4d1; font-size: .58rem; font-weight: 900; }
+
+.score-lockup {
+  display: inline-flex;
+  align-items: baseline;
+  gap: .55rem;
+  font-family: var(--font-mono);
+  line-height: .9;
+}
+
+.score-lockup strong {
+  color: #ff3345;
+  font-size: clamp(2.65rem, 6vw, 4.2rem);
+  text-shadow: 0 0 24px rgba(239,68,68,.28);
+}
+
+.score-lockup span { color: #dbe4ef; font-size: 1.15rem; font-weight: 900; }
+
+.round-card {
+  position: relative;
+  min-height: 124px;
+  overflow: hidden;
+  border-color: rgba(255,255,255,.14) !important;
+  background: linear-gradient(145deg, rgba(21,26,31,.9), rgba(7,9,12,.96));
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.round-card::after {
+  content: "";
+  position: absolute;
+  right: -12px;
+  bottom: -20px;
+  width: 84px;
+  height: 84px;
+  border: 1px solid rgba(239,68,68,.18);
+  border-radius: 999px;
+  box-shadow: 0 0 0 8px rgba(239,68,68,.03), 0 0 0 16px rgba(239,68,68,.025);
+}
+
+.round-card:hover { transform: translateY(-2px); }
+.round-card.is-selected { border-color: #ef4444 !important; box-shadow: inset 0 0 30px rgba(127,29,29,.22), 0 0 22px rgba(239,68,68,.12); }
+.round-card.is-approved { border-color: rgba(34,197,94,.55) !important; }
+.round-card b { font-family: var(--font-mono); letter-spacing: .04em; }
+
+.round-card__icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(239,68,68,.55);
+  border-radius: 999px;
+  color: #fb7185;
+  background: rgba(127,29,29,.18);
+}
+
+.round-card.is-approved .round-card__icon { border-color: rgba(34,197,94,.7); color: #4ade80; background: rgba(21,128,61,.2); }
+
+.hud-corner {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-color: #ef3340;
+  pointer-events: none;
+}
+
+.hud-corner--tl { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; }
+.hud-corner--tr { top: -1px; right: -1px; border-top: 2px solid; border-right: 2px solid; }
+.hud-corner--bl { bottom: -1px; left: -1px; border-bottom: 2px solid; border-left: 2px solid; }
+.hud-corner--br { right: -1px; bottom: -1px; border-right: 2px solid; border-bottom: 2px solid; }
+
+.command-footer {
+  color: #64748b;
+  font-family: var(--font-mono);
+  font-size: .56rem;
+  font-weight: 800;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+/* Command-center composition: keep the existing flows, but give every surface the same HUD language. */
+main > div.relative.mx-auto {
+  max-width: 1800px;
+}
+
+main > div.relative.mx-auto > section > header {
+  position: relative;
+  min-height: 76px;
+  background: linear-gradient(180deg, rgba(12,15,20,.96), rgba(7,8,11,.72));
+}
+
+main > div.relative.mx-auto > section > header::before {
+  content: "PLAY   •   CHECK-IN   •   EARN   •   TOGETHER";
+  position: absolute;
+  left: 31%;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #728096;
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+  white-space: nowrap;
+}
+
+main > div.relative.mx-auto > section > header::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  background: linear-gradient(90deg, transparent 0 12%, #ef3340 12% 37%, transparent 37% 62%, #ef3340 62% 68%, transparent 68%);
+}
+
+main > div.relative.mx-auto > section > .command-hero h1 {
+  display: flex;
+  align-items: flex-end;
+  gap: .75rem;
+  letter-spacing: .01em;
+}
+
+main > div.relative.mx-auto > section > .command-hero h1 span {
+  display: inline-block;
+  color: #ff3345;
+  font-family: var(--font-mono);
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  line-height: .85;
+  text-shadow: 0 0 24px rgba(239,68,68,.32);
+}
+
+/* The first two direct buttons are the 20:00 / 23:00 round cards. */
+form.command-panel > .grid.grid-cols-2 > button {
+  position: relative;
+  min-height: 124px;
+  overflow: hidden;
+  border-color: rgba(255,255,255,.14) !important;
+  background: linear-gradient(145deg, rgba(21,26,31,.92), rgba(7,9,12,.98));
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+form.command-panel > .grid.grid-cols-2 > button::after {
+  content: "";
+  position: absolute;
+  right: -14px;
+  bottom: -22px;
+  width: 86px;
+  height: 86px;
+  border: 1px solid rgba(239,68,68,.2);
+  border-radius: 999px;
+  box-shadow: 0 0 0 8px rgba(239,68,68,.035), 0 0 0 16px rgba(239,68,68,.025);
+}
+
+form.command-panel > .grid.grid-cols-2 > button:hover { transform: translateY(-2px); }
+form.command-panel > .grid.grid-cols-2 > button:first-child { border-left: 2px solid rgba(239,68,68,.7) !important; }
+form.command-panel > .grid.grid-cols-2 > button:last-child { border-right: 2px solid rgba(239,68,68,.7) !important; }
+form.command-panel > .grid.grid-cols-2 > button b { position: relative; z-index: 1; font-family: var(--font-mono); letter-spacing: .05em; }
+form.command-panel > .grid.grid-cols-2 > button p { position: relative; z-index: 1; }
+
+main > div.relative.mx-auto::after {
+  content: "MORE PLAYERS   HIGHER MOMENTS   5K TOGETHER";
+  position: fixed;
+  right: 28px;
+  bottom: 16px;
+  z-index: 2;
+  color: #566477;
+  font-family: var(--font-mono);
+  font-size: .55rem;
+  font-weight: 800;
+  letter-spacing: .16em;
+}
+
+@media (max-width: 1023px) {
+  .command-header { min-height: 64px; }
+  .command-hero { min-height: 0; }
+}
+
+@media (max-width: 1279px) {
+  main > div.relative.mx-auto > section > header::before { display: none; }
+  main > div.relative.mx-auto::after { display: none; }
+}
 
 .label {
   color: #7f8da3;
