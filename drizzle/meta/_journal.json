@@ -43,6 +43,13 @@
       "when": 1789303236880,
       "tag": "0005_long_vivisector",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789327154021,
+      "tag": "0006_awesome_charles_xavier",
+      "breakpoints": true
     }
   ]
 }

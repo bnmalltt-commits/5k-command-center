@@ -47,6 +47,7 @@ export const partyActivities = sqliteTable("party_activities", {
   imageKey: text("image_key").notNull(),
   status: text("status", { enum: ["pending", "approved", "rejected"] }).notNull().default("pending"),
   approvedBy: integer("approved_by").references(() => members.id),
+  submittedByMemberId: integer("submitted_by_member_id").references(() => members.id),
   createdAt: text("created_at").notNull(),
 });
 
