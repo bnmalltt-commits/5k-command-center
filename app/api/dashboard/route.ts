@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     const me = await requireMember(request);
     const date = thaiDate();
     const [members, airdrops, partyActivities, favorites, leaderboard] = await Promise.all([
-      env.DB.prepare("SELECT id, display_name, role, active FROM members WHERE active = 1 ORDER BY display_name").all(),
+      env.DB.prepare("SELECT id, display_name, email, role, active FROM members ORDER BY active DESC, display_name").all(),
       env.DB.prepare("SELECT id, round_time, status, image_key, created_at FROM airdrop_submissions WHERE member_id = ? ORDER BY activity_date DESC, round_time DESC LIMIT 30").bind(me.id).all(),
       env.DB.prepare("SELECT pa.id, pa.status, pa.image_key, pa.activity_date, pa.created_at, GROUP_CONCAT(m.display_name, ' · ') AS members FROM party_activities pa JOIN party_activity_members pam ON pam.party_activity_id = pa.id JOIN members m ON m.id = pam.member_id WHERE pam.member_id = ? GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all(),
       env.DB.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id = ?").bind(me.id).all(),
@@ -73,6 +73,8 @@ export async function POST(request: Request) {
     }
     if (body.action === "reject") { const admin = await requireAdmin(request); const table = body.type === "party" ? "party_activities" : "airdrop_submissions"; await env.DB.prepare(`UPDATE ${table} SET status = 'rejected', approved_by = ? WHERE id = ? AND status = 'pending'`).bind(admin.id, Number(body.id)).run(); return json({ ok: true }); }
     if (body.action === "member") { await requireAdmin(request); const name = String(body.name || "").trim(); const email = String(body.email || "").trim().toLowerCase(); if (!name || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("กรอกชื่อและอีเมลสมาชิกให้ถูกต้อง"); const username = email.split("@")[0].replace(/[^a-z0-9]+/g,"-") + "-" + Date.now().toString().slice(-5); await env.DB.prepare("INSERT INTO members (username, email, display_name, role, active, created_at) VALUES (?, ?, ?, 'member', 1, ?)").bind(username, email, name, now()).run(); return json({ ok: true }); }
+    if (body.action === "member_update") { await requireAdmin(request); const id=Number(body.id); const name=String(body.name||"").trim(); if(!id||!name) throw new Error("กรอกชื่อสมาชิก"); await env.DB.prepare("UPDATE members SET display_name=? WHERE id=? AND active=1").bind(name,id).run(); return json({ok:true}); }
+    if (body.action === "member_delete") { const admin=await requireAdmin(request); const id=Number(body.id); if(!id||id===admin.id) throw new Error("ไม่สามารถปิดใช้งานบัญชีแอดมินตัวเอง"); await env.DB.prepare("UPDATE members SET active=0 WHERE id=?").bind(id).run(); await env.DB.prepare("DELETE FROM sessions WHERE member_id=?").bind(id).run(); return json({ok:true}); }
     throw new Error("คำสั่งไม่ถูกต้อง");
   } catch (error) { return json({ error: error instanceof Error ? error.message : "บันทึกไม่สำเร็จ" }, 400); }
 }
