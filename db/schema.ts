@@ -3,11 +3,15 @@ import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core
 export const members = sqliteTable("members", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   username: text("username").notNull(),
+  externalUserId: text("external_user_id"),
   displayName: text("display_name").notNull(),
   role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   createdAt: text("created_at").notNull(),
-}, (table) => [uniqueIndex("idx_members_username").on(table.username)]);
+}, (table) => [
+  uniqueIndex("idx_members_username").on(table.username),
+  uniqueIndex("idx_members_external_user").on(table.externalUserId),
+]);
 
 export const parties = sqliteTable("parties", {
   id: integer("id").primaryKey({ autoIncrement: true }),

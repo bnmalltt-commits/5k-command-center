@@ -22,6 +22,13 @@
       "when": 1789300787646,
       "tag": "0002_groovy_pixie",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1789301148219,
+      "tag": "0003_worried_ben_grimm",
+      "breakpoints": true
     }
   ]
 }

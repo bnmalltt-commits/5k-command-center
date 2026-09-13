@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Airdrop Party Check",
-  description: "เช็คชื่อแอร์ดรอปและแต้มปาร์ตี้ของแก๊ง",
+  title: "5K Fivethousand Command Center",
+  description: "เช็คชื่อแอร์ดรอป ปาร์ตี้ และคะแนนแก๊ง 5K Fivethousand",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
