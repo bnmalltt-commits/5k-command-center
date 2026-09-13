@@ -316,9 +316,36 @@ form.command-panel > .grid.grid-cols-2 > button {
   position: relative;
   min-height: 124px;
   overflow: hidden;
+  isolation: isolate;
   border-color: rgba(255,255,255,.14) !important;
   background: linear-gradient(145deg, rgba(21,26,31,.92), rgba(7,9,12,.98));
   transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+form.command-panel > .grid.grid-cols-2 > button::before {
+  content: "✓";
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 0;
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border: 1px solid rgba(239,68,68,.64);
+  border-radius: 999px;
+  color: #fb7185;
+  background: radial-gradient(circle, rgba(127,29,29,.5), rgba(7,9,12,.7) 68%);
+  box-shadow: 0 0 0 7px rgba(239,68,68,.04), 0 0 0 14px rgba(239,68,68,.025), inset 0 0 18px rgba(239,68,68,.2);
+  font-family: var(--font-mono);
+  font-size: 1.65rem;
+  font-weight: 900;
+}
+
+form.command-panel > .grid.grid-cols-2 > button:last-child::before {
+  content: "⌛";
+  color: #fda4af;
+  font-size: 1.25rem;
 }
 
 form.command-panel > .grid.grid-cols-2 > button::after {
@@ -338,6 +365,54 @@ form.command-panel > .grid.grid-cols-2 > button:first-child { border-left: 2px s
 form.command-panel > .grid.grid-cols-2 > button:last-child { border-right: 2px solid rgba(239,68,68,.7) !important; }
 form.command-panel > .grid.grid-cols-2 > button b { position: relative; z-index: 1; font-family: var(--font-mono); letter-spacing: .05em; }
 form.command-panel > .grid.grid-cols-2 > button p { position: relative; z-index: 1; }
+
+form.command-panel > .grid.grid-cols-2 > button p::before {
+  content: "STATUS // ";
+  margin-right: .25rem;
+  color: #64748b;
+  font-family: var(--font-mono);
+  font-size: .55rem;
+  letter-spacing: .12em;
+}
+
+.command-panel > div.mt-5 > label {
+  position: relative;
+  min-height: 68px;
+  overflow: hidden;
+  border-color: rgba(239,68,68,.32) !important;
+  background: linear-gradient(90deg, rgba(28,12,16,.7), rgba(6,8,11,.86), rgba(28,12,16,.7));
+  box-shadow: inset 0 0 30px rgba(239,68,68,.045);
+}
+
+.command-panel > div.mt-5 > label::before {
+  content: "UPLOAD CHANNEL // READY";
+  position: absolute;
+  right: 14px;
+  bottom: 8px;
+  color: rgba(148,163,184,.45);
+  font-family: var(--font-mono);
+  font-size: .48rem;
+  letter-spacing: .13em;
+  pointer-events: none;
+}
+
+.command-panel > div.mt-5 > label::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(239,68,68,.7), transparent);
+  opacity: .65;
+  pointer-events: none;
+}
+
+form.command-panel > .red-action {
+  min-height: 58px;
+  background: linear-gradient(100deg, #7f1d28, #dc2636 48%, #8f1e2b);
+  box-shadow: 0 0 0 1px rgba(255,93,105,.18), 0 12px 30px rgba(127,29,29,.28), inset 0 1px 0 rgba(255,255,255,.22);
+}
 
 main > div.relative.mx-auto::after {
   content: "MORE PLAYERS   HIGHER MOMENTS   5K TOGETHER";
