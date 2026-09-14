@@ -5,9 +5,11 @@ import {
   Check,
   ChevronDown,
   Clipboard,
+  Clock3,
   Crosshair,
   LogOut,
   Pencil,
+  Radio,
   ShieldCheck,
   Star,
   Trophy,
@@ -43,6 +45,91 @@ function Status({ value }: { value: string }) {
     >
       {labels[value] || value}
     </span>
+  );
+}
+
+function MissionControl({
+  data,
+  onOpenAirdrop,
+  onOpenParty,
+}: {
+  data: Data;
+  onOpenAirdrop: (round: "20:00" | "23:00") => void;
+  onOpenParty: () => void;
+}) {
+  const entries = new Map(
+    data.airdrops
+      .filter((entry: any) => entry.activity_date === data.date)
+      .map((entry: any) => [entry.round_time, entry]),
+  );
+  const rounds = ["20:00", "23:00"] as const;
+  const approved = rounds.filter(
+    (round) => entries.get(round)?.status === "approved",
+  ).length;
+  const rejected = rounds.find(
+    (round) => entries.get(round)?.status === "rejected",
+  );
+  const missing = rounds.find((round) => !entries.get(round));
+  const pending = rounds.find(
+    (round) => entries.get(round)?.status === "pending",
+  );
+  const nextRound = rejected || missing || pending || "20:00";
+  const done = approved === rounds.length;
+  const title = done
+    ? "ภารกิจแอร์ดรอปวันนี้ครบแล้ว"
+    : rejected
+      ? `ส่งหลักฐานรอบ ${rejected} ใหม่`
+      : missing
+        ? `เช็กอินแอร์ดรอปรอบ ${missing}`
+        : `รอตรวจหลักฐานรอบ ${pending}`;
+  const detail = done
+    ? "ไปสร้างหรือเข้าปาร์ตี้ต่อเพื่อเก็บคะแนนทีมเพิ่ม"
+    : rejected
+      ? "หลักฐานเดิมไม่ผ่านการตรวจ เลือกรูปใหม่แล้วส่งได้ทันที"
+      : missing
+        ? "เลือกเวลา วางรูปหลักฐาน แล้วส่งเข้าคิวตรวจ"
+        : "หลักฐานถูกส่งแล้ว ระบบกำลังรอแอดมินตรวจสอบ";
+
+  return (
+    <section
+      className={`mission-control ${done ? "mission-control--complete" : ""}`}
+    >
+      <div className="mission-control__signal">
+        {done ? (
+          <Check />
+        ) : pending && !missing && !rejected ? (
+          <Clock3 />
+        ) : (
+          <Radio />
+        )}
+      </div>
+      <div className="mission-control__copy">
+        <p className="label">NEXT MISSION</p>
+        <h2>{title}</h2>
+        <p>{detail}</p>
+      </div>
+      <div className="mission-control__metrics" aria-label="สถานะกิจกรรมวันนี้">
+        <span>
+          <b>{approved}/2</b>
+          <small>แอร์ดรอป</small>
+        </span>
+        <span>
+          <b>{data.myParty ? "ON" : "—"}</b>
+          <small>ปาร์ตี้</small>
+        </span>
+      </div>
+      <button
+        type="button"
+        onClick={() => (done ? onOpenParty() : onOpenAirdrop(nextRound))}
+        className="mission-control__action"
+      >
+        {done
+          ? "ไปที่ปาร์ตี้"
+          : pending && !missing && !rejected
+            ? "ดูสถานะ"
+            : "เริ่มภารกิจ"}
+      </button>
+    </section>
   );
 }
 function PartyEditDialog({
@@ -127,9 +214,7 @@ function SquadRanking({
           </h2>
         </div>
         <div className="ranking-panel__tools">
-          {!compact && (
-            <span className="ranking-filter">{rows.length} คน</span>
-          )}
+          {!compact && <span className="ranking-filter">{rows.length} คน</span>}
           <Trophy className="h-5 w-5 text-red-400" />
         </div>
       </div>
@@ -165,11 +250,14 @@ function SquadRanking({
         })}
       </div>
       {!compact && myRank > 0 && (
-        <p className="ranking-position">อันดับของคุณ <b>#{myRank}</b> จาก {leaderboard.length} คน</p>
+        <p className="ranking-position">
+          อันดับของคุณ <b>#{myRank}</b> จาก {leaderboard.length} คน
+        </p>
       )}
       <div className="ranking-footer">
         <span />
-        {compact ? "MORE PLAYERS" : "ALL SQUAD MEMBERS"} <b>//</b> HIGHER MOMENTS
+        {compact ? "MORE PLAYERS" : "ALL SQUAD MEMBERS"} <b>//</b> HIGHER
+        MOMENTS
         <span />
       </div>
     </section>
@@ -672,7 +760,9 @@ function AdminCommandCenter({
       .split(/\s+/)
       .some((part: string) => part.startsWith(normalizedQuery));
   });
-  const activeMembers = data.managedMembers.filter((member: any) => member.active);
+  const activeMembers = data.managedMembers.filter(
+    (member: any) => member.active,
+  );
 
   return (
     <section className="command-panel admin-command-panel p-5">
@@ -688,7 +778,11 @@ function AdminCommandCenter({
           {activeMembers.length} สมาชิกใช้งาน
         </span>
       </div>
-      <div className="admin-command-tabs mt-5" role="tablist" aria-label="จัดการแก๊ง">
+      <div
+        className="admin-command-tabs mt-5"
+        role="tablist"
+        aria-label="จัดการแก๊ง"
+      >
         <button
           type="button"
           role="tab"
@@ -714,7 +808,13 @@ function AdminCommandCenter({
           onClick={() => setTab("admins")}
           className={tab === "admins" ? "is-active" : ""}
         >
-          แอดมิน <span>{activeMembers.filter((member: any) => member.role === "admin").length}</span>
+          แอดมิน{" "}
+          <span>
+            {
+              activeMembers.filter((member: any) => member.role === "admin")
+                .length
+            }
+          </span>
         </button>
       </div>
 
@@ -725,30 +825,69 @@ function AdminCommandCenter({
               <p className="label">VERIFY QUEUE</p>
               <h3 className="mt-1 text-lg font-black">รายการรอตรวจ</h3>
             </div>
-            <span className="text-sm text-amber-200">{data.pending.length} รายการ</span>
+            <span className="text-sm text-amber-200">
+              {data.pending.length} รายการ
+            </span>
           </div>
           <div className="admin-command-list mt-4">
             {data.pending.length ? (
               data.pending.map((item: any) => (
                 <div key={item.type + item.id} className="admin-command-row">
                   <div className="min-w-0 flex-1">
-                    <b>{item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} #{item.id}</b>
-                    <p>{item.detail}{item.submitted_by ? ` · ส่งโดย ${item.submitted_by}` : ""}</p>
+                    <b>
+                      {item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} #
+                      {item.id}
+                    </b>
+                    <p>
+                      {item.detail}
+                      {item.submitted_by
+                        ? ` · ส่งโดย ${item.submitted_by}`
+                        : ""}
+                    </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
-                    <a href={`/api/image/${item.image_key}`} target="_blank" className="evidence-link">
-                      <img src={`/api/image/${item.image_key}`} alt="ตัวอย่างหลักฐาน" loading="lazy" />
+                    <a
+                      href={`/api/image/${item.image_key}`}
+                      target="_blank"
+                      className="evidence-link"
+                    >
+                      <img
+                        src={`/api/image/${item.image_key}`}
+                        alt="ตัวอย่างหลักฐาน"
+                        loading="lazy"
+                      />
                       ดูรูป
                     </a>
-                    <button disabled={busy} aria-label="อนุมัติ" onClick={() => call({ action: "approve", type: item.type, id: item.id })} className="approval-action">
+                    <button
+                      disabled={busy}
+                      aria-label="อนุมัติ"
+                      onClick={() =>
+                        call({
+                          action: "approve",
+                          type: item.type,
+                          id: item.id,
+                        })
+                      }
+                      className="approval-action"
+                    >
                       <Check className="h-4 w-4" />
                     </button>
-                    <button disabled={busy} onClick={() => call({ action: "reject", type: item.type, id: item.id })} className="reject-action">ไม่ผ่าน</button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        call({ action: "reject", type: item.type, id: item.id })
+                      }
+                      className="reject-action"
+                    >
+                      ไม่ผ่าน
+                    </button>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="admin-command-empty">ไม่มีรายการรอตรวจในตอนนี้</div>
+              <div className="admin-command-empty">
+                ไม่มีรายการรอตรวจในตอนนี้
+              </div>
             )}
           </div>
         </div>
@@ -763,7 +902,11 @@ function AdminCommandCenter({
             </div>
             <label className="admin-member-search">
               <span className="sr-only">ค้นหาสมาชิก</span>
-              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="ค้นหาสมาชิก" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="ค้นหาสมาชิก"
+              />
             </label>
           </div>
           <form
@@ -776,7 +919,14 @@ function AdminCommandCenter({
             }}
             className="admin-member-add mt-4"
           >
-            <input required minLength={2} maxLength={60} value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="ชื่อสมาชิกใหม่" />
+            <input
+              required
+              minLength={2}
+              maxLength={60}
+              value={memberName}
+              onChange={(event) => setMemberName(event.target.value)}
+              placeholder="ชื่อสมาชิกใหม่"
+            />
             <button disabled={busy}>เพิ่มสมาชิก</button>
           </form>
           <div className="admin-command-list mt-4">
@@ -785,15 +935,26 @@ function AdminCommandCenter({
                 <div key={member.id} className="admin-command-row">
                   <div className="min-w-0 flex-1">
                     <b>{member.display_name}</b>
-                    <p>{member.active ? "ใช้งาน" : "ปิดใช้งาน"} · {member.role === "admin" ? "แอดมิน" : "สมาชิก"}</p>
+                    <p>
+                      {member.active ? "ใช้งาน" : "ปิดใช้งาน"} ·{" "}
+                      {member.role === "admin" ? "แอดมิน" : "สมาชิก"}
+                    </p>
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <button
                       type="button"
                       disabled={!member.active || busy}
                       onClick={() => {
-                        const next = window.prompt("แก้ชื่อสมาชิก", member.display_name);
-                        if (next?.trim()) call({ action: "member_update", id: member.id, name: next.trim() });
+                        const next = window.prompt(
+                          "แก้ชื่อสมาชิก",
+                          member.display_name,
+                        );
+                        if (next?.trim())
+                          call({
+                            action: "member_update",
+                            id: member.id,
+                            name: next.trim(),
+                          });
                       }}
                       className="member-edit-action"
                     >
@@ -804,7 +965,8 @@ function AdminCommandCenter({
                         type="button"
                         disabled={busy}
                         onClick={() => {
-                          if (window.confirm("ปิดใช้งานสมาชิกนี้?")) call({ action: "member_delete", id: member.id });
+                          if (window.confirm("ปิดใช้งานสมาชิกนี้?"))
+                            call({ action: "member_delete", id: member.id });
                         }}
                         className="reject-action"
                       >
@@ -827,30 +989,50 @@ function AdminCommandCenter({
             <div>
               <p className="label">ADMIN ACCESS</p>
               <h3 className="mt-1 text-lg font-black">จัดการแอดมิน</h3>
-              <p className="mt-1 text-sm text-slate-400">เฉพาะ Sam เท่านั้นที่เพิ่มหรือถอดสิทธิ์แอดมินได้</p>
+              <p className="mt-1 text-sm text-slate-400">
+                เฉพาะ Sam เท่านั้นที่เพิ่มหรือถอดสิทธิ์แอดมินได้
+              </p>
             </div>
-            <span className="rounded-full border border-red-400/30 bg-red-950/30 px-3 py-1 text-xs font-bold text-red-200">SAM ONLY</span>
+            <span className="rounded-full border border-red-400/30 bg-red-950/30 px-3 py-1 text-xs font-bold text-red-200">
+              SAM ONLY
+            </span>
           </div>
           {sam ? (
             <div className="admin-command-list mt-4">
-              {activeMembers.filter((member: any) => member.id !== data.me.id).map((member: any) => (
-                <div key={member.id} className="admin-command-row">
-                  <div className="min-w-0 flex-1">
-                    <b>{member.display_name}</b>
-                    <p>{member.role === "admin" ? "แอดมิน" : "สมาชิก"}</p>
+              {activeMembers
+                .filter((member: any) => member.id !== data.me.id)
+                .map((member: any) => (
+                  <div key={member.id} className="admin-command-row">
+                    <div className="min-w-0 flex-1">
+                      <b>{member.display_name}</b>
+                      <p>{member.role === "admin" ? "แอดมิน" : "สมาชิก"}</p>
+                    </div>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        call({
+                          action: "admin_access",
+                          memberId: member.id,
+                          enabled: member.role !== "admin",
+                        })
+                      }
+                      className={
+                        member.role === "admin"
+                          ? "member-edit-action"
+                          : "admin-promote-action"
+                      }
+                    >
+                      {member.role === "admin"
+                        ? "ถอดแอดมิน"
+                        : "เพิ่มเป็นแอดมิน"}
+                    </button>
                   </div>
-                  <button
-                    disabled={busy}
-                    onClick={() => call({ action: "admin_access", memberId: member.id, enabled: member.role !== "admin" })}
-                    className={member.role === "admin" ? "member-edit-action" : "admin-promote-action"}
-                  >
-                    {member.role === "admin" ? "ถอดแอดมิน" : "เพิ่มเป็นแอดมิน"}
-                  </button>
-                </div>
-              ))}
+                ))}
             </div>
           ) : (
-            <div className="admin-command-empty mt-4">บัญชีนี้ไม่มีสิทธิ์จัดการแอดมิน</div>
+            <div className="admin-command-empty mt-4">
+              บัญชีนี้ไม่มีสิทธิ์จัดการแอดมิน
+            </div>
           )}
         </div>
       )}
@@ -1100,16 +1282,23 @@ export default function Home() {
       <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
       <div className="relative mx-auto flex max-w-7xl gap-6 p-4 lg:p-7">
         <aside className="hidden w-60 shrink-0 lg:block">
-          <img
-            src="/5k-logo.png"
-            alt="5K Fivethousand"
-            className="h-28 w-full object-contain"
-          />
+          <div className="side-brand">
+            <img
+              src="/5k-logo.png"
+              alt="5K Fivethousand"
+              className="h-28 w-full object-contain"
+            />
+            <div>
+              <p>FIVETHOUSAND</p>
+              <b>COMMAND MODE</b>
+            </div>
+          </div>
           <nav className="mt-7 space-y-2">
             {nav.map(([id, label, Icon]: any) => (
               <button
                 key={id}
                 onClick={() => setView(id)}
+                aria-current={view === id ? "page" : undefined}
                 className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left font-bold ${view === id ? "bg-red-600" : "text-slate-400 hover:bg-white/5"}`}
               >
                 <Icon className="h-4 w-4" />
@@ -1126,9 +1315,10 @@ export default function Home() {
                 alt="5K"
                 className="h-12 w-24 object-contain lg:hidden"
               />
-              <p className="hidden text-sm text-slate-400 lg:block">
-                {data.date} · ประเทศไทย
-              </p>
+              <div className="hidden lg:block">
+                <p className="label">LIVE COMMAND // THAILAND</p>
+                <p className="mt-1 text-sm text-slate-300">{data.date}</p>
+              </div>
             </div>
             <div className="flex items-center gap-3 text-right">
               <div>
@@ -1146,13 +1336,16 @@ export default function Home() {
               </button>
             </div>
           </header>
-          <div className="command-hero mb-5 rounded-xl border border-red-500/25 p-5">
-            <p className="label">FIVETHOUSAND COMMAND CENTER</p>
+          <div className="command-hero mb-4 rounded-xl border border-red-500/25 p-5">
+            <div className="command-hero__eyebrow">
+              <p className="label">FIVETHOUSAND COMMAND CENTER</p>
+              <span>LIVE</span>
+            </div>
             <div className="mt-2 flex items-end justify-between gap-4">
               <div>
+                <p className="command-hero__title">แต้มสะสมของคุณ</p>
                 <h1 className="text-2xl font-black sm:text-3xl">
-                  แต้มของคุณ{" "}
-                  <span className="text-red-500">{data.me.score} PTS</span>
+                  <span className="text-red-500">{data.me.score}</span> PTS
                 </h1>
                 <p className="mt-2 text-sm text-slate-400">
                   แอร์ดรอป 20:00 และ 23:00 · รอบละ +3 คะแนน · ปาร์ตี้คนละ +1
@@ -1161,12 +1354,21 @@ export default function Home() {
               </div>
               <button
                 onClick={load}
-                className="rounded-lg border border-white/15 px-3 py-2 text-sm"
+                className="hero-refresh"
+                aria-label="รีเฟรชข้อมูล"
               >
                 รีเฟรช
               </button>
             </div>
           </div>
+          <MissionControl
+            data={data}
+            onOpenAirdrop={(nextRound) => {
+              setRound(nextRound);
+              setView("airdrop");
+            }}
+            onOpenParty={() => setView("party")}
+          />
           <div className="mb-5 flex gap-2 overflow-x-auto lg:hidden">
             {nav.map(([id, label]) => (
               <button
@@ -1185,15 +1387,16 @@ export default function Home() {
             </div>
           )}
           {view === "airdrop" && (
-            <div className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
+            <div className="airdrop-workspace grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
               <form
                 onSubmit={(e) => send("airdrop", e)}
-                className="command-panel p-5"
+                className="command-panel airdrop-submit-panel p-5"
               >
                 <p className="label">AIRDROP CHECK-IN</p>
                 <h2 className="mt-2 text-xl font-black">ส่งหลักฐานแอร์ดรอป</h2>
                 <p className="mt-2 text-sm text-slate-400">
-                  เลือกรอบที่ต้องการ แล้วส่งภาพเฉพาะเมื่อรอบนั้นยังไม่ผ่านการตรวจ
+                  เลือกรอบที่ต้องการ
+                  แล้วส่งภาพเฉพาะเมื่อรอบนั้นยังไม่ผ่านการตรวจ
                 </p>
                 <div className="mt-5 grid grid-cols-2 gap-3">
                   {(["20:00", "23:00"] as const).map((time) => {
@@ -1203,7 +1406,7 @@ export default function Home() {
                         type="button"
                         key={time}
                         onClick={() => setRound(time)}
-                        className={`rounded-lg border p-4 text-left ${round === time ? "border-red-500 bg-red-950/30" : "border-white/10"}`}
+                        className={`airdrop-round-card rounded-lg border p-4 text-left ${round === time ? "border-red-500 bg-red-950/30" : "border-white/10"}`}
                       >
                         <b className="text-2xl">{time}</b>
                         <p className="mt-3">
@@ -1253,14 +1456,15 @@ export default function Home() {
                   </>
                 )}
               </form>
-              <section className="command-panel p-5">
-                <p className="label">ประวัติแอร์ดรอป</p>
+              <section className="command-panel airdrop-history-panel p-5">
+                <p className="label">AIRDROP LOG</p>
+                <h2 className="mt-2 text-xl font-black">ประวัติแอร์ดรอป</h2>
                 <div className="mt-4 space-y-2">
                   {data.airdrops.length ? (
                     data.airdrops.map((x: any) => (
                       <div
                         key={x.id}
-                        className="flex items-center justify-between rounded-lg bg-white/5 p-3"
+                        className="airdrop-history-item flex items-center justify-between rounded-lg bg-white/5 p-3"
                       >
                         <div>
                           <b>
@@ -1306,10 +1510,17 @@ export default function Home() {
               }}
             />
           )}
-          {view === "score" && <SquadRanking leaderboard={data.leaderboard} highlightId={data.me.id} />}
+          {view === "score" && (
+            <SquadRanking
+              leaderboard={data.leaderboard}
+              highlightId={data.me.id}
+            />
+          )}
           {view === "admin" &&
             (data.me.role !== "admin" ? (
-              <section className="command-panel p-6">หน้านี้สำหรับแอดมินเท่านั้น</section>
+              <section className="command-panel p-6">
+                หน้านี้สำหรับแอดมินเท่านั้น
+              </section>
             ) : (
               <AdminCommandCenter data={data} call={call} busy={busy} />
             ))}
