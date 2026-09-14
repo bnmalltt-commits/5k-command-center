@@ -462,6 +462,39 @@ main > div.relative.mx-auto::after {
 .red-action:hover { filter: brightness(1.12); transform: translateY(-1px); }
 .red-action:active { transform: translateY(0); }
 
+/* Shared command-center button interaction: lift on hover, tactile press, and clear keyboard focus. */
+button:not(:disabled) {
+  position: relative;
+  transition: transform .16s ease, filter .16s ease, box-shadow .16s ease, border-color .16s ease;
+}
+
+button:not(:disabled):hover {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .24);
+}
+
+button:not(:disabled):active {
+  transform: translateY(0) scale(.975);
+  filter: brightness(.98);
+  box-shadow: none;
+}
+
+button:focus-visible {
+  outline: 2px solid #fb7185;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 5px rgba(251, 113, 133, .16);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  filter: saturate(.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled) { transition: none; }
+}
+
 .score-card {
   border: 1px solid rgba(255,255,255,.1);
   border-radius: .6rem;
