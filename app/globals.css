@@ -926,6 +926,47 @@ button:disabled {
   .ui-v2 .command-score-strip { min-height: 76px; }
 }
 
+/* Keep the reference-style mission deck above legacy mission-control layout rules. */
+main.ui-v2 .mission-control {
+  display: block;
+  padding: 1rem;
+}
+main.ui-v2 .mission-control__heading {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+main.ui-v2 .mission-control__rounds {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem;
+  margin-top: 0.95rem;
+}
+main.ui-v2 .mission-control__round {
+  display: block;
+  min-height: 122px;
+  padding: 1rem;
+  text-align: left;
+}
+main.ui-v2 .mission-control__status {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+}
+main.ui-v2 .mission-control__copy { min-width: 0; }
+main.ui-v2 .mission-control__copy h3 { margin: 0.15rem 0 0; }
+main.ui-v2 .mission-control__metrics { display: flex; margin-left: auto; }
+main.ui-v2 .mission-control__action { min-width: 156px; margin-left: 0; }
+
+@media (max-width: 640px) {
+  main.ui-v2 .mission-control { padding: 0.8rem; }
+  main.ui-v2 .mission-control__status { flex-wrap: wrap; }
+  main.ui-v2 .mission-control__metrics { display: none; }
+  main.ui-v2 .mission-control__action { width: 100%; }
+}
+
 .score-card {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 0.6rem;
