@@ -762,7 +762,7 @@ function AdminCommandCenter({
   busy,
 }: {
   data: Data;
-  call: (body: any) => void;
+  call: (body: any) => Promise<boolean>;
   busy: boolean;
 }) {
   const [tab, setTab] = useState<"verify" | "members" | "admins">("verify");
