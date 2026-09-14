@@ -966,11 +966,18 @@ function AdminCommandCenter({
                           "แก้ชื่อสมาชิก",
                           member.display_name,
                         );
-                        if (next?.trim())
+                        const nextName = next?.trim();
+                        if (
+                          nextName &&
+                          nextName !== member.display_name &&
+                          window.confirm(
+                            `ตรวจสอบชื่อก่อนบันทึก\n\n${member.display_name} → ${nextName}\n\nยืนยันการแก้ชื่อสมาชิกใช่หรือไม่?`,
+                          )
+                        )
                           call({
                             action: "member_update",
                             id: member.id,
-                            name: next.trim(),
+                            name: nextName,
                           });
                       }}
                       className="member-edit-action"
@@ -1690,11 +1697,18 @@ export default function Home() {
                               "แก้ชื่อสมาชิก",
                               member.display_name,
                             );
-                            if (next)
+                            const nextName = next?.trim();
+                            if (
+                              nextName &&
+                              nextName !== member.display_name &&
+                              window.confirm(
+                                `ตรวจสอบชื่อก่อนบันทึก\n\n${member.display_name} → ${nextName}\n\nยืนยันการแก้ชื่อสมาชิกใช่หรือไม่?`,
+                              )
+                            )
                               call({
                                 action: "member_update",
                                 id: member.id,
-                                name: next,
+                                name: nextName,
                               });
                           }}
                           className="rounded bg-white/10 px-2 py-1 text-xs"
