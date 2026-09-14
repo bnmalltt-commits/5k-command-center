@@ -2511,3 +2511,60 @@ main.ui-v2 .mission-control__action { min-width: 156px; margin-left: 0; }
     width: 100%;
   }
 }
+
+/* Airdrop submission is an action surface, not a second mission board. */
+main.ui-v2 .airdrop-submit-panel {
+  min-height: 0;
+}
+
+main.ui-v2 .airdrop-day-complete,
+main.ui-v2 .airdrop-complete {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid rgba(61, 225, 147, 0.34);
+  border-radius: 0.85rem;
+  background:
+    radial-gradient(circle at 95% 0%, rgba(37, 228, 139, 0.1), transparent 42%),
+    rgba(4, 37, 30, 0.5);
+  color: #49e9a1;
+}
+
+main.ui-v2 .airdrop-day-complete b,
+main.ui-v2 .airdrop-complete b {
+  display: block;
+  color: #e8fff4;
+  font-size: 0.95rem;
+}
+
+main.ui-v2 .airdrop-day-complete p,
+main.ui-v2 .airdrop-complete p {
+  margin-top: 0.2rem;
+  color: #9bb7aa;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+main.ui-v2 .airdrop-next-round {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid rgba(255, 89, 105, 0.55);
+  border-radius: 0.7rem;
+  background: rgba(134, 15, 31, 0.22);
+  color: #ffe6e9;
+  font-size: 0.84rem;
+  font-weight: 800;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+
+main.ui-v2 .airdrop-next-round:hover {
+  border-color: #ff6475;
+  background: rgba(191, 25, 47, 0.35);
+  transform: translateY(-1px);
+}
+
+main.ui-v2 .airdrop-next-round:focus-visible {
+  outline: 2px solid #fda4af;
+  outline-offset: 3px;
+}

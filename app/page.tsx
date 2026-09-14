@@ -1288,6 +1288,15 @@ export default function Home() {
         Number(data.favorites.includes(a.id)) ||
       a.display_name.localeCompare(b.display_name),
   );
+  const todayRounds = ["20:00", "23:00"] as const;
+  const completedRounds = todayRounds.filter(
+    (time) => mine.get(time)?.status === "approved",
+  );
+  const nextIncompleteRound = todayRounds.find(
+    (time) => mine.get(time)?.status !== "approved",
+  );
+  const checkInComplete = completedRounds.length === todayRounds.length;
+  const selectedAirdrop = mine.get(round);
   const nav: [string, string, any][] = [
     ["airdrop", "แอร์ดรอป", Crosshair],
     ["party", "ปาร์ตี้", Users],
@@ -1411,49 +1420,49 @@ export default function Home() {
                 className="command-panel airdrop-submit-panel p-5"
               >
                 <p className="label">AIRDROP CHECK-IN</p>
-                <h2 className="mt-2 text-xl font-black">ส่งหลักฐานแอร์ดรอป</h2>
+                <h2 className="mt-2 text-xl font-black">
+                  {checkInComplete
+                    ? "เช็กอินวันนี้ครบแล้ว"
+                    : `ส่งหลักฐานรอบ ${round}`}
+                </h2>
                 <p className="mt-2 text-sm text-slate-400">
-                  เลือกรอบที่ต้องการ
-                  แล้วส่งภาพเฉพาะเมื่อรอบนั้นยังไม่ผ่านการตรวจ
+                  {checkInComplete
+                    ? "คะแนนของทั้งสองรอบถูกบันทึกแล้ว ดูหลักฐานย้อนหลังได้ทางด้านขวา"
+                    : "รอบที่เลือกจากภารกิจด้านบนจะแสดงที่นี่ เพื่อส่งหลักฐานเพียงครั้งเดียว"}
                 </p>
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  {(["20:00", "23:00"] as const).map((time) => {
-                    const entry = mine.get(time);
-                    return (
-                      <button
-                        type="button"
-                        key={time}
-                        onClick={() => setRound(time)}
-                        className={`airdrop-round-card rounded-lg border p-4 text-left ${round === time ? "border-red-500 bg-red-950/30" : "border-white/10"}`}
-                      >
-                        <b className="text-2xl">{time}</b>
-                        <p className="mt-3">
-                          {entry ? (
-                            <Status value={entry.status} />
-                          ) : (
-                            <span className="text-sm text-slate-400">
-                              ยังไม่ส่ง
-                            </span>
-                          )}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-                {mine.get(round)?.status === "approved" ? (
-                  <div className="airdrop-complete mt-5">
+                {checkInComplete ? (
+                  <div className="airdrop-day-complete mt-5">
                     <Check className="h-5 w-5" />
                     <div>
-                      <b>รอบ {round} ผ่านการตรวจแล้ว</b>
-                      <p>คะแนนถูกบันทึกเรียบร้อย ไม่ต้องส่งหลักฐานซ้ำ</p>
+                      <b>ภารกิจแอร์ดรอปเสร็จสมบูรณ์ · 2/2 รอบ</b>
+                      <p>ไม่ต้องส่งหลักฐานซ้ำแล้ว รอภารกิจวันถัดไปได้เลย</p>
                     </div>
                   </div>
+                ) : selectedAirdrop?.status === "approved" ? (
+                  <>
+                    <div className="airdrop-complete mt-5">
+                      <Check className="h-5 w-5" />
+                      <div>
+                        <b>รอบ {round} ผ่านการตรวจแล้ว</b>
+                        <p>คะแนนถูกบันทึกเรียบร้อย ไม่ต้องส่งหลักฐานซ้ำ</p>
+                      </div>
+                    </div>
+                    {nextIncompleteRound && (
+                      <button
+                        type="button"
+                        onClick={() => setRound(nextIncompleteRound)}
+                        className="airdrop-next-round mt-4"
+                      >
+                        ไปส่งหลักฐานรอบ {nextIncompleteRound}
+                      </button>
+                    )}
+                  </>
                 ) : (
                   <>
                     <p className="airdrop-next mt-5">
-                      {mine.get(round)?.status === "pending"
+                      {selectedAirdrop?.status === "pending"
                         ? "หลักฐานกำลังรอตรวจ หากต้องการเปลี่ยน ให้เลือกรูปใหม่แล้วส่งแก้ไข"
-                        : mine.get(round)?.status === "rejected"
+                        : selectedAirdrop?.status === "rejected"
                           ? "หลักฐานไม่ผ่านการตรวจ กรุณาเลือกรูปใหม่และส่งอีกครั้ง"
                           : `ยังไม่มีหลักฐานสำหรับรอบ ${round}`}
                     </p>
@@ -1465,9 +1474,9 @@ export default function Home() {
                       className="red-action mt-4 w-full disabled:opacity-40"
                     >
                       <Upload className="h-5 w-5" />
-                      {mine.get(round)?.status === "rejected"
+                      {selectedAirdrop?.status === "rejected"
                         ? "ส่งหลักฐานใหม่"
-                        : mine.get(round)?.status === "pending"
+                        : selectedAirdrop?.status === "pending"
                           ? "ส่งหลักฐานแก้ไข"
                           : "ส่งรอบ " + round}
                     </button>
