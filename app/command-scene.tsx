@@ -22,12 +22,19 @@ function OrbitalCore() {
   });
 
   return (
-    <group position={[2.65, 1.05, -0.5]} scale={1.7}>
+    <group position={[2.75, 1.15, -0.5]} scale={1.42}>
       <pointLight color="#ff263c" intensity={9} distance={7} />
       <ambientLight intensity={0.28} />
       <mesh ref={core}>
         <icosahedronGeometry args={[0.7, 1]} />
-        <meshStandardMaterial color="#ff3345" emissive="#870016" emissiveIntensity={1.8} metalness={0.75} roughness={0.22} wireframe />
+        <meshStandardMaterial
+          color="#ff3345"
+          emissive="#870016"
+          emissiveIntensity={1.8}
+          metalness={0.75}
+          roughness={0.22}
+          wireframe
+        />
       </mesh>
       <group ref={ring}>
         <mesh rotation={[Math.PI / 2.5, 0, 0]}>
@@ -50,10 +57,21 @@ function OrbitalCore() {
 export default function CommandScene() {
   return (
     <div className="command-scene" aria-hidden="true">
-      <Canvas dpr={[1, 1.5]} camera={{ position: [0, 0, 6], fov: 42 }} gl={{ alpha: true, antialias: true }}>
+      <Canvas
+        dpr={[1, 1.5]}
+        camera={{ position: [0, 0, 6], fov: 42 }}
+        gl={{ alpha: true, antialias: true }}
+      >
         <fog attach="fog" args={["#07080b", 4, 11]} />
         <OrbitalCore />
-        <Sparkles count={42} scale={[9, 5, 3]} size={1.25} speed={0.18} color="#ef4444" opacity={0.5} />
+        <Sparkles
+          count={42}
+          scale={[9, 5, 3]}
+          size={1.1}
+          speed={0.18}
+          color="#ef4444"
+          opacity={0.34}
+        />
       </Canvas>
     </div>
   );

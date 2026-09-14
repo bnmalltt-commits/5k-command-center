@@ -106,8 +106,30 @@ body {
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  opacity: 0.62;
+  opacity: 0.72;
   overflow: hidden;
+  background:
+    linear-gradient(
+      90deg,
+      rgba(4, 6, 9, 0.28),
+      rgba(4, 6, 9, 0.04) 52%,
+      rgba(4, 6, 9, 0.24)
+    ),
+    url("/command-center-depth-v1.png") center / cover no-repeat;
+}
+
+.command-scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      circle at 76% 26%,
+      rgba(255, 38, 60, 0.16),
+      transparent 23%
+    ),
+    linear-gradient(180deg, rgba(3, 5, 8, 0.12), rgba(3, 5, 8, 0.46));
 }
 
 body > main {
@@ -118,7 +140,7 @@ body > main {
 
 @media (max-width: 900px) {
   .command-scene {
-    opacity: 0.28;
+    opacity: 0.38;
   }
 }
 
@@ -1030,7 +1052,7 @@ button:disabled {
       rgba(7, 8, 11, 0.46) 50%,
       rgba(7, 8, 11, 0.7) 100%
     ),
-    url("/fivethousand-command-bg.png");
+    url("/command-center-depth-v1.png");
   background-position: center;
   background-size: cover;
   background-attachment: fixed;
@@ -1597,48 +1619,65 @@ button:disabled {
 .ui-v2 .airdrop-next,
 .ui-v2 .airdrop-complete {
   display: flex;
-  gap: .75rem;
+  gap: 0.75rem;
   align-items: flex-start;
-  padding: .85rem 1rem;
-  border: 1px solid rgba(148, 163, 184, .18);
-  border-radius: .85rem;
-  background: rgba(15, 23, 42, .48);
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 0.85rem;
+  background: rgba(15, 23, 42, 0.48);
   color: #cbd5e1;
-  font-size: .875rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
 .ui-v2 .airdrop-complete {
-  border-color: rgba(52, 211, 153, .28);
-  background: linear-gradient(120deg, rgba(6, 95, 70, .28), rgba(15, 23, 42, .58));
+  border-color: rgba(52, 211, 153, 0.28);
+  background: linear-gradient(
+    120deg,
+    rgba(6, 95, 70, 0.28),
+    rgba(15, 23, 42, 0.58)
+  );
   color: #d1fae5;
 }
 
-.ui-v2 .airdrop-complete svg { flex: 0 0 auto; color: #34d399; }
-.ui-v2 .airdrop-complete p { margin-top: .18rem; color: #94a3b8; font-size: .78rem; }
+.ui-v2 .airdrop-complete svg {
+  flex: 0 0 auto;
+  color: #34d399;
+}
+.ui-v2 .airdrop-complete p {
+  margin-top: 0.18rem;
+  color: #94a3b8;
+  font-size: 0.78rem;
+}
 
 /* Scores: the main page can show the whole squad while the rail remains a quick top-five view. */
 .ui-v2 .ranking-panel:not(.ranking-panel--compact) .ranking-list {
   max-height: 560px;
-  padding-right: .3rem;
+  padding-right: 0.3rem;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 58, 75, .5) transparent;
+  scrollbar-color: rgba(255, 58, 75, 0.5) transparent;
 }
 
 .ui-v2 .ranking-row--mine {
-  border-color: rgba(251, 191, 36, .52);
-  background: linear-gradient(100deg, rgba(251, 191, 36, .12), rgba(255, 255, 255, .035));
+  border-color: rgba(251, 191, 36, 0.52);
+  background: linear-gradient(
+    100deg,
+    rgba(251, 191, 36, 0.12),
+    rgba(255, 255, 255, 0.035)
+  );
 }
 
 .ui-v2 .ranking-position {
-  margin: .9rem 0 0;
+  margin: 0.9rem 0 0;
   color: #94a3b8;
-  font-size: .85rem;
+  font-size: 0.85rem;
   text-align: center;
 }
 
-.ui-v2 .ranking-position b { color: #fbbf24; }
+.ui-v2 .ranking-position b {
+  color: #fbbf24;
+}
 
 /* Admin command center: one compact workspace with tabs and searchable lists. */
 .ui-v2 .admin-command-panel {
@@ -1647,28 +1686,32 @@ button:disabled {
 
 .ui-v2 .admin-command-tabs {
   display: flex;
-  gap: .45rem;
-  padding: .4rem;
-  border: 1px solid rgba(148, 163, 184, .16);
-  border-radius: .85rem;
-  background: rgba(2, 6, 23, .44);
+  gap: 0.45rem;
+  padding: 0.4rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.85rem;
+  background: rgba(2, 6, 23, 0.44);
 }
 
 .ui-v2 .admin-command-tabs button {
   flex: 1;
   min-height: 38px;
-  padding: .55rem .7rem;
+  padding: 0.55rem 0.7rem;
   border: 1px solid transparent;
-  border-radius: .6rem;
+  border-radius: 0.6rem;
   color: #94a3b8;
-  font-size: .82rem;
+  font-size: 0.82rem;
   font-weight: 700;
 }
 
 .ui-v2 .admin-command-tabs button:hover,
 .ui-v2 .admin-command-tabs button.is-active {
-  border-color: rgba(255, 73, 91, .38);
-  background: linear-gradient(105deg, rgba(239, 36, 52, .25), rgba(112, 16, 24, .3));
+  border-color: rgba(255, 73, 91, 0.38);
+  background: linear-gradient(
+    105deg,
+    rgba(239, 36, 52, 0.25),
+    rgba(112, 16, 24, 0.3)
+  );
   color: #fff;
 }
 
@@ -1676,100 +1719,147 @@ button:disabled {
   display: inline-grid;
   min-width: 1.35rem;
   place-items: center;
-  margin-left: .28rem;
-  padding: .1rem .3rem;
+  margin-left: 0.28rem;
+  padding: 0.1rem 0.3rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, .1);
-  font-size: .68rem;
+  background: rgba(255, 255, 255, 0.1);
+  font-size: 0.68rem;
 }
 
 .ui-v2 .admin-command-list {
   display: grid;
-  gap: .5rem;
+  gap: 0.5rem;
   max-height: 470px;
-  padding-right: .25rem;
+  padding-right: 0.25rem;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 58, 75, .5) transparent;
+  scrollbar-color: rgba(255, 58, 75, 0.5) transparent;
 }
 
 .ui-v2 .admin-command-row {
   display: flex;
   min-height: 58px;
   align-items: center;
-  gap: .75rem;
-  padding: .7rem .8rem;
-  border: 1px solid rgba(156, 173, 194, .15);
-  border-radius: .8rem;
-  background: rgba(255, 255, 255, .045);
+  gap: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(156, 173, 194, 0.15);
+  border-radius: 0.8rem;
+  background: rgba(255, 255, 255, 0.045);
 }
 
 .ui-v2 .admin-command-row:hover {
-  border-color: rgba(255, 74, 90, .38);
-  background: rgba(255, 40, 58, .075);
+  border-color: rgba(255, 74, 90, 0.38);
+  background: rgba(255, 40, 58, 0.075);
 }
 
-.ui-v2 .admin-command-row b { font-size: .9rem; }
-.ui-v2 .admin-command-row p { margin-top: .16rem; color: #94a3b8; font-size: .75rem; }
+.ui-v2 .admin-command-row b {
+  font-size: 0.9rem;
+}
+.ui-v2 .admin-command-row p {
+  margin-top: 0.16rem;
+  color: #94a3b8;
+  font-size: 0.75rem;
+}
 
 .ui-v2 .admin-command-row button,
 .ui-v2 .admin-member-add button {
   min-height: 34px;
-  padding: .45rem .72rem;
-  border-radius: .55rem;
-  font-size: .74rem;
+  padding: 0.45rem 0.72rem;
+  border-radius: 0.55rem;
+  font-size: 0.74rem;
   font-weight: 700;
 }
 
 .ui-v2 .evidence-link {
   display: flex;
   align-items: center;
-  gap: .45rem;
+  gap: 0.45rem;
   min-height: 34px;
-  padding: .35rem .48rem;
-  border-radius: .55rem;
-  background: rgba(255, 255, 255, .1);
+  padding: 0.35rem 0.48rem;
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.1);
   color: #e2e8f0;
-  font-size: .72rem;
+  font-size: 0.72rem;
   font-weight: 700;
 }
 
-.ui-v2 .evidence-link img { width: 2.25rem; height: 1.7rem; border-radius: .32rem; object-fit: cover; }
-.ui-v2 .approval-action { background: #059669; color: white; }
-.ui-v2 .reject-action { background: #b91c2f; color: white; }
-.ui-v2 .member-edit-action { border: 1px solid rgba(148, 163, 184, .32); background: rgba(255, 255, 255, .07); color: #e2e8f0; }
-.ui-v2 .admin-promote-action { background: #e11d31; color: white; }
+.ui-v2 .evidence-link img {
+  width: 2.25rem;
+  height: 1.7rem;
+  border-radius: 0.32rem;
+  object-fit: cover;
+}
+.ui-v2 .approval-action {
+  background: #059669;
+  color: white;
+}
+.ui-v2 .reject-action {
+  background: #b91c2f;
+  color: white;
+}
+.ui-v2 .member-edit-action {
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  background: rgba(255, 255, 255, 0.07);
+  color: #e2e8f0;
+}
+.ui-v2 .admin-promote-action {
+  background: #e11d31;
+  color: white;
+}
 
 .ui-v2 .admin-member-search input,
 .ui-v2 .admin-member-add input {
   min-height: 40px;
-  border: 1px solid rgba(148, 163, 184, .24);
-  border-radius: .65rem;
-  background: rgba(2, 6, 23, .54);
-  padding: .55rem .75rem;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 0.65rem;
+  background: rgba(2, 6, 23, 0.54);
+  padding: 0.55rem 0.75rem;
   color: #f8fafc;
-  font-size: .86rem;
+  font-size: 0.86rem;
 }
 
-.ui-v2 .admin-member-search input { width: 12rem; }
-.ui-v2 .admin-member-add { display: flex; gap: .55rem; }
-.ui-v2 .admin-member-add input { flex: 1; }
-.ui-v2 .admin-member-add button { background: #e11d31; color: white; }
+.ui-v2 .admin-member-search input {
+  width: 12rem;
+}
+.ui-v2 .admin-member-add {
+  display: flex;
+  gap: 0.55rem;
+}
+.ui-v2 .admin-member-add input {
+  flex: 1;
+}
+.ui-v2 .admin-member-add button {
+  background: #e11d31;
+  color: white;
+}
 
 .ui-v2 .admin-command-empty {
   padding: 1rem;
-  border: 1px dashed rgba(148, 163, 184, .25);
-  border-radius: .8rem;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  border-radius: 0.8rem;
   color: #94a3b8;
-  font-size: .88rem;
+  font-size: 0.88rem;
   text-align: center;
 }
 
 @media (max-width: 640px) {
-  .ui-v2 .admin-command-tabs { overflow-x: auto; }
-  .ui-v2 .admin-command-tabs button { min-width: 7.4rem; }
-  .ui-v2 .admin-member-search { width: 100%; }
-  .ui-v2 .admin-member-search input { width: 100%; }
-  .ui-v2 .admin-command-row { align-items: flex-start; flex-wrap: wrap; }
-  .ui-v2 .admin-command-row > div:last-child { width: 100%; }
+  .ui-v2 .admin-command-tabs {
+    overflow-x: auto;
+  }
+  .ui-v2 .admin-command-tabs button {
+    min-width: 7.4rem;
+  }
+  .ui-v2 .admin-member-search {
+    width: 100%;
+  }
+  .ui-v2 .admin-member-search input {
+    width: 100%;
+  }
+  .ui-v2 .admin-command-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .ui-v2 .admin-command-row > div:last-child {
+    width: 100%;
+  }
 }
