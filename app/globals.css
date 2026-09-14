@@ -934,3 +934,57 @@ button:disabled {
   .ui-v2 .command-panel > div.mt-4.space-y-2 > div,
   .ui-v2 .command-panel > div.mt-4.space-y-3 > div { transition: none; }
 }
+
+/* Compact squad rail: keep all 25 members available without letting the rail dominate the page. */
+@media (min-width: 1280px) {
+  .ui-v2 .command-rail .command-panel:first-child {
+    max-height: 500px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .ui-v2 .command-rail .command-panel:first-child > div:first-child {
+    flex: 0 0 auto;
+    gap: .55rem;
+  }
+
+  .ui-v2 .command-rail .command-panel:first-child > div:first-child .label {
+    overflow: hidden;
+    font-size: .56rem;
+    letter-spacing: .12em;
+    line-height: 1.15;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ui-v2 .command-rail .command-panel:first-child > div:first-child > span {
+    flex: 0 0 auto;
+    max-width: 82px;
+    text-align: right;
+    font-size: .78rem;
+    line-height: 1.2;
+  }
+
+  .ui-v2 .command-rail .command-panel:first-child > div.mt-4.space-y-2 {
+    min-height: 0;
+    margin-top: .7rem;
+    padding-right: .2rem;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 58, 75, .52) transparent;
+  }
+
+  .ui-v2 .command-rail .command-panel:first-child > div.mt-4.space-y-2 > div {
+    min-height: 38px;
+    padding: .48rem .58rem;
+    border-radius: 11px;
+  }
+
+  .ui-v2 .command-rail .command-panel:first-child > div.mt-4.space-y-2 > div .font-bold {
+    font-size: .8rem;
+  }
+
+  .ui-v2 .command-rail .command-panel:first-child > div.mt-4.space-y-2 > div .text-xs {
+    font-size: .64rem;
+  }
+}
