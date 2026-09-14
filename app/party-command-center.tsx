@@ -15,6 +15,8 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
   const party = data.myParty;
   const [name, setName] = useState("");
   const [tab, setTab] = useState<"team" | "find" | "invites">("team");
+  const [confirmDissolve, setConfirmDissolve] = useState(false);
+  const isOwner = party?.owner_member_id === data.me.id;
   const available = useMemo(
     () =>
       members.filter(
@@ -47,7 +49,7 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
                   {party.members.length}/5
                 </span>
                 {party.status === "open" &&
-                  party.owner_member_id === data.me.id && (
+                  isOwner && (
                     <button
                       disabled={busy}
                       onClick={() =>
@@ -63,13 +65,23 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
                       ล็อกทีม
                     </button>
                   )}
-                <button
-                  disabled={busy}
-                  onClick={() => call({ action: "party_leave" })}
-                  className="rounded-lg border border-white/15 px-4 py-2 text-sm"
-                >
-                  ออก
-                </button>
+                {isOwner ? (
+                  <button
+                    disabled={busy}
+                    onClick={() => setConfirmDissolve(true)}
+                    className="rounded-lg border border-red-400/50 px-4 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10"
+                  >
+                    ยุบปาร์ตี้
+                  </button>
+                ) : (
+                  <button
+                    disabled={busy}
+                    onClick={() => call({ action: "party_leave" })}
+                    className="rounded-lg border border-white/15 px-4 py-2 text-sm"
+                  >
+                    ออก
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -281,6 +293,19 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
             ) : (
               <p className="text-slate-400">ยังไม่มีคำเชิญ</p>
             )}
+          </div>
+        </div>
+      )}
+      {confirmDissolve && party && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-labelledby="dissolve-party-title">
+          <div className="command-panel w-full max-w-md p-5 shadow-2xl">
+            <p className="label text-red-300">PARTY CONTROL // DISSOLVE</p>
+            <h3 id="dissolve-party-title" className="mt-2 text-xl font-black">ยุบปาร์ตี้ “{party.name}” ?</h3>
+            <p className="mt-3 text-sm leading-6 text-slate-300">สมาชิกทั้งหมดจะออกจากปาร์ตี้และกลับไปสร้างหรือเข้าทีมใหม่ได้ทันที การดำเนินการนี้ย้อนกลับไม่ได้</p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" disabled={busy} onClick={() => setConfirmDissolve(false)} className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold">ยกเลิก</button>
+              <button type="button" disabled={busy} onClick={() => { call({ action: "party_dissolve", partyId: party.id }); setConfirmDissolve(false); }} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-black text-white">ยืนยันยุบปาร์ตี้</button>
+            </div>
           </div>
         </div>
       )}
