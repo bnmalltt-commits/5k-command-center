@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Lock, Plus, ShieldCheck, Users, X } from "lucide-react";
+import { Check, Lock, Plus, ShieldCheck, Users, X } from "lucide-react";
 
 type Props = {
   data: any;
