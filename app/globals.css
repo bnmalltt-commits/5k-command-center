@@ -694,9 +694,9 @@ button:disabled {
 }
 
 .ui-v2 .command-hero {
-  min-height: 132px;
+  min-height: 104px;
   margin-bottom: 1rem;
-  padding: 1.25rem 1.35rem;
+  padding: .85rem 1.15rem;
   border-radius: 20px;
   background: linear-gradient(112deg, rgba(35, 15, 20, .9), rgba(13, 16, 22, .9) 55%, rgba(17, 12, 16, .9));
   box-shadow: 0 18px 42px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .06);
@@ -704,11 +704,16 @@ button:disabled {
 
 .ui-v2 .command-hero h1 {
   gap: .6rem;
-  font-size: clamp(1.65rem, 2.8vw, 2.35rem);
+  font-size: clamp(1.35rem, 2.3vw, 1.9rem);
 }
 
 .ui-v2 .command-hero h1 span {
-  font-size: clamp(2.6rem, 5vw, 4.1rem);
+  font-size: clamp(2.15rem, 4vw, 3.15rem);
+}
+
+.ui-v2 .command-hero h1 + p {
+  margin-top: .35rem;
+  font-size: .78rem;
 }
 
 .ui-v2 .command-panel {
