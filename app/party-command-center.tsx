@@ -11,7 +11,7 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
   const [tab, setTab] = useState<"team" | "find" | "invites">("team");
   const available = useMemo(() => members.filter((member: any) => !party?.members?.some((current: any) => current.id === member.id)), [members, party]);
 
-  return <section className="space-y-5">
+  return <section className="party-v2 space-y-5">
     <div className="command-panel overflow-hidden">
       <div className="border-b border-white/10 bg-gradient-to-r from-red-950/45 to-transparent p-5">
         <div className="flex flex-wrap items-start justify-between gap-4">
