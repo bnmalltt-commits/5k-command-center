@@ -960,6 +960,25 @@ main.ui-v2 .mission-control__copy h3 { margin: 0.15rem 0 0; }
 main.ui-v2 .mission-control__metrics { display: flex; margin-left: auto; }
 main.ui-v2 .mission-control__action { min-width: 156px; margin-left: 0; }
 
+.ui-v2 .party-create-invites { max-width: 52rem; }
+.ui-v2 .party-create-invite {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid rgba(145, 173, 198, 0.22);
+  border-radius: 0.42rem;
+  background: rgba(4, 8, 12, 0.62);
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition: border-color .16s ease, background .16s ease, transform .16s ease;
+}
+.ui-v2 .party-create-invite:hover:not(:disabled) { border-color: rgba(255, 69, 87, .58); transform: translateY(-1px); }
+.ui-v2 .party-create-invite.is-selected { border-color: rgba(255, 73, 91, .82); background: linear-gradient(110deg, rgba(179, 16, 34, .46), rgba(49, 12, 18, .65)); color: #fff; }
+.ui-v2 .party-create-invite:disabled { cursor: not-allowed; opacity: .42; }
+
 @media (max-width: 640px) {
   main.ui-v2 .mission-control { padding: 0.8rem; }
   main.ui-v2 .mission-control__status { flex-wrap: wrap; }

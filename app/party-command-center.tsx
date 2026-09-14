@@ -16,6 +16,7 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
   const [name, setName] = useState("");
   const [tab, setTab] = useState<"team" | "find" | "invites">("team");
   const [confirmDissolve, setConfirmDissolve] = useState(false);
+  const [inviteeIds, setInviteeIds] = useState<number[]>([]);
   const isOwner = party?.owner_member_id === data.me.id;
   const available = useMemo(
     () =>
@@ -144,13 +145,14 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                if (name.trim()) call({ action: "party_create", name });
+                if (name.trim())
+                  call({ action: "party_create", name, memberIds: inviteeIds });
               }}
             >
               <p className="label">CREATE SQUAD</p>
-              <h3 className="mt-2 text-xl font-black">สร้างปาร์ตี้ใหม่</h3>
+              <h3 className="mt-2 text-xl font-black">สร้างปาร์ตี้และชวนเพื่อน</h3>
               <p className="mt-2 text-sm text-slate-400">
-                ตั้งชื่อทีม แล้วเชิญสมาชิกจากรายชื่อในขั้นถัดไป
+                ตั้งชื่อทีมและเลือกสมาชิกได้ทันที ระบบจะส่งคำเชิญหลังสร้างปาร์ตี้
               </p>
               <div className="mt-4 flex max-w-xl gap-2">
                 <input
@@ -166,8 +168,47 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
                   disabled={busy}
                   className="rounded-lg bg-red-600 px-4 font-bold"
                 >
-                  สร้าง
+                  สร้างและส่งคำเชิญ
                 </button>
+              </div>
+              <div className="party-create-invites mt-5 border-t border-white/10 pt-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black">เลือกเพื่อนเข้าปาร์ตี้</p>
+                    <p className="mt-1 text-xs text-slate-400">เลือกได้สูงสุด 4 คน นอกเหนือจากคุณ</p>
+                  </div>
+                  <span className="rounded-full border border-red-400/35 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-200">
+                    {inviteeIds.length}/4 คน
+                  </span>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {members
+                    .filter((member: any) => member.id !== data.me.id)
+                    .map((member: any) => {
+                      const selected = inviteeIds.includes(member.id);
+                      const blocked = !selected && inviteeIds.length >= 4;
+                      return (
+                        <button
+                          type="button"
+                          key={member.id}
+                          disabled={busy || blocked}
+                          aria-pressed={selected}
+                          onClick={() =>
+                            setInviteeIds((current) =>
+                              selected
+                                ? current.filter((id) => id !== member.id)
+                                : [...current, member.id],
+                            )
+                          }
+                          className={`party-create-invite ${selected ? "is-selected" : ""}`}
+                        >
+                          <span className={`status-dot ${member.online ? "" : "status-dot-offline"}`} />
+                          {member.display_name}
+                          {selected && <Check className="h-4 w-4" />}
+                        </button>
+                      );
+                    })}
+                </div>
               </div>
             </form>
           ) : (
