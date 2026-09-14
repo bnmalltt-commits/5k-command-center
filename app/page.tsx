@@ -89,46 +89,63 @@ function MissionControl({
       : missing
         ? "เลือกเวลา วางรูปหลักฐาน แล้วส่งเข้าคิวตรวจ"
         : "หลักฐานถูกส่งแล้ว ระบบกำลังรอแอดมินตรวจสอบ";
+  const roundState = (round: "20:00" | "23:00") => {
+    const status = entries.get(round)?.status;
+    return status === "approved"
+      ? "ผ่านแล้ว"
+      : status === "pending"
+        ? "รอตรวจ"
+        : status === "rejected"
+          ? "ส่งใหม่"
+          : "พร้อมเช็กอิน";
+  };
 
   return (
     <section
       className={`mission-control ${done ? "mission-control--complete" : ""}`}
     >
-      <div className="mission-control__signal">
-        {done ? (
-          <Check />
-        ) : pending && !missing && !rejected ? (
-          <Clock3 />
-        ) : (
-          <Radio />
-        )}
+      <div className="mission-control__heading">
+        <div className="mission-control__signal">
+          {done ? <Check /> : pending && !missing && !rejected ? <Clock3 /> : <Radio />}
+        </div>
+        <div>
+          <p className="label">NEXT MISSION</p>
+          <h2>เช็กอินแอร์ดรอป</h2>
+        </div>
+        <span className="mission-control__eyebrow">AIR DROP CHECK-IN</span>
       </div>
-      <div className="mission-control__copy">
-        <p className="label">NEXT MISSION</p>
-        <h2>{title}</h2>
-        <p>{detail}</p>
+      <div className="mission-control__rounds" aria-label="เลือกเวลาเช็กอิน">
+        {rounds.map((round) => (
+          <button
+            type="button"
+            key={round}
+            onClick={() => onOpenAirdrop(round)}
+            className={`mission-control__round ${nextRound === round ? "is-next" : ""} ${entries.get(round)?.status === "approved" ? "is-complete" : ""}`}
+          >
+            <small>MISSION {round === "20:00" ? "01" : "02"}</small>
+            <strong>{round}</strong>
+            <span>{roundState(round)}</span>
+          </button>
+        ))}
       </div>
-      <div className="mission-control__metrics" aria-label="สถานะกิจกรรมวันนี้">
-        <span>
-          <b>{approved}/2</b>
-          <small>แอร์ดรอป</small>
-        </span>
-        <span>
-          <b>{data.myParty ? "ON" : "—"}</b>
-          <small>ปาร์ตี้</small>
-        </span>
+      <div className="mission-control__status">
+        <div className="mission-control__copy">
+          <p className="label">CURRENT STATE</p>
+          <h3>{title}</h3>
+          <p>{detail}</p>
+        </div>
+        <div className="mission-control__metrics" aria-label="สถานะกิจกรรมวันนี้">
+          <span><b>{approved}/2</b><small>CHECK-IN</small></span>
+          <span><b>{data.myParty ? "ON" : "—"}</b><small>PARTY</small></span>
+        </div>
+        <button
+          type="button"
+          onClick={() => (done ? onOpenParty() : onOpenAirdrop(nextRound))}
+          className="mission-control__action"
+        >
+          {done ? "ไปที่ปาร์ตี้" : pending && !missing && !rejected ? "ดูสถานะ" : "เริ่มภารกิจ"}
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={() => (done ? onOpenParty() : onOpenAirdrop(nextRound))}
-        className="mission-control__action"
-      >
-        {done
-          ? "ไปที่ปาร์ตี้"
-          : pending && !missing && !rejected
-            ? "ดูสถานะ"
-            : "เริ่มภารกิจ"}
-      </button>
     </section>
   );
 }
@@ -1280,8 +1297,8 @@ export default function Home() {
   return (
     <main className="ui-v2 command-shell min-h-screen bg-[#07080b] text-white">
       <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
-      <div className="relative mx-auto flex max-w-7xl gap-6 p-4 lg:p-7">
-        <aside className="hidden w-60 shrink-0 lg:block">
+      <div className="command-desktop relative mx-auto flex max-w-[1600px] gap-6 p-4 lg:p-7">
+        <aside className="command-sidebar hidden w-60 shrink-0 lg:block">
           <div className="side-brand">
             <img
               src="/5k-logo.png"
@@ -1308,7 +1325,7 @@ export default function Home() {
           </nav>
         </aside>
         <section className="min-w-0 flex-1">
-          <header className="mb-6 flex items-center justify-between border-b border-white/10 pb-4">
+          <header className="command-topbar mb-6 flex items-center justify-between border-b border-white/10 pb-4">
             <div>
               <img
                 src="/5k-logo.png"
@@ -1317,10 +1334,11 @@ export default function Home() {
               />
               <div className="hidden lg:block">
                 <p className="label">LIVE COMMAND // THAILAND</p>
-                <p className="mt-1 text-sm text-slate-300">{data.date}</p>
+                <p className="mt-1 text-sm text-slate-300">{data.date} · เล่นด้วยกัน ไปได้ไกลกว่า</p>
               </div>
             </div>
             <div className="flex items-center gap-3 text-right">
+              <span className="system-online hidden lg:inline-flex"><i /> SYSTEM ONLINE</span>
               <div>
                 <b>{data.me.name}</b>
                 <p className="text-xs text-red-400">
@@ -1336,7 +1354,7 @@ export default function Home() {
               </button>
             </div>
           </header>
-          <div className="command-hero mb-4 rounded-xl border border-red-500/25 p-5">
+          <div className="command-hero command-score-strip mb-4 rounded-xl border border-red-500/25 p-5">
             <div className="command-hero__eyebrow">
               <p className="label">FIVETHOUSAND COMMAND CENTER</p>
               <span>LIVE</span>
