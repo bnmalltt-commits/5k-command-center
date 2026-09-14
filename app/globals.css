@@ -574,3 +574,21 @@ button:disabled {
   .ranking-row { gap: .4rem; }
   .ranking-footer { font-size: .43rem; letter-spacing: .08em; }
 }
+
+/* Command center artwork: keep the UI readable while giving the shell a stronger gaming identity. */
+.command-shell {
+  background-color: #07080b;
+  background-image:
+    linear-gradient(90deg, rgba(7, 8, 11, .94) 0%, rgba(7, 8, 11, .72) 50%, rgba(7, 8, 11, .9) 100%),
+    url('/fivethousand-command-bg.png');
+  background-position: center;
+  background-size: cover;
+  background-attachment: fixed;
+}
+
+@media (max-width: 1023px) {
+  .command-shell {
+    background-position: center top;
+    background-attachment: scroll;
+  }
+}
