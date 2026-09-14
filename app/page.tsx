@@ -665,9 +665,13 @@ function AdminCommandCenter({
   const [memberName, setMemberName] = useState("");
   const sam = data.me.name === "Sam";
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleMembers = data.managedMembers.filter((member: any) =>
-    member.display_name.toLowerCase().includes(normalizedQuery),
-  );
+  const visibleMembers = data.managedMembers.filter((member: any) => {
+    if (!normalizedQuery) return true;
+    return member.display_name
+      .toLowerCase()
+      .split(/\s+/)
+      .some((part: string) => part.startsWith(normalizedQuery));
+  });
   const activeMembers = data.managedMembers.filter((member: any) => member.active);
 
   return (
