@@ -930,8 +930,11 @@ function AdminCommandCenter({
             onSubmit={(event) => {
               event.preventDefault();
               if (memberName.trim()) {
-                call({ action: "member", name: memberName.trim() });
-                setMemberName("");
+                void call({ action: "member", name: memberName.trim() }).then(
+                  (saved) => {
+                    if (saved) setMemberName("");
+                  },
+                );
               }
             }}
             className="admin-member-add mt-4"
@@ -967,13 +970,7 @@ function AdminCommandCenter({
                           member.display_name,
                         );
                         const nextName = next?.trim();
-                        if (
-                          nextName &&
-                          nextName !== member.display_name &&
-                          window.confirm(
-                            `ตรวจสอบชื่อก่อนบันทึก\n\n${member.display_name} → ${nextName}\n\nยืนยันการแก้ชื่อสมาชิกใช่หรือไม่?`,
-                          )
-                        )
+                        if (nextName && nextName !== member.display_name)
                           call({
                             action: "member_update",
                             id: member.id,
@@ -988,10 +985,7 @@ function AdminCommandCenter({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => {
-                          if (window.confirm("ปิดใช้งานสมาชิกนี้?"))
-                            call({ action: "member_delete", id: member.id });
-                        }}
+                        onClick={() => call({ action: "member_delete", id: member.id })}
                         className="reject-action"
                       >
                         ปิดใช้งาน
@@ -1172,22 +1166,57 @@ export default function Home() {
       ),
     [data],
   );
+  const confirmationMessage = (body: any) => {
+    const action = body.action;
+    const messages: Record<string, string> = {
+      favorite: body.enabled
+        ? "ยืนยันเพิ่มสมาชิกคนนี้เป็นรายการโปรดใช่หรือไม่?"
+        : "ยืนยันนำสมาชิกคนนี้ออกจากรายการโปรดใช่หรือไม่?",
+      approve: "ยืนยันอนุมัติหลักฐานนี้และเพิ่มคะแนนให้สมาชิกใช่หรือไม่?",
+      reject: "ยืนยันว่าไม่ผ่านหลักฐานนี้ใช่หรือไม่? สมาชิกจะต้องส่งหลักฐานใหม่",
+      member: `ยืนยันเพิ่มสมาชิกใหม่ชื่อ “${body.name}” ใช่หรือไม่?`,
+      member_update: `ตรวจสอบชื่อก่อนบันทึก\n\nยืนยันเปลี่ยนชื่อเป็น “${body.name}” ใช่หรือไม่?`,
+      member_delete: "ยืนยันปิดใช้งานสมาชิกนี้ใช่หรือไม่? สมาชิกจะออกจากระบบทันที",
+      admin_access: body.enabled
+        ? "ยืนยันเพิ่มสิทธิ์แอดมินให้สมาชิกนี้ใช่หรือไม่?"
+        : "ยืนยันถอนสิทธิ์แอดมินของสมาชิกนี้ใช่หรือไม่?",
+      party_create: `ยืนยันสร้างปาร์ตี้ “${body.name}” และส่งคำเชิญที่เลือกใช่หรือไม่?`,
+      party_update: `ยืนยันเปลี่ยนชื่อปาร์ตี้เป็น “${body.name}” ใช่หรือไม่?`,
+      party_lock: "ยืนยันล็อกปาร์ตี้ใช่หรือไม่? หลังล็อกจะไม่รับสมาชิกเพิ่ม",
+      party_leave: "ยืนยันออกจากปาร์ตี้ใช่หรือไม่?",
+      party_remove_member: "ยืนยันนำสมาชิกคนนี้ออกจากปาร์ตี้ใช่หรือไม่?",
+      party_invite: "ยืนยันส่งคำเชิญเข้าปาร์ตี้ให้สมาชิกนี้ใช่หรือไม่?",
+      party_join: "ยืนยันเข้าร่วมปาร์ตี้นี้ใช่หรือไม่?",
+      party_respond: body.accept
+        ? "ยืนยันรับคำเชิญและเข้าร่วมปาร์ตี้ใช่หรือไม่?"
+        : "ยืนยันปฏิเสธคำเชิญปาร์ตี้ใช่หรือไม่?",
+      party_dissolve: "ยืนยันยุบปาร์ตี้ใช่หรือไม่? การดำเนินการนี้ย้อนกลับไม่ได้",
+    };
+    return messages[action] || "ยืนยันดำเนินการนี้ใช่หรือไม่?";
+  };
   const call = async (body: any) => {
+    if (!body.confirmed && !window.confirm(confirmationMessage(body))) return false;
+    const { confirmed: _confirmed, ...payload } = body;
     setBusy(true);
     try {
       const r = await fetch(
-          body.action.startsWith("party_") ? "/api/party" : "/api/dashboard",
+          payload.action.startsWith("party_") ? "/api/party" : "/api/dashboard",
           {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify(body),
+            body: JSON.stringify(payload),
           },
         ),
         x: any = await r.json();
       setNotice(x.error || "บันทึกแล้ว");
-      if (!x.error) await load();
+      if (!x.error) {
+        await load();
+        return true;
+      }
+      return false;
     } catch {
       setNotice("บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -1195,6 +1224,14 @@ export default function Home() {
   const send = async (type: "airdrop" | "party", event: FormEvent) => {
     event.preventDefault();
     if (!image) return setNotice("กรุณาเลือกรูปหลักฐาน");
+    if (
+      !window.confirm(
+        type === "airdrop"
+          ? `ยืนยันส่งหลักฐานแอร์ดรอปรอบ ${round} เข้าคิวตรวจใช่หรือไม่?`
+          : "ยืนยันส่งหลักฐานกิจกรรมปาร์ตี้เข้าคิวตรวจใช่หรือไม่?",
+      )
+    )
+      return;
     setBusy(true);
     try {
       const form = new FormData();
@@ -1698,13 +1735,7 @@ export default function Home() {
                               member.display_name,
                             );
                             const nextName = next?.trim();
-                            if (
-                              nextName &&
-                              nextName !== member.display_name &&
-                              window.confirm(
-                                `ตรวจสอบชื่อก่อนบันทึก\n\n${member.display_name} → ${nextName}\n\nยืนยันการแก้ชื่อสมาชิกใช่หรือไม่?`,
-                              )
-                            )
+                            if (nextName && nextName !== member.display_name)
                               call({
                                 action: "member_update",
                                 id: member.id,

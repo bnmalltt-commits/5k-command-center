@@ -345,7 +345,7 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
             <p className="mt-3 text-sm leading-6 text-slate-300">สมาชิกทั้งหมดจะออกจากปาร์ตี้และกลับไปสร้างหรือเข้าทีมใหม่ได้ทันที การดำเนินการนี้ย้อนกลับไม่ได้</p>
             <div className="mt-5 flex justify-end gap-2">
               <button type="button" disabled={busy} onClick={() => setConfirmDissolve(false)} className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold">ยกเลิก</button>
-              <button type="button" disabled={busy} onClick={() => { call({ action: "party_dissolve", partyId: party.id }); setConfirmDissolve(false); }} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-black text-white">ยืนยันยุบปาร์ตี้</button>
+              <button type="button" disabled={busy} onClick={() => { call({ action: "party_dissolve", partyId: party.id, confirmed: true }); setConfirmDissolve(false); }} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-black text-white">ยืนยันยุบปาร์ตี้</button>
             </div>
           </div>
         </div>
