@@ -579,7 +579,7 @@ button:disabled {
 .command-shell {
   background-color: #07080b;
   background-image:
-    linear-gradient(90deg, rgba(7, 8, 11, .94) 0%, rgba(7, 8, 11, .72) 50%, rgba(7, 8, 11, .9) 100%),
+    linear-gradient(90deg, rgba(7, 8, 11, .78) 0%, rgba(7, 8, 11, .46) 50%, rgba(7, 8, 11, .7) 100%),
     url('/fivethousand-command-bg.png');
   background-position: center;
   background-size: cover;
