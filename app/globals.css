@@ -993,3 +993,58 @@ button:disabled {
     font-size: .64rem;
   }
 }
+
+/* Admin lists: compact rows plus an internal scroll area keep the workspace usable. */
+.ui-v2 .admin-v2 > .command-panel {
+  min-height: 0 !important;
+}
+
+.ui-v2 .admin-v2 > section:nth-child(2),
+.ui-v2 .admin-access-v2 {
+  max-height: 640px;
+  min-height: 0 !important;
+  display: flex;
+  flex-direction: column;
+}
+
+.ui-v2 .admin-v2 > section:nth-child(2) > div.mt-4.space-y-2,
+.ui-v2 .admin-access-v2 > div.mt-4.space-y-2 {
+  min-height: 0;
+  max-height: 510px;
+  overflow-y: auto;
+  padding-right: .2rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 58, 75, .5) transparent;
+}
+
+.ui-v2 .admin-v2 > section:nth-child(2) > div.mt-4.space-y-2 > div,
+.ui-v2 .admin-access-v2 > div.mt-4.space-y-2 > div {
+  min-height: 48px;
+  padding: .62rem .72rem;
+  border: 1px solid rgba(156, 173, 194, .14);
+  border-radius: 13px;
+  background: rgba(255, 255, 255, .045);
+}
+
+.ui-v2 .admin-v2 > section:nth-child(2) > div.mt-4.space-y-2 > div:hover,
+.ui-v2 .admin-access-v2 > div.mt-4.space-y-2 > div:hover {
+  border-color: rgba(255, 74, 90, .4);
+  background: rgba(255, 40, 58, .08);
+}
+
+.ui-v2 .admin-v2 > section:nth-child(2) > div.mt-4.space-y-2 > div b,
+.ui-v2 .admin-access-v2 > div.mt-4.space-y-2 > div b {
+  font-size: .9rem;
+}
+
+.ui-v2 .admin-v2 > section:nth-child(2) > div.mt-4.space-y-2 button,
+.ui-v2 .admin-access-v2 > div.mt-4.space-y-2 button {
+  min-height: 32px;
+  padding: .4rem .7rem;
+  border-radius: 9px;
+  font-size: .72rem;
+}
+
+.ui-v2 .admin-access-v2 > div.mt-4.space-y-2 > div {
+  min-height: 52px;
+}
