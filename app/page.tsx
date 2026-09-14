@@ -1252,7 +1252,9 @@ export default function Home() {
           />
           <h1 className="mt-5 text-2xl font-black">เข้าสู่ระบบแก๊ง</h1>
           <p className="mt-3 text-sm text-slate-400">
-            สมาชิกใช้ชื่อที่แอดมินเพิ่มไว้ ส่วนแอดมินใช้รหัสสมาชิก
+            พิมพ์ชื่อเพื่อเข้าสู่ระบบได้เลย · ชื่อใหม่จะสมัครเป็นสมาชิกให้อัตโนมัติ
+            <br />
+            แอดมินใช้รหัสสมาชิกของตัวเอง
           </p>
           <form onSubmit={login} className="mt-6 space-y-3">
             <input
@@ -1261,7 +1263,7 @@ export default function Home() {
               maxLength={120}
               value={loginName}
               onChange={(e) => setLoginName(e.target.value)}
-              placeholder="ชื่อสมาชิก หรือรหัสสมาชิก"
+              placeholder="ชื่อสำหรับเข้าแก๊ง หรือรหัสแอดมิน"
               className="w-full rounded-lg border border-white/15 bg-black/30 px-4 py-3"
             />
             <button
