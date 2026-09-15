@@ -1,0 +1,1 @@
+ALTER TABLE `party_activities` ADD `submitted_by_member_id` integer REFERENCES members(id);
