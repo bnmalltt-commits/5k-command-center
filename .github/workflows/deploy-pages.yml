@@ -34,7 +34,7 @@ jobs:
       - name: Build static frontend
         run: pnpm exec vite build --config github-pages/vite.config.ts
         env:
-          VITE_API_ORIGIN: ${{ vars.VITE_API_ORIGIN }}
+          VITE_API_ORIGIN: https://airdrop-party-check.bnmalltt.chatgpt.site
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
