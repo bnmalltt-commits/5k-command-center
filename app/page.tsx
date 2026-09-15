@@ -21,6 +21,7 @@ import { PartyCommandCenter } from "./party-command-center";
 
 const API_ORIGIN = (import.meta as any).env?.VITE_API_ORIGIN || "";
 const apiUrl = (path: string) => `${API_ORIGIN}${path}`;
+const apiFetch = (input: RequestInfo | URL, init: RequestInit = {}) => { const token = typeof window !== "undefined" ? window.localStorage.getItem("fivek_session_token") : null; const headers = new Headers(init.headers); if (token) headers.set("Authorization", `Bearer ${token}`); return fetch(input, { ...init, headers }); };
 
 type Data = {
   me: { id: number; name: string; role: string; score: number };
@@ -1088,7 +1089,7 @@ export default function Home() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch(apiUrl("/api/dashboard"), { cache: "no-store", credentials: "include" }),
+      const r = await apiFetch(apiUrl("/api/dashboard"), { cache: "no-store", credentials: "include" }),
         x: any = await r.json();
       if (r.status === 401) {
         setData(null);
@@ -1180,7 +1181,7 @@ export default function Home() {
     const { confirmed: _confirmed, ...payload } = body;
     setBusy(true);
     try {
-      const r = await fetch(
+      const r = await apiFetch(
           payload.action.startsWith("party_") ? apiUrl("/api/party") : apiUrl("/api/dashboard"),
           {
             method: "POST",
@@ -1220,7 +1221,7 @@ export default function Home() {
       form.append("image", image);
       if (type === "airdrop") form.append("round", round);
       else form.append("memberIds", JSON.stringify(crew));
-      const r = await fetch(apiUrl("/api/upload"), { method: "POST", body: form, credentials: "include" }),
+      const r = await apiFetch(apiUrl("/api/upload"), { method: "POST", body: form, credentials: "include" }),
         x: any = await r.json();
       setNotice(x.error || "ส่งเข้าคิวตรวจแล้ว");
       if (!x.error) {
@@ -1236,7 +1237,7 @@ export default function Home() {
     }
   };
   const logout = async () => {
-    await fetch(apiUrl("/api/auth"), {
+    await apiFetch(apiUrl("/api/auth"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "logout" }),
@@ -1244,12 +1245,13 @@ export default function Home() {
     setData(null);
     setAuthNeeded(true);
     setLoginName("");
+    window.localStorage.removeItem("fivek_session_token");
   };
   const login = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     try {
-      const r = await fetch(apiUrl("/api/auth"), {
+      const r = await apiFetch(apiUrl("/api/auth"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name: loginName, pin: loginPin }),
@@ -1257,6 +1259,7 @@ export default function Home() {
         x: any = await r.json();
       if (x.error) setNotice(x.error);
       else {
+        if (x.token) window.localStorage.setItem("fivek_session_token", x.token);
         if (x.loginId)
           setNotice(`สร้างบัญชีแอดมินแล้ว รหัสสมาชิกของคุณคือ ${x.loginId}`);
         await load();
@@ -1560,7 +1563,7 @@ export default function Home() {
                   form.append("type", "party");
                   form.append("image", file);
                   form.append("memberIds", JSON.stringify(ids));
-                  const r = await fetch(apiUrl("/api/upload"), {
+                  const r = await apiFetch(apiUrl("/api/upload"), {
                       method: "POST",
                       body: form,
                     }),
