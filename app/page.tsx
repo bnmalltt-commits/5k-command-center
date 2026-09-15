@@ -19,6 +19,9 @@ import {
 } from "lucide-react";
 import { PartyCommandCenter } from "./party-command-center";
 
+const API_ORIGIN = (import.meta as any).env?.VITE_API_ORIGIN || "";
+const apiUrl = (path: string) => `${API_ORIGIN}${path}`;
+
 type Data = {
   me: { id: number; name: string; role: string; score: number };
   date: string;
@@ -873,12 +876,12 @@ function AdminCommandCenter({
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <a
-                      href={`/api/image/${item.image_key}`}
+                      href={apiUrl(`/api/image/${item.image_key}`)}
                       target="_blank"
                       className="evidence-link"
                     >
                       <img
-                        src={`/api/image/${item.image_key}`}
+                        src={apiUrl(`/api/image/${item.image_key}`)}
                         alt="ตัวอย่างหลักฐาน"
                         loading="lazy"
                       />
@@ -1084,7 +1087,7 @@ export default function Home() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/dashboard", { cache: "no-store" }),
+      const r = await fetch(apiUrl("/api/dashboard"), { cache: "no-store", credentials: "include" }),
         x: any = await r.json();
       if (r.status === 401) {
         setData(null);
@@ -1177,7 +1180,7 @@ export default function Home() {
     setBusy(true);
     try {
       const r = await fetch(
-          payload.action.startsWith("party_") ? "/api/party" : "/api/dashboard",
+          payload.action.startsWith("party_") ? apiUrl("/api/party") : apiUrl("/api/dashboard"),
           {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -1216,7 +1219,7 @@ export default function Home() {
       form.append("image", image);
       if (type === "airdrop") form.append("round", round);
       else form.append("memberIds", JSON.stringify(crew));
-      const r = await fetch("/api/upload", { method: "POST", body: form }),
+      const r = await fetch(apiUrl("/api/upload"), { method: "POST", body: form, credentials: "include" }),
         x: any = await r.json();
       setNotice(x.error || "ส่งเข้าคิวตรวจแล้ว");
       if (!x.error) {
@@ -1232,7 +1235,7 @@ export default function Home() {
     }
   };
   const logout = async () => {
-    await fetch("/api/auth", {
+    await fetch(apiUrl("/api/auth"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "logout" }),
@@ -1245,7 +1248,7 @@ export default function Home() {
     event.preventDefault();
     setBusy(true);
     try {
-      const r = await fetch("/api/auth", {
+      const r = await fetch(apiUrl("/api/auth"), {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ name: loginName }),
@@ -1517,7 +1520,7 @@ export default function Home() {
                   {data.airdrops.length ? (
                     data.airdrops.map((x: any) => (
                       <a
-                        href={`/api/image/${x.image_key}`}
+                        href={apiUrl(`/api/image/${x.image_key}`)}
                         target="_blank"
                         rel="noreferrer"
                         key={x.id}
@@ -1555,7 +1558,7 @@ export default function Home() {
                   form.append("type", "party");
                   form.append("image", file);
                   form.append("memberIds", JSON.stringify(ids));
-                  const r = await fetch("/api/upload", {
+                  const r = await fetch(apiUrl("/api/upload"), {
                       method: "POST",
                       body: form,
                     }),
@@ -1620,11 +1623,11 @@ export default function Home() {
                             <div className="flex gap-2">
                               <a
                                 className="group flex items-center gap-2 rounded bg-white/10 px-2 py-1 text-sm"
-                                href={`/api/image/${item.image_key}`}
+                                href={apiUrl(`/api/image/${item.image_key}`)}
                                 target="_blank"
                               >
                                 <img
-                                  src={`/api/image/${item.image_key}`}
+                                  src={apiUrl(`/api/image/${item.image_key}`)}
                                   alt="ตัวอย่างหลักฐาน"
                                   loading="lazy"
                                   className="h-10 w-14 rounded object-cover"
