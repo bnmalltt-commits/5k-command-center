@@ -7,6 +7,7 @@ export const members = sqliteTable("members", {
   email: text("email"),
   displayName: text("display_name").notNull(),
   role: text("role", { enum: ["admin", "member"] }).notNull().default("member"),
+  isPrimaryAdmin: integer("is_primary_admin", { mode: "boolean" }).notNull().default(false),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   lastSeenAt: text("last_seen_at"),
   createdAt: text("created_at").notNull(),

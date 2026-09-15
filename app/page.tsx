@@ -280,7 +280,7 @@ function SquadRanking({
     </section>
   );
 }
-function Picker({ onChange }: { onChange: (file: File | null) => void }) {
+function Picker({ onChange, resetToken }: { onChange: (file: File | null) => void; resetToken?: string | number }) {
   const [filename, setFilename] = useState("เลือกรูปหลักฐาน"),
     [preview, setPreview] = useState("");
   const applyFile = (file: File | null) => {
@@ -302,6 +302,15 @@ function Picker({ onChange }: { onChange: (file: File | null) => void }) {
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
   }, []);
+  useEffect(() => {
+    setFilename("เลือกรูปหลักฐาน");
+    setPreview((current) => {
+      if (current) URL.revokeObjectURL(current);
+      return "";
+    });
+    onChange(null);
+  }, [resetToken]);
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center justify-center gap-3 rounded-lg border border-dashed border-white/20 bg-black/20 px-4 py-4 text-sm text-slate-300 hover:border-red-400">
@@ -1070,7 +1079,8 @@ export default function Home() {
     [name, setName] = useState(""),
     [authNeeded, setAuthNeeded] = useState(false),
     [loginName, setLoginName] = useState(""),
-    [partyName, setPartyName] = useState("");
+    [partyName, setPartyName] = useState(""),
+    [pickerReset, setPickerReset] = useState(0);
   const load = async () => {
     setLoading(true);
     try {
@@ -1245,6 +1255,7 @@ export default function Home() {
       if (!x.error) {
         setImage(null);
         setCrew([]);
+        setPickerReset((value) => value + 1);
         await load();
       }
     } catch {
@@ -1323,8 +1334,11 @@ export default function Home() {
     );
   if (!data)
     return (
-      <main className="grid min-h-screen place-items-center bg-[#07080b] text-white">
-        กำลังเปิดศูนย์บัญชาการ…
+      <main className="grid min-h-screen place-items-center bg-[#07080b] p-5 text-white">
+        <section className="command-panel max-w-md p-6 text-center">
+          <p>{loading ? "กำลังเปิดศูนย์บัญชาการ…" : "ยังเปิดข้อมูลไม่ได้"}</p>
+          {!loading && <><p className="mt-2 text-sm text-slate-400">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p><button onClick={load} className="red-action mt-5">ลองใหม่</button></>}
+        </section>
       </main>
     );
   const members = [...data.members].sort(
@@ -1513,7 +1527,7 @@ export default function Home() {
                           : `ยังไม่มีหลักฐานสำหรับรอบ ${round}`}
                     </p>
                     <div className="mt-3">
-                      <Picker onChange={setImage} />
+                      <Picker onChange={setImage} resetToken={`${round}-${pickerReset}`} />
                     </div>
                     <button
                       disabled={busy}
@@ -1535,7 +1549,10 @@ export default function Home() {
                 <div className="mt-4 space-y-2">
                   {data.airdrops.length ? (
                     data.airdrops.map((x: any) => (
-                      <div
+                      <a
+                        href={`/api/image/${x.image_key}`}
+                        target="_blank"
+                        rel="noreferrer"
                         key={x.id}
                         className="airdrop-history-item flex items-center justify-between rounded-lg bg-white/5 p-3"
                       >
@@ -1548,7 +1565,7 @@ export default function Home() {
                           </p>
                         </div>
                         <Status value={x.status} />
-                      </div>
+                      </a>
                     ))
                   ) : (
                     <p className="text-slate-400">ยังไม่มีประวัติ</p>
@@ -1564,6 +1581,7 @@ export default function Home() {
               call={call}
               busy={busy}
               onSubmit={async (ids, file) => {
+                if (!window.confirm(`ยืนยันส่งหลักฐานกิจกรรมให้สมาชิก ${ids.length} คนเข้าคิวตรวจใช่หรือไม่?`)) return;
                 setBusy(true);
                 try {
                   const form = new FormData();
@@ -1577,6 +1595,8 @@ export default function Home() {
                     x: any = await r.json();
                   setNotice(x.error || "ส่งเข้าคิวตรวจแล้ว");
                   if (!x.error) await load();
+                } catch {
+                  setNotice("ส่งหลักฐานกิจกรรมไม่สำเร็จ ลองใหม่อีกครั้ง");
                 } finally {
                   setBusy(false);
                 }
@@ -1773,16 +1793,16 @@ export default function Home() {
           <section className="command-panel p-5">
             <div className="flex items-center justify-between">
               <div>
-                <p className="label">SQUAD STATUS // 25 SLOTS</p>
+                <p className="label">SQUAD STATUS // ALL MEMBERS</p>
                 <h2 className="mt-2 text-lg font-black">สถานะแก๊ง</h2>
               </div>
               <span className="text-sm text-emerald-300">
-                {data.members.filter((member: any) => member.online).length}/25
+                {data.members.filter((member: any) => member.online).length}/{data.members.length}
                 คนออนไลน์
               </span>
             </div>
             <div className="mt-4 space-y-2">
-              {members.slice(0, 25).map((member: any) => (
+              {members.map((member: any) => (
                 <div
                   key={member.id}
                   className="flex items-center gap-3 rounded-lg border border-white/10 bg-black/20 p-3"

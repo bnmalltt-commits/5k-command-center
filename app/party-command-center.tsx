@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Lock, Plus, ShieldCheck, Users, X } from "lucide-react";
+import { Check, Lock, Plus, ShieldCheck, Upload, Users, X } from "lucide-react";
 
 type Props = {
   data: any;
@@ -11,12 +11,13 @@ type Props = {
   onSubmit?: (ids: number[], file: File) => void;
 };
 
-export function PartyCommandCenter({ data, members, call, busy }: Props) {
+export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Props) {
   const party = data.myParty;
   const [name, setName] = useState("");
   const [tab, setTab] = useState<"team" | "find" | "invites">("team");
   const [confirmDissolve, setConfirmDissolve] = useState(false);
   const [inviteeIds, setInviteeIds] = useState<number[]>([]);
+  const [activityFile, setActivityFile] = useState<File | null>(null);
   const isOwner = party?.owner_member_id === data.me.id;
   const available = useMemo(
     () =>
@@ -66,6 +67,15 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
                       ล็อกทีม
                     </button>
                   )}
+                {party.status === "locked" && isOwner && (
+                  <button
+                    disabled={busy}
+                    onClick={() => call({ action: "party_lock", partyId: party.id, locked: false })}
+                    className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold"
+                  >
+                    ปลดล็อกทีม
+                  </button>
+                )}
                 {isOwner ? (
                   <button
                     disabled={busy}
@@ -118,6 +128,36 @@ export function PartyCommandCenter({ data, members, call, busy }: Props) {
           </div>
         )}
       </div>
+      {party && (
+        <section className="command-panel p-5">
+          <p className="label">PARTY ACTIVITY</p>
+          <h3 className="mt-2 text-xl font-black">ส่งหลักฐานกิจกรรมปาร์ตี้</h3>
+          <p className="mt-2 text-sm text-slate-400">ส่งรูปเดียวเพื่อบันทึกกิจกรรมให้สมาชิกในปาร์ตี้ {party.members.length} คน</p>
+          <form
+            className="mt-4 flex flex-wrap items-center gap-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (activityFile) onSubmit?.(party.members.map((member: any) => member.id), activityFile);
+            }}
+          >
+            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-white/20 bg-black/20 px-4 py-3 text-sm text-slate-300">
+              <Upload className="h-4 w-4 text-red-400" />
+              <span className="truncate">{activityFile?.name || "เลือกรูปหลักฐานกิจกรรม"}</span>
+              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setActivityFile(event.target.files?.[0] || null)} />
+            </label>
+            <button disabled={busy || !activityFile} className="rounded-lg bg-red-600 px-4 py-3 text-sm font-bold disabled:opacity-40">ส่งเข้าคิวตรวจ</button>
+          </form>
+          <div className="mt-5 space-y-2 border-t border-white/10 pt-4">
+            <p className="text-sm font-bold">ประวัติกิจกรรมปาร์ตี้</p>
+            {data.parties.length ? data.parties.map((activity: any) => (
+              <a key={activity.id} href={`/api/image/${activity.image_key}`} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 p-3 text-sm hover:border-red-400/50">
+                <span>{activity.activity_date} · {activity.members}</span>
+                <span>{activity.status === "approved" ? "ผ่านแล้ว" : activity.status === "rejected" ? "ไม่ผ่าน" : "รอตรวจ"}</span>
+              </a>
+            )) : <p className="text-sm text-slate-500">ยังไม่มีประวัติกิจกรรม</p>}
+          </div>
+        </section>
+      )}
       <div className="flex gap-2 overflow-x-auto">
         <button
           onClick={() => setTab("team")}
