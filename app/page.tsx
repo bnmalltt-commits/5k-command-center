@@ -1082,6 +1082,7 @@ export default function Home() {
     [name, setName] = useState(""),
     [authNeeded, setAuthNeeded] = useState(false),
     [loginName, setLoginName] = useState(""),
+    [loginPin, setLoginPin] = useState(""),
     [partyName, setPartyName] = useState(""),
     [pickerReset, setPickerReset] = useState(0);
   const load = async () => {
@@ -1251,7 +1252,7 @@ export default function Home() {
       const r = await fetch(apiUrl("/api/auth"), {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: loginName }),
+          body: JSON.stringify({ name: loginName, pin: loginPin }),
         }),
         x: any = await r.json();
       if (x.error) setNotice(x.error);
@@ -1277,7 +1278,7 @@ export default function Home() {
           />
           <h1 className="mt-5 text-2xl font-black">เข้าสู่ระบบแก๊ง</h1>
           <p className="mt-3 text-sm text-slate-400">
-            พิมพ์ชื่อเพื่อเข้าสู่ระบบได้เลย · ชื่อใหม่จะสมัครเป็นสมาชิกให้อัตโนมัติ
+            พิมพ์ชื่อและตั้งรหัสสมาชิก 6 หลัก · ชื่อใหม่จะสมัครเป็นสมาชิกให้อัตโนมัติ
             <br />
             แอดมินใช้รหัสสมาชิกของตัวเอง
           </p>
@@ -1291,6 +1292,7 @@ export default function Home() {
               placeholder="ชื่อสำหรับเข้าแก๊ง หรือรหัสแอดมิน"
               className="w-full rounded-lg border border-white/15 bg-black/30 px-4 py-3"
             />
+            <input required inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={loginPin} onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="รหัสสมาชิก 6 หลัก" className="w-full rounded-lg border border-white/15 bg-black/30 px-4 py-3 tracking-[0.35em]" />
             <button
               disabled={busy}
               className="red-action w-full disabled:opacity-40"
