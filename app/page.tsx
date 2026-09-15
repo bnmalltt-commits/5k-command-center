@@ -1106,39 +1106,6 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
-    const id = "admin-login-id";
-    document.getElementById(id)?.remove();
-    if (!data) return;
-    fetch("/api/auth", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((x: any) => {
-        if (x.user?.role !== "admin" || !x.user.username) return;
-        const el = document.createElement("div");
-        el.id = id;
-        el.setAttribute("role", "note");
-        Object.assign(el.style, {
-          position: "fixed",
-          left: "20px",
-          bottom: "20px",
-          zIndex: "100",
-          maxWidth: "calc(100vw - 40px)",
-          padding: "12px 16px",
-          borderRadius: "10px",
-          background: "#111827",
-          border: "1px solid rgba(248,113,113,.5)",
-          color: "#fee2e2",
-          fontSize: "14px",
-          boxShadow: "0 8px 24px rgba(0,0,0,.4)",
-        });
-        el.textContent = `รหัสสมาชิกแอดมิน: ${x.user.username}`;
-        document.body.appendChild(el);
-      })
-      .catch(() => {});
-    return () => {
-      document.getElementById(id)?.remove();
-    };
-  }, [data]);
-  useEffect(() => {
     const id = "loading-indicator";
     let el = document.getElementById(id);
     if (loading || busy) {
