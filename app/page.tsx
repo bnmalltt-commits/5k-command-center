@@ -1068,7 +1068,7 @@ export default function Home() {
   return (
     <main className="ui-v2 command-shell min-h-screen bg-[#07080b] text-white">
       <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
-      <div className="command-desktop relative mx-auto flex max-w-[1600px] gap-6 p-4 lg:p-7">
+      <div className="command-desktop relative mx-auto max-w-[1600px] p-4 lg:p-7">
         <aside className="command-sidebar hidden w-60 shrink-0 lg:block">
           <div className="side-brand">
             <img
@@ -1096,41 +1096,37 @@ export default function Home() {
           </nav>
         </aside>
         <section className="min-w-0 flex-1">
-          <header className="command-topbar mb-6 flex items-center justify-between border-b border-white/10 pb-4">
-            <div>
-              <img
-                src="/5k-logo.png"
-                alt="5K"
-                className="topbar-logo--mobile h-12 w-24 object-contain lg:hidden"
-              />
-              <div className="topbar-info--desktop hidden lg:block">
-                <p className="label">LIVE COMMAND // THAILAND</p>
-                <p className="mt-1 text-sm text-slate-300">{data.date} · เล่นด้วยกัน ไปได้ไกลกว่า</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-right">
-              <span className="system-online hidden lg:inline-flex"><i /> SYSTEM ONLINE</span>
+          <div className="command-header mb-4 overflow-hidden rounded-xl border border-red-500/25">
+            <header className="command-header__identity flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
-                <b>{data.me.name}</b>
-                <p className="text-xs text-red-400">
-                  {data.me.role === "admin" ? "ADMINISTRATOR" : "MEMBER"}
-                </p>
+                <img
+                  src="/5k-logo.png"
+                  alt="5K"
+                  className="topbar-logo--mobile h-12 w-24 object-contain lg:hidden"
+                />
+                <div className="topbar-info--desktop hidden lg:block">
+                  <p className="label">LIVE COMMAND // THAILAND</p>
+                  <p className="mt-1 text-sm text-slate-300">{data.date} · เล่นด้วยกัน ไปได้ไกลกว่า</p>
+                </div>
               </div>
-              <button
-                onClick={logout}
-                aria-label="ออกจากระบบ"
-                className="rounded-lg border border-white/15 p-2 text-slate-300 hover:text-white"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            </div>
-          </header>
-          <div className="command-hero command-score-strip mb-4 rounded-xl border border-red-500/25 p-5">
-            <div className="command-hero__eyebrow">
-              <p className="label">FIVETHOUSAND COMMAND CENTER</p>
-              <span>LIVE</span>
-            </div>
-            <div className="mt-2 flex items-end justify-between gap-4">
+              <div className="flex items-center gap-3 text-right">
+                <span className="system-online hidden lg:inline-flex"><i /> SYSTEM ONLINE</span>
+                <div>
+                  <b>{data.me.name}</b>
+                  <p className="text-xs text-red-400">
+                    {data.me.role === "admin" ? "ADMINISTRATOR" : "MEMBER"}
+                  </p>
+                </div>
+                <button
+                  onClick={logout}
+                  aria-label="ออกจากระบบ"
+                  className="rounded-lg border border-white/15 p-2 text-slate-300 hover:text-white"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </div>
+            </header>
+            <div className="command-header__score flex items-end justify-between gap-4 px-5 py-4">
               <div>
                 <p className="command-hero__title">แต้มสะสมของคุณ</p>
                 <h1 className="text-2xl font-black sm:text-3xl">

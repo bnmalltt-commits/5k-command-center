@@ -592,6 +592,9 @@ button:disabled {
   --deck-line: rgba(161, 186, 208, 0.32);
   --deck-red: #ff3148;
   --deck-dark: rgba(5, 9, 13, 0.91);
+  --hud-red: #ff3148;
+  --hud-green: #3fe08a;
+  --hud-amber: #ffb454;
   background:
     linear-gradient(90deg, rgba(1, 3, 6, 0.92), rgba(4, 7, 11, 0.62) 47%, rgba(1, 3, 6, 0.78)),
     #05070a;
@@ -642,16 +645,19 @@ button:disabled {
 .ui-v2 .command-sidebar nav button[class*="bg-red-600"]::before {
   position: absolute;
   top: 16%; left: -0.58rem; bottom: 16%; width: 3px;
-  content: ""; background: #ff3b50; box-shadow: 0 0 12px #ff243b;
+  content: ""; background: var(--hud-red); box-shadow: 0 0 12px var(--hud-red);
 }
 
-.ui-v2 .command-topbar {
-  min-height: 80px !important;
-  margin: 0 0 0.95rem !important;
-  padding: 0.7rem 0.25rem 1rem !important;
+/* Header card: identity row + score row share one panel instead of two
+   separately bordered/backgrounded bands, so they read as one unit. */
+.ui-v2 .command-header {
+  background: linear-gradient(180deg, rgba(9, 13, 17, 0.94), rgba(17, 9, 13, 0.94));
+}
+.ui-v2 .command-header__identity {
+  min-height: 80px;
+  padding: 0.7rem 1.1rem 1rem !important;
   border-bottom-color: var(--deck-line) !important;
 }
-.ui-v2 .command-topbar::before { content: none; }
 .ui-v2 .system-online {
   align-items: center;
   gap: 0.45rem;
@@ -664,21 +670,15 @@ button:disabled {
   font-size: 0.6rem;
   letter-spacing: 0.09em;
 }
-.ui-v2 .system-online i { width: 0.55rem; height: 0.55rem; border-radius: 99px; background: #21e695; box-shadow: 0 0 12px #21e695; }
+.ui-v2 .system-online i { width: 0.55rem; height: 0.55rem; border-radius: 99px; background: var(--hud-green); box-shadow: 0 0 12px var(--hud-green); }
 
-.ui-v2 .command-score-strip {
-  display: flex;
-  align-items: center;
+.ui-v2 .command-header__score {
   min-height: 84px;
-  padding: 0.78rem 1.1rem !important;
-  border-color: rgba(255, 65, 82, 0.45) !important;
-  border-radius: 0.5rem !important;
-  background: linear-gradient(105deg, rgba(58, 11, 19, 0.68), rgba(9, 13, 17, 0.94) 58%, rgba(17, 9, 13, 0.94)) !important;
+  padding: 0.78rem 1.1rem;
+  background: linear-gradient(105deg, rgba(58, 11, 19, 0.68), rgba(9, 13, 17, 0.94) 58%, rgba(17, 9, 13, 0.94));
 }
-.ui-v2 .command-score-strip .command-hero__eyebrow { margin-bottom: 0; }
-.ui-v2 .command-score-strip .command-hero__title { font-size: 0.84rem; }
-.ui-v2 .command-score-strip h1 span { font-size: 2.25rem; }
-.ui-v2 .command-score-strip h1 + p { display: none; }
+.ui-v2 .command-header__score .command-hero__title { font-size: 0.84rem; }
+.ui-v2 .command-header__score h1 span { font-size: 2.25rem; }
 
 .ui-v2 .airdrop-workspace { gap: 1rem !important; }
 .ui-v2 .airdrop-submit-panel, .ui-v2 .airdrop-history-panel { border-radius: .55rem !important; }
@@ -699,7 +699,7 @@ button:disabled {
   .ui-v2 .command-desktop { display: flex; gap: .75rem; }
 }
 @media (max-width: 640px) {
-  .ui-v2 .command-score-strip { min-height: 76px; }
+  .ui-v2 .command-header__score { min-height: 76px; }
 }
 
 .ui-v2 .party-create-invites { max-width: 52rem; }
@@ -2363,7 +2363,7 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   background: #1e1f24;
 }
 .hud-hero__bar-seg.is-done {
-  background: linear-gradient(90deg, #2a8f5c, #3fe08a);
+  background: linear-gradient(90deg, #2a8f5c, var(--hud-green));
 }
 .hud-hero__bar-seg.is-next {
   background: linear-gradient(90deg, #d81828, #ff3b48);
@@ -2408,7 +2408,7 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   height: 14px;
 }
 .hud-hero__label-glyph svg {
-  color: #3fe08a;
+  color: var(--hud-green);
 }
 .hud-hero__label-btn.is-next .hud-hero__label-glyph::before {
   content: "";
@@ -2444,7 +2444,7 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   background: rgba(63, 224, 138, 0.06);
 }
 .hud-hero__label-btn.is-done .hud-hero__label-time {
-  color: #3fe08a;
+  color: var(--hud-green);
 }
 .hud-hero__label-btn.is-next {
   border-color: rgba(255, 59, 72, 0.5);
@@ -2460,7 +2460,7 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   background: rgba(232, 133, 15, 0.08);
 }
 .hud-hero__label-btn.is-rejected .hud-hero__label-time {
-  color: #ffb454;
+  color: var(--hud-amber);
 }
 .hud-hero__label-state {
   display: block;
@@ -2475,7 +2475,7 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   color: #ff8f97;
 }
 .hud-hero__label-btn.is-rejected .hud-hero__label-state {
-  color: #ffb454;
+  color: var(--hud-amber);
 }
 @media (max-width: 640px) {
   .hud-hero__labels {
@@ -2523,7 +2523,7 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   right: 14%;
   bottom: -1px;
   height: 2px;
-  background: #ff3148;
+  background: var(--hud-red);
   box-shadow: 0 0 10px rgba(255, 49, 72, 0.8);
 }
 .hud-hero__metrics {
