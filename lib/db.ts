@@ -11,19 +11,15 @@ declare global {
 function getSql() {
   if (!global.__pgSql) {
     if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
-    // We're on Supabase's transaction pooler (pgbouncer), which hands out a
-    // small, fixed number of backend connections. postgres.js defaults to
-    // opening up to 10 connections per client — with several serverless
-    // instances doing that at once, the pooler's slots run out and new
-    // connections queue for tens of seconds (the exact "loading forever"
-    // symptom this was fixed for). One connection per lambda instance,
-    // reused across invocations via the global above, is the standard
-    // serverless + pgbouncer pattern. The timeouts make a starved pool fail
-    // fast with a clear error instead of hanging the request.
+    // We're on Supabase's transaction pooler (pgbouncer). Keep the
+    // per-instance connection footprint modest (the dashboard route fires
+    // ~11 queries in parallel, so 1 connection would serialize all of them)
+    // while still bounding it well below postgres.js's unbounded-feeling
+    // default, and fail fast instead of hanging if the pool is ever starved.
     global.__pgSql = postgres(process.env.DATABASE_URL, {
       prepare: false,
       ssl: "require",
-      max: 1,
+      max: 5,
       idle_timeout: 20,
       connect_timeout: 10,
     });
