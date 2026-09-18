@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { now, requireMember, json } from "@/lib/auth";
 
+export const maxDuration = 30;
+
 async function activeParty(memberId: number) {
   return db
     .prepare("SELECT p.id,p.name,p.status,p.owner_member_id FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1")

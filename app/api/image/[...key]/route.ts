@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { currentMember } from "@/lib/auth";
 
+export const maxDuration = 30;
+
 export async function GET(request: Request, { params }: { params: Promise<{ key: string[] }> }) {
   const member = await currentMember(request);
   if (!member) return new Response("Unauthorized", { status: 401 });

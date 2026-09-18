@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, currentMember } from "@/lib/auth";
 
+export const maxDuration = 30;
+
 const rules: Record<string, [string, number[]]> = {
   "image/jpeg": ["jpg", [255, 216, 255]],
   "image/png": ["png", [137, 80, 78, 71]],

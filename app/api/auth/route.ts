@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { now, makeToken, pinDigest, setSessionCookie, clearSessionCookie } from "@/lib/auth";
 
+export const maxDuration = 30;
+
 const publicUser = (member: any) =>
   member ? { id: member.id, display_name: member.display_name, role: member.role } : null;
 

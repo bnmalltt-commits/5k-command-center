@@ -2,6 +2,12 @@ import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json } from "@/lib/auth";
 
+// Give the ~11 parallel queries this route fires room to finish instead of
+// Vercel killing the function mid-flight, which would abandon their Postgres
+// connections (they'd sit "active" on the server forever since nobody ever
+// reads the response) and starve the connection pool for later requests.
+export const maxDuration = 30;
+
 const validType = (type: unknown) => {
   if (type !== "airdrop" && type !== "party") throw Error("ประเภทไม่ถูกต้อง");
   return type;
