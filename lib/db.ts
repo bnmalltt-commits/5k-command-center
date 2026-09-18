@@ -40,20 +40,38 @@ function toPositional(text: string) {
   return text.replace(/\?/g, () => `$${++i}`);
 }
 
+// A query normally takes well under a second. If the connection pool or the
+// database itself is ever wedged, fail loudly and fast instead of leaving
+// the request (and the "loading..." spinner) hanging for a minute or more.
+const QUERY_TIMEOUT_MS = 9000;
+function withTimeout<T>(promise: Promise<T>, text: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`ฐานข้อมูลตอบช้าผิดปกติ กรุณาลองใหม่อีกครั้ง (timeout: ${text.slice(0, 60)}…)`)),
+      QUERY_TIMEOUT_MS,
+    );
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
 function bound(client: Client, text: string, params: unknown[]) {
+  const exec = () => withTimeout(client.unsafe(toPositional(text), params as any[]), text);
   return {
     _text: text,
     _params: params,
     async first<T = Row>(): Promise<T | null> {
-      const rows = await client.unsafe(toPositional(text), params as any[]);
+      const rows = await exec();
       return (rows[0] as T) ?? null;
     },
     async all<T = Row>(): Promise<{ results: T[] }> {
-      const rows = await client.unsafe(toPositional(text), params as any[]);
+      const rows = await exec();
       return { results: rows as unknown as T[] };
     },
     async run(): Promise<{ meta: { changes: number; last_row_id: number | null } }> {
-      const rows = await client.unsafe(toPositional(text), params as any[]);
+      const rows = await exec();
       return {
         meta: { changes: rows.count ?? rows.length, last_row_id: (rows[0] as any)?.id ?? null },
       };
