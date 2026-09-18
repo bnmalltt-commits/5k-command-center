@@ -11,16 +11,19 @@ declare global {
 function getSql() {
   if (!global.__pgSql) {
     if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is not set");
-    // We're on Supabase's transaction pooler (pgbouncer). Keep the
-    // per-instance connection footprint modest (the dashboard route fires
-    // ~11 queries in parallel, so 1 connection would serialize all of them)
-    // while still bounding it well below postgres.js's unbounded-feeling
-    // default, and fail fast instead of hanging if the pool is ever starved.
+    // We're on Supabase's session pooler, which hands out a real dedicated
+    // backend per connection and caps the whole project at a small fixed
+    // total (pool_size: 15 on this tier) — unlike the transaction pooler,
+    // there's no multiplexing headroom here. `max: 5` per lambda instance
+    // hit "max clients reached in session mode" with just 2-3 concurrent
+    // instances. One connection per instance, held only while actually in
+    // use (idle_timeout releases it quickly), is the only footprint that
+    // stays safely under the cap as multiple serverless instances warm up.
     global.__pgSql = postgres(process.env.DATABASE_URL, {
       prepare: false,
       ssl: "require",
-      max: 5,
-      idle_timeout: 20,
+      max: 1,
+      idle_timeout: 10,
       connect_timeout: 10,
     });
   }
