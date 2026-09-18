@@ -1,36 +1,159 @@
-import { env } from "cloudflare:workers";
+import { db } from "@/lib/db";
+import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json } from "@/lib/auth";
 
-const thaiDate=()=>new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Bangkok"}).format(new Date());
-const now=()=>new Date().toISOString();
-const corsHeaders={"Access-Control-Allow-Origin":"https://bnmalltt-commits.github.io","Access-Control-Allow-Credentials":"true","Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"GET,POST,OPTIONS","Vary":"Origin"};
-const json=(data:unknown,status=200)=>Response.json(data,{status,headers:corsHeaders});
-export function OPTIONS(){return new Response(null,{status:204,headers:corsHeaders});}
-async function currentMember(request:Request){const token=request.headers.get("authorization")?.replace(/^Bearer\s+/i,"")||request.headers.get("cookie")?.match(/(?:^|;\s*)fivek_session=([^;\s]+)/)?.[1];if(!token)return null;return env.DB.prepare("SELECT m.* FROM sessions s JOIN members m ON m.id=s.member_id WHERE s.token=? AND s.expires_at>? AND m.active=1").bind(token,now()).first<any>();}
-async function requireMember(request:Request){const member=await currentMember(request);if(!member)throw Error("กรุณาเข้าสู่ระบบก่อนใช้งาน");return member;}
-async function requireAdmin(request:Request){const member=await requireMember(request);if(member.role!=="admin")throw Error("เฉพาะแอดมินเท่านั้น");return member;}
-async function requireSam(request:Request){const member=await requireAdmin(request);if(!member.is_primary_admin)throw Error("เฉพาะบัญชีเจ้าของแก๊งเท่านั้นที่จัดการสิทธิ์แอดมินได้");return member;}
-const validType=(type:unknown)=>{if(type!=="airdrop"&&type!=="party")throw Error("ประเภทไม่ถูกต้อง");return type;};
-const onlineSince=()=>new Date(Date.now()-2*60*1000).toISOString();
-async function activeParty(memberId:number){return env.DB.prepare("SELECT p.id,p.name,p.status FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1").bind(memberId).first<any>();}
-async function partyDetails(party:any){if(!party)return null;const members=await env.DB.prepare("SELECT m.id,m.display_name,m.role,CASE WHEN m.last_seen_at IS NOT NULL AND m.last_seen_at>=? THEN 1 ELSE 0 END AS online,pm.joined_at FROM party_members pm JOIN members m ON m.id=pm.member_id WHERE pm.party_id=? AND m.active=1 ORDER BY online DESC,pm.id").bind(onlineSince(),party.id).all();return {...party,members:members.results};}
+const validType = (type: unknown) => {
+  if (type !== "airdrop" && type !== "party") throw Error("ประเภทไม่ถูกต้อง");
+  return type;
+};
 
-export async function GET(request:Request){try{const me=await requireMember(request),date=thaiDate();await env.DB.prepare("UPDATE members SET last_seen_at=? WHERE id=?").bind(now(),me.id).run();const since=onlineSince();const [members,airdrops,parties,favorites,leaderboard,managed,partyBase,partyInvites,openParties]=await Promise.all([
- env.DB.prepare("SELECT id,display_name,role,CASE WHEN last_seen_at IS NOT NULL AND last_seen_at>=? THEN 1 ELSE 0 END AS online FROM members WHERE active=1 ORDER BY online DESC,display_name").bind(since).all(),
- env.DB.prepare("SELECT id,activity_date,round_time,status,image_key,created_at FROM airdrop_submissions WHERE member_id=? ORDER BY activity_date DESC,round_time DESC LIMIT 30").bind(me.id).all(),
- env.DB.prepare("SELECT pa.id,pa.status,pa.image_key,pa.activity_date,pa.created_at,GROUP_CONCAT(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all(),
- env.DB.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
- env.DB.prepare("SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN point_ledger pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100").bind(since).all(),
- me.role==="admin"?env.DB.prepare("SELECT id,display_name,role,active,is_primary_admin FROM members ORDER BY active DESC,display_name").all():Promise.resolve({results:[]}),
- env.DB.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
- env.DB.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all(),
- env.DB.prepare("SELECT p.id,p.name,p.owner_member_id,owner.display_name AS owner_name,COUNT(pm.id) AS member_count FROM parties p JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id WHERE p.status='open' AND p.active=1 GROUP BY p.id,p.name,p.owner_member_id,owner.display_name HAVING COUNT(pm.id)<5 ORDER BY p.id DESC LIMIT 20").all()
-  ]);const party=await partyDetails(partyBase);const pending=me.role==="admin"?await env.DB.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.image_key,a.round_time AS detail,a.created_at,m.display_name AS submitted_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.status='pending' UNION ALL SELECT 'party' AS type,pa.id,pa.image_key,'ปาร์ตี้' AS detail,pa.created_at,submitter.display_name AS submitted_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id WHERE pa.status='pending') ORDER BY created_at DESC").all():{results:[]};const score=await env.DB.prepare("SELECT COALESCE(SUM(points),0) AS total FROM point_ledger WHERE member_id=?").bind(me.id).first<any>();return json({me:{id:me.id,name:me.display_name,role:me.role,score:score?.total||0},date,members:members.results,managedMembers:managed.results,airdrops:airdrops.results,parties:parties.results,favorites:favorites.results.map((x:any)=>x.favorite_member_id),leaderboard:leaderboard.results,pending:pending.results,myParty:party,partyInvites:partyInvites.results,openParties:openParties.results});
-}catch(error){const message=error instanceof Error?error.message:"โหลดข้อมูลไม่สำเร็จ";return json({error:message},message.includes("เข้าสู่ระบบ")?401:500)}}
+async function activeParty(memberId: number) {
+  return db
+    .prepare("SELECT p.id,p.name,p.status FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1")
+    .bind(memberId)
+    .first<any>();
+}
 
-export async function POST(request:Request){try{const me=await requireMember(request),body=await request.json<any>();if(body.action==="favorite"){const id=Number(body.memberId);if(!id||id===me.id)throw Error("เลือกสมาชิกไม่ถูกต้อง");const target=await env.DB.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(id).first();if(!target)throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");if(body.enabled)await env.DB.prepare("INSERT OR IGNORE INTO member_favorites (owner_member_id,favorite_member_id,created_at) VALUES (?,?,?)").bind(me.id,id,now()).run();else await env.DB.prepare("DELETE FROM member_favorites WHERE owner_member_id=? AND favorite_member_id=?").bind(me.id,id).run();return json({ok:true});}
-if(body.action==="approve"){const admin=await requireAdmin(request),type=validType(body.type),id=Number(body.id),table=type==="party"?"party_activities":"airdrop_submissions",points=type==="party"?1:3,updated=await env.DB.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending'`).bind(admin.id,id).run();if(!updated.meta.changes)throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");const recipients=type==="party"?await env.DB.prepare("SELECT member_id FROM party_activity_members WHERE party_activity_id=?").bind(id).all<any>():{results:[await env.DB.prepare("SELECT member_id FROM airdrop_submissions WHERE id=?").bind(id).first<any>()]};await env.DB.batch(recipients.results.filter(Boolean).map((r:any)=>env.DB.prepare("INSERT OR IGNORE INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,?,?,?,?,?)").bind(r.member_id,type,id,points,type==="party"?"ปาร์ตี้ตรวจผ่าน":"แอร์ดรอปตรวจผ่าน",now())));return json({ok:true});}
-if(body.action==="reject"){const admin=await requireAdmin(request),type=validType(body.type),table=type==="party"?"party_activities":"airdrop_submissions",r=await env.DB.prepare(`UPDATE ${table} SET status='rejected',approved_by=? WHERE id=? AND status='pending'`).bind(admin.id,Number(body.id)).run();if(!r.meta.changes)throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");return json({ok:true});}
-if(body.action==="admin_access"){const sam=await requireSam(request),id=Number(body.memberId);if(!id||id===sam.id)throw Error("ไม่สามารถเปลี่ยนสิทธิ์บัญชีเจ้าของแก๊งได้");const target=await env.DB.prepare("SELECT id,active,is_primary_admin FROM members WHERE id=?").bind(id).first<any>();if(!target||!target.active)throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");if(target.is_primary_admin)throw Error("บัญชีเจ้าของแก๊งไม่สามารถเปลี่ยนสิทธิ์ได้");await env.DB.prepare("UPDATE members SET role=? WHERE id=? AND active=1").bind(body.enabled?"admin":"member",id).run();return json({ok:true});}if(body.action==="member"){await requireAdmin(request);const name=String(body.name||"").trim();if(name.length<2||name.length>60)throw Error("กรอกชื่อสมาชิก 2–60 ตัวอักษร");const exists=await env.DB.prepare("SELECT id FROM members WHERE lower(display_name)=lower(?)").bind(name).first();if(exists)throw Error("มีชื่อสมาชิกนี้แล้ว");await env.DB.prepare("INSERT INTO members (username,display_name,role,active,created_at) VALUES (?,?,'member',1,?)").bind(`${name}-${Date.now()}-${crypto.randomUUID().slice(0,6)}`,name,now()).run();return json({ok:true});}
-if(body.action==="member_update"){await requireAdmin(request);const id=Number(body.id),name=String(body.name||"").trim();if(!id||name.length<2||name.length>60)throw Error("กรอกชื่อสมาชิก 2–60 ตัวอักษร");const target=await env.DB.prepare("SELECT is_primary_admin FROM members WHERE id=?").bind(id).first<any>();if(!target)throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");if(target.is_primary_admin)throw Error("ไม่สามารถแก้ชื่อบัญชีเจ้าของแก๊งได้");const exists=await env.DB.prepare("SELECT id FROM members WHERE lower(display_name)=lower(?) AND id<>?").bind(name,id).first();if(exists)throw Error("มีชื่อสมาชิกนี้แล้ว");const r=await env.DB.prepare("UPDATE members SET display_name=? WHERE id=? AND active=1").bind(name,id).run();if(!r.meta.changes)throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");return json({ok:true});}
-if(body.action==="member_delete"){const admin=await requireAdmin(request),id=Number(body.id);if(!id||id===admin.id)throw Error("ไม่สามารถปิดใช้งานบัญชีแอดมินตัวเอง");const target=await env.DB.prepare("SELECT is_primary_admin FROM members WHERE id=?").bind(id).first<any>();if(!target||target.is_primary_admin)throw Error("ไม่สามารถปิดใช้งานบัญชีเจ้าของแก๊งได้");const owned=await env.DB.prepare("SELECT id FROM parties WHERE owner_member_id=? AND status IN ('open','locked')").bind(id).all<any>();const statements=[env.DB.prepare("DELETE FROM party_members WHERE member_id=?").bind(id),env.DB.prepare("DELETE FROM party_invites WHERE invitee_member_id=? OR inviter_member_id=?").bind(id,id),env.DB.prepare("UPDATE members SET active=0 WHERE id=?").bind(id),env.DB.prepare("DELETE FROM sessions WHERE member_id=?").bind(id)];for(const row of owned.results){const next=await env.DB.prepare("SELECT member_id FROM party_members WHERE party_id=? AND member_id<>? ORDER BY id LIMIT 1").bind(row.id,id).first<any>();statements.push(next?env.DB.prepare("UPDATE parties SET owner_member_id=? WHERE id=?").bind(next.member_id,row.id):env.DB.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(row.id));}await env.DB.batch(statements);return json({ok:true});}throw Error("คำสั่งไม่ถูกต้อง");
-}catch(error){return json({error:error instanceof Error?error.message:"บันทึกไม่สำเร็จ"},400)}}
+async function partyDetails(party: any) {
+  if (!party) return null;
+  const members = await db
+    .prepare("SELECT m.id,m.display_name,m.role,CASE WHEN m.last_seen_at IS NOT NULL AND m.last_seen_at>=? THEN 1 ELSE 0 END AS online,pm.joined_at FROM party_members pm JOIN members m ON m.id=pm.member_id WHERE pm.party_id=? AND m.active=1 ORDER BY online DESC,pm.id")
+    .bind(onlineSince(), party.id)
+    .all();
+  return { ...party, members: members.results };
+}
+
+export async function GET(request: Request) {
+  try {
+    const me = await requireMember(request), date = thaiDate();
+    await db.prepare("UPDATE members SET last_seen_at=? WHERE id=?").bind(now(), me.id).run();
+    const since = onlineSince();
+    const [members, airdrops, parties, favorites, leaderboard, managed, partyBase, partyInvites, openParties] = await Promise.all([
+      db.prepare("SELECT id,display_name,role,CASE WHEN last_seen_at IS NOT NULL AND last_seen_at>=? THEN 1 ELSE 0 END AS online FROM members WHERE active=1 ORDER BY online DESC,display_name").bind(since).all(),
+      db.prepare("SELECT id,activity_date,round_time,status,image_key,created_at FROM airdrop_submissions WHERE member_id=? ORDER BY activity_date DESC,round_time DESC LIMIT 30").bind(me.id).all(),
+      db.prepare("SELECT pa.id,pa.status,pa.image_key,pa.activity_date,pa.created_at,STRING_AGG(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all(),
+      db.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
+      db.prepare("SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN point_ledger pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100").bind(since).all(),
+      me.role === "admin" ? db.prepare("SELECT id,display_name,role,active,is_primary_admin FROM members ORDER BY active DESC,display_name").bind().all() : Promise.resolve({ results: [] }),
+      db.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
+      db.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all(),
+      db.prepare("SELECT p.id,p.name,p.owner_member_id,owner.display_name AS owner_name,COUNT(pm.id) AS member_count FROM parties p JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id WHERE p.status='open' AND p.active=1 GROUP BY p.id,p.name,p.owner_member_id,owner.display_name HAVING COUNT(pm.id)<5 ORDER BY p.id DESC LIMIT 20").bind().all(),
+    ]);
+    const party = await partyDetails(partyBase);
+    const pending = me.role === "admin"
+      ? await db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.image_key,a.round_time AS detail,a.created_at,m.display_name AS submitted_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.status='pending' UNION ALL SELECT 'party' AS type,pa.id,pa.image_key,'ปาร์ตี้' AS detail,pa.created_at,submitter.display_name AS submitted_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id WHERE pa.status='pending') x ORDER BY created_at DESC").bind().all()
+      : { results: [] };
+    const score = await db.prepare("SELECT COALESCE(SUM(points),0) AS total FROM point_ledger WHERE member_id=?").bind(me.id).first<any>();
+    return json({
+      me: { id: me.id, name: me.display_name, role: me.role, score: score?.total || 0 },
+      date,
+      members: members.results,
+      managedMembers: managed.results,
+      airdrops: airdrops.results,
+      parties: parties.results,
+      favorites: favorites.results.map((x: any) => x.favorite_member_id),
+      leaderboard: leaderboard.results,
+      pending: pending.results,
+      myParty: party,
+      partyInvites: partyInvites.results,
+      openParties: openParties.results,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ";
+    return json({ error: message }, message.includes("เข้าสู่ระบบ") ? 401 : 500);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const me = await requireMember(request), body = await request.json();
+    if (body.action === "favorite") {
+      const id = Number(body.memberId);
+      if (!id || id === me.id) throw Error("เลือกสมาชิกไม่ถูกต้อง");
+      const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(id).first();
+      if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
+      if (body.enabled)
+        await db.prepare("INSERT INTO member_favorites (owner_member_id,favorite_member_id,created_at) VALUES (?,?,?) ON CONFLICT DO NOTHING").bind(me.id, id, now()).run();
+      else await db.prepare("DELETE FROM member_favorites WHERE owner_member_id=? AND favorite_member_id=?").bind(me.id, id).run();
+      return json({ ok: true });
+    }
+    if (body.action === "approve") {
+      const admin = await requireAdmin(request), type = validType(body.type), id = Number(body.id);
+      const table = type === "party" ? "party_activities" : "airdrop_submissions", points = type === "party" ? 1 : 3;
+      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending'`).bind(admin.id, id).run();
+      if (!updated.meta.changes) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
+      const recipients = type === "party"
+        ? await db.prepare("SELECT member_id FROM party_activity_members WHERE party_activity_id=?").bind(id).all<any>()
+        : { results: [await db.prepare("SELECT member_id FROM airdrop_submissions WHERE id=?").bind(id).first<any>()] };
+      await db.batch(
+        recipients.results.filter(Boolean).map((r: any) =>
+          db.prepare("INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING")
+            .bind(r.member_id, type, id, points, type === "party" ? "ปาร์ตี้ตรวจผ่าน" : "แอร์ดรอปตรวจผ่าน", now())
+        )
+      );
+      return json({ ok: true });
+    }
+    if (body.action === "reject") {
+      const admin = await requireAdmin(request), type = validType(body.type), table = type === "party" ? "party_activities" : "airdrop_submissions";
+      const r = await db.prepare(`UPDATE ${table} SET status='rejected',approved_by=? WHERE id=? AND status='pending'`).bind(admin.id, Number(body.id)).run();
+      if (!r.meta.changes) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
+      return json({ ok: true });
+    }
+    if (body.action === "admin_access") {
+      const sam = await requireSam(request), id = Number(body.memberId);
+      if (!id || id === sam.id) throw Error("ไม่สามารถเปลี่ยนสิทธิ์บัญชีเจ้าของแก๊งได้");
+      const target = await db.prepare("SELECT id,active,is_primary_admin FROM members WHERE id=?").bind(id).first<any>();
+      if (!target || !target.active) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
+      if (target.is_primary_admin) throw Error("บัญชีเจ้าของแก๊งไม่สามารถเปลี่ยนสิทธิ์ได้");
+      await db.prepare("UPDATE members SET role=? WHERE id=? AND active=1").bind(body.enabled ? "admin" : "member", id).run();
+      return json({ ok: true });
+    }
+    if (body.action === "member") {
+      await requireAdmin(request);
+      const name = String(body.name || "").trim();
+      if (name.length < 2 || name.length > 60) throw Error("กรอกชื่อสมาชิก 2–60 ตัวอักษร");
+      const exists = await db.prepare("SELECT id FROM members WHERE lower(display_name)=lower(?)").bind(name).first();
+      if (exists) throw Error("มีชื่อสมาชิกนี้แล้ว");
+      await db.prepare("INSERT INTO members (username,display_name,role,active,created_at) VALUES (?,?,'member',1,?)").bind(`${name}-${Date.now()}-${crypto.randomUUID().slice(0, 6)}`, name, now()).run();
+      return json({ ok: true });
+    }
+    if (body.action === "member_update") {
+      await requireAdmin(request);
+      const id = Number(body.id), name = String(body.name || "").trim();
+      if (!id || name.length < 2 || name.length > 60) throw Error("กรอกชื่อสมาชิก 2–60 ตัวอักษร");
+      const target = await db.prepare("SELECT is_primary_admin FROM members WHERE id=?").bind(id).first<any>();
+      if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
+      if (target.is_primary_admin) throw Error("ไม่สามารถแก้ชื่อบัญชีเจ้าของแก๊งได้");
+      const exists = await db.prepare("SELECT id FROM members WHERE lower(display_name)=lower(?) AND id<>?").bind(name, id).first();
+      if (exists) throw Error("มีชื่อสมาชิกนี้แล้ว");
+      const r = await db.prepare("UPDATE members SET display_name=? WHERE id=? AND active=1").bind(name, id).run();
+      if (!r.meta.changes) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
+      return json({ ok: true });
+    }
+    if (body.action === "member_delete") {
+      const admin = await requireAdmin(request), id = Number(body.id);
+      if (!id || id === admin.id) throw Error("ไม่สามารถปิดใช้งานบัญชีแอดมินตัวเอง");
+      const target = await db.prepare("SELECT is_primary_admin FROM members WHERE id=?").bind(id).first<any>();
+      if (!target || target.is_primary_admin) throw Error("ไม่สามารถปิดใช้งานบัญชีเจ้าของแก๊งได้");
+      const owned = await db.prepare("SELECT id FROM parties WHERE owner_member_id=? AND status IN ('open','locked')").bind(id).all<any>();
+      const statements = [
+        db.prepare("DELETE FROM party_members WHERE member_id=?").bind(id),
+        db.prepare("DELETE FROM party_invites WHERE invitee_member_id=? OR inviter_member_id=?").bind(id, id),
+        db.prepare("UPDATE members SET active=0 WHERE id=?").bind(id),
+        db.prepare("DELETE FROM sessions WHERE member_id=?").bind(id),
+      ];
+      for (const row of owned.results) {
+        const next = await db.prepare("SELECT member_id FROM party_members WHERE party_id=? AND member_id<>? ORDER BY id LIMIT 1").bind(row.id, id).first<any>();
+        statements.push(
+          next
+            ? db.prepare("UPDATE parties SET owner_member_id=? WHERE id=?").bind(next.member_id, row.id)
+            : db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(row.id)
+        );
+      }
+      await db.batch(statements);
+      return json({ ok: true });
+    }
+    throw Error("คำสั่งไม่ถูกต้อง");
+  } catch (error) {
+    return json({ error: error instanceof Error ? error.message : "บันทึกไม่สำเร็จ" }, 400);
+  }
+}
