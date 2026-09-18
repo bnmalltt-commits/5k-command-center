@@ -19,6 +19,15 @@ import {
 } from "lucide-react";
 import { PartyCommandCenter } from "./party-command-center";
 
+const API_ORIGIN = (import.meta as any).env?.VITE_API_ORIGIN || "";
+const apiUrl = (path: string) => `${API_ORIGIN}${path}`;
+const apiFetch = (input: RequestInfo | URL, init: RequestInit = {}) => {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("fivek_session_token") : null;
+  const headers = new Headers(init.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(input, { ...init, headers });
+};
+
 type Data = {
   me: { id: number; name: string; role: string; score: number };
   date: string;
@@ -873,12 +882,12 @@ function AdminCommandCenter({
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <a
-                      href={`/api/image/${item.image_key}`}
+                      href={apiUrl(`/api/image/${item.image_key}`)}
                       target="_blank"
                       className="evidence-link"
                     >
                       <img
-                        src={`/api/image/${item.image_key}`}
+                        src={apiUrl(`/api/image/${item.image_key}`)}
                         alt="ตัวอย่างหลักฐาน"
                         loading="lazy"
                       />
@@ -1079,12 +1088,13 @@ export default function Home() {
     [name, setName] = useState(""),
     [authNeeded, setAuthNeeded] = useState(false),
     [loginName, setLoginName] = useState(""),
+    [loginPin, setLoginPin] = useState(""),
     [partyName, setPartyName] = useState(""),
     [pickerReset, setPickerReset] = useState(0);
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/dashboard", { cache: "no-store" }),
+      const r = await apiFetch(apiUrl("/api/dashboard"), { cache: "no-store", credentials: "include" }),
         x: any = await r.json();
       if (r.status === 401) {
         setData(null);
@@ -1176,8 +1186,8 @@ export default function Home() {
     const { confirmed: _confirmed, ...payload } = body;
     setBusy(true);
     try {
-      const r = await fetch(
-          payload.action.startsWith("party_") ? "/api/party" : "/api/dashboard",
+      const r = await apiFetch(
+          payload.action.startsWith("party_") ? apiUrl("/api/party") : apiUrl("/api/dashboard"),
           {
             method: "POST",
             headers: { "content-type": "application/json" },
@@ -1216,7 +1226,7 @@ export default function Home() {
       form.append("image", image);
       if (type === "airdrop") form.append("round", round);
       else form.append("memberIds", JSON.stringify(crew));
-      const r = await fetch("/api/upload", { method: "POST", body: form }),
+      const r = await apiFetch(apiUrl("/api/upload"), { method: "POST", body: form, credentials: "include" }),
         x: any = await r.json();
       setNotice(x.error || "ส่งเข้าคิวตรวจแล้ว");
       if (!x.error) {
@@ -1232,7 +1242,7 @@ export default function Home() {
     }
   };
   const logout = async () => {
-    await fetch("/api/auth", {
+    await apiFetch(apiUrl("/api/auth"), {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "logout" }),
@@ -1240,19 +1250,21 @@ export default function Home() {
     setData(null);
     setAuthNeeded(true);
     setLoginName("");
+    window.localStorage.removeItem("fivek_session_token");
   };
   const login = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     try {
-      const r = await fetch("/api/auth", {
+      const r = await apiFetch(apiUrl("/api/auth"), {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: loginName }),
+          body: JSON.stringify({ name: loginName, pin: loginPin }),
         }),
         x: any = await r.json();
       if (x.error) setNotice(x.error);
       else {
+        if (x.token) window.localStorage.setItem("fivek_session_token", x.token);
         if (x.loginId)
           setNotice(`สร้างบัญชีแอดมินแล้ว รหัสสมาชิกของคุณคือ ${x.loginId}`);
         await load();
@@ -1274,7 +1286,7 @@ export default function Home() {
           />
           <h1 className="mt-5 text-2xl font-black">เข้าสู่ระบบแก๊ง</h1>
           <p className="mt-3 text-sm text-slate-400">
-            พิมพ์ชื่อเพื่อเข้าสู่ระบบได้เลย · ชื่อใหม่จะสมัครเป็นสมาชิกให้อัตโนมัติ
+            พิมพ์ชื่อและตั้งรหัสสมาชิก 6 หลัก · ชื่อใหม่จะสมัครเป็นสมาชิกให้อัตโนมัติ
             <br />
             แอดมินใช้รหัสสมาชิกของตัวเอง
           </p>
@@ -1288,6 +1300,7 @@ export default function Home() {
               placeholder="ชื่อสำหรับเข้าแก๊ง หรือรหัสแอดมิน"
               className="w-full rounded-lg border border-white/15 bg-black/30 px-4 py-3"
             />
+            <input required inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={loginPin} onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="รหัสสมาชิก 6 หลัก" className="w-full rounded-lg border border-white/15 bg-black/30 px-4 py-3 tracking-[0.35em]" />
             <button
               disabled={busy}
               className="red-action w-full disabled:opacity-40"
@@ -1517,7 +1530,7 @@ export default function Home() {
                   {data.airdrops.length ? (
                     data.airdrops.map((x: any) => (
                       <a
-                        href={`/api/image/${x.image_key}`}
+                        href={apiUrl(`/api/image/${x.image_key}`)}
                         target="_blank"
                         rel="noreferrer"
                         key={x.id}
@@ -1555,7 +1568,7 @@ export default function Home() {
                   form.append("type", "party");
                   form.append("image", file);
                   form.append("memberIds", JSON.stringify(ids));
-                  const r = await fetch("/api/upload", {
+                  const r = await apiFetch(apiUrl("/api/upload"), {
                       method: "POST",
                       body: form,
                     }),
@@ -1620,11 +1633,11 @@ export default function Home() {
                             <div className="flex gap-2">
                               <a
                                 className="group flex items-center gap-2 rounded bg-white/10 px-2 py-1 text-sm"
-                                href={`/api/image/${item.image_key}`}
+                                href={apiUrl(`/api/image/${item.image_key}`)}
                                 target="_blank"
                               >
                                 <img
-                                  src={`/api/image/${item.image_key}`}
+                                  src={apiUrl(`/api/image/${item.image_key}`)}
                                   alt="ตัวอย่างหลักฐาน"
                                   loading="lazy"
                                   className="h-10 w-14 rounded object-cover"

@@ -3,6 +3,13 @@
   "dialect": "sqlite",
   "entries": [
     {
+      "idx": 9,
+      "version": "7",
+      "when": 1789452000000,
+      "tag": "0010_member_pin",
+      "breakpoints": true
+    },
+    {
       "idx": 0,
       "version": "6",
       "when": 1789299035576,

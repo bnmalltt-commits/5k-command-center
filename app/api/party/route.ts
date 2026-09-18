@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers";
 
 const now=()=>new Date().toISOString();
-const json=(data:unknown,status=200)=>Response.json(data,{status});
-async function currentMember(request:Request){const c=request.headers.get("cookie")?.match(/(?:^|;\s*)fivek_session=([^;]+)/);if(!c)return null;return env.DB.prepare("SELECT m.* FROM sessions s JOIN members m ON m.id=s.member_id WHERE s.token=? AND s.expires_at>? AND m.active=1").bind(c[1],now()).first<any>();}
+const corsHeaders={"Access-Control-Allow-Origin":"https://bnmalltt-commits.github.io","Access-Control-Allow-Credentials":"true","Access-Control-Allow-Headers":"Content-Type, Authorization","Access-Control-Allow-Methods":"POST,OPTIONS","Vary":"Origin"};
+const json=(data:unknown,status=200)=>Response.json(data,{status,headers:corsHeaders});
+export function OPTIONS(){return new Response(null,{status:204,headers:corsHeaders});}
+async function currentMember(request:Request){const token=request.headers.get("authorization")?.replace(/^Bearer\s+/i,"")||request.headers.get("cookie")?.match(/(?:^|;\s*)fivek_session=([^;\s]+)/)?.[1];if(!token)return null;return env.DB.prepare("SELECT m.* FROM sessions s JOIN members m ON m.id=s.member_id WHERE s.token=? AND s.expires_at>? AND m.active=1").bind(token,now()).first<any>();}
 async function requireMember(request:Request){const member=await currentMember(request);if(!member)throw Error("กรุณาเข้าสู่ระบบก่อนใช้งาน");return member;}
 async function activeParty(memberId:number){return env.DB.prepare("SELECT p.id,p.name,p.status,p.owner_member_id FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1").bind(memberId).first<any>();}
 
