@@ -1902,7 +1902,7 @@ main.ui-v2 .mission-control__action { min-width: 156px; margin-left: 0; }
   gap: 0.45rem;
   padding: 0.4rem;
   border: 1px solid rgba(148, 163, 184, 0.16);
-  border-radius: 0.85rem;
+  clip-path: polygon(10px 0, 100% 0, 100% 100%, 0 100%, 0 10px);
   background: rgba(2, 6, 23, 0.44);
 }
 
@@ -1911,7 +1911,7 @@ main.ui-v2 .mission-control__action { min-width: 156px; margin-left: 0; }
   min-height: 38px;
   padding: 0.55rem 0.7rem;
   border: 1px solid transparent;
-  border-radius: 0.6rem;
+  clip-path: polygon(6px 0, 100% 0, 100% 100%, 0 100%, 0 6px);
   color: #94a3b8;
   font-size: 0.82rem;
   font-weight: 700;

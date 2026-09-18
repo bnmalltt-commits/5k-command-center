@@ -161,19 +161,19 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
       <div className="flex gap-2 overflow-x-auto">
         <button
           onClick={() => setTab("team")}
-          className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === "team" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
+          className={`hud-clip-sm px-4 py-2 text-sm font-bold ${tab === "team" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
         >
           ทีมของฉัน
         </button>
         <button
           onClick={() => setTab("find")}
-          className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === "find" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
+          className={`hud-clip-sm px-4 py-2 text-sm font-bold ${tab === "find" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
         >
           ค้นหาปาร์ตี้
         </button>
         <button
           onClick={() => setTab("invites")}
-          className={`rounded-lg px-4 py-2 text-sm font-bold ${tab === "invites" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
+          className={`hud-clip-sm px-4 py-2 text-sm font-bold ${tab === "invites" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
         >
           คำเชิญ{" "}
           {data.partyInvites.length ? `(${data.partyInvites.length})` : ""}
@@ -206,7 +206,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 />
                 <button
                   disabled={busy}
-                  className="rounded-lg bg-red-600 px-4 font-bold"
+                  className="hud-clip-sm bg-red-600 px-4 font-bold"
                 >
                   สร้างและส่งคำเชิญ
                 </button>

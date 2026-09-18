@@ -852,7 +852,7 @@ function LeaveRoom({
           />
           <button
             disabled={busy}
-            className="rounded-lg bg-red-600 px-4 font-bold disabled:opacity-40"
+            className="hud-clip-sm bg-red-600 px-4 font-bold disabled:opacity-40"
           >
             แจ้งลา
           </button>
