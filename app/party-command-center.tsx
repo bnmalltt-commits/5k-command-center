@@ -99,22 +99,23 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
         </div>
         {party && (
           <div className="grid gap-3 p-5 sm:grid-cols-5">
-            {party.members.map((member: any) => (
-              <div
-                key={member.id}
-                className="rounded-xl border border-white/10 bg-black/20 p-3"
-              >
-                <span
-                  className={`status-dot ${member.online ? "" : "status-dot-offline"}`}
-                />
-                <b className="ml-2 block truncate">{member.display_name}</b>
-                <small className="mt-1 block text-slate-500">
-                  {member.online ? "ออนไลน์" : "ออฟไลน์"} · {member.id === party.owner_member_id
-                    ? "หัวหน้าทีม"
-                    : "สมาชิก"}
-                </small>
-              </div>
-            ))}
+            {party.members.map((member: any) => {
+              const isLeader = member.id === party.owner_member_id;
+              return (
+                <div
+                  key={member.id}
+                  className={`party-slot ${isLeader ? "party-slot--leader" : ""}`}
+                >
+                  <span
+                    className={`status-dot ${member.online ? "" : "status-dot-offline"}`}
+                  />
+                  <b className="ml-2 block truncate">{member.display_name}</b>
+                  <small className="mt-1 block text-slate-500">
+                    {member.online ? "ออนไลน์" : "ออฟไลน์"} · {isLeader ? "หัวหน้าทีม" : "สมาชิก"}
+                  </small>
+                </div>
+              );
+            })}
             {Array.from({ length: Math.max(0, 5 - party.members.length) }).map(
               (_, index) => (
                 <div

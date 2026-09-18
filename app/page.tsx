@@ -6,12 +6,10 @@ import {
   Check,
   ChevronDown,
   Clipboard,
-  Clock3,
   Crosshair,
   History,
   LogOut,
   Pencil,
-  Radio,
   ShieldCheck,
   Star,
   Trophy,
@@ -107,54 +105,63 @@ function MissionControl({
   };
 
   return (
-    <section
-      className={`mission-control ${done ? "mission-control--complete" : ""}`}
-    >
-      <div className="mission-control__heading">
-        <div className="mission-control__signal">
-          {done ? <Check /> : pending && !missing && !rejected ? <Clock3 /> : <Radio />}
+    <section className={`hud-hero ${done ? "hud-hero--complete" : ""}`}>
+      <p className="hud-hero__eyebrow">
+        {done ? "ภารกิจวันนี้ครบแล้ว" : `ภารกิจถัดไป · รอบ ${nextRound}`}
+      </p>
+      <div className="hud-hero__main">
+        <div className="hud-hero__clock-wrap">
+          <span className="hud-hero__clock-glow" aria-hidden="true" />
+          <span className="hud-hero__clock">
+            {done ? <Check className="hud-hero__clock-icon" /> : nextRound}
+          </span>
         </div>
-        <div>
-          <p className="label">NEXT MISSION</p>
-          <h2>เช็กอินแอร์ดรอป</h2>
+        <div className="hud-hero__body">
+          <h3 className="hud-hero__title">{title}</h3>
+          <p className="hud-hero__desc">{detail}</p>
+          <button
+            type="button"
+            onClick={() => (done ? onOpenParty() : onOpenAirdrop(nextRound))}
+            className="hud-hero__cta"
+          >
+            {done ? "ไปที่ปาร์ตี้" : pending && !missing && !rejected ? "ดูสถานะ" : "เริ่มภารกิจ"}
+          </button>
         </div>
-        <span className="mission-control__eyebrow">AIR DROP CHECK-IN</span>
       </div>
-      <div className="mission-timeline" aria-label="เลือกเวลาเช็กอิน">
-        {rounds.map((round, i) => {
-          const done = entries.get(round)?.status === "approved";
+      <div className="hud-hero__bar" aria-hidden="true">
+        {rounds.map((round) => {
+          const status = entries.get(round)?.status;
+          const cls =
+            status === "approved"
+              ? "is-done"
+              : status === "rejected"
+                ? "is-rejected"
+                : nextRound === round
+                  ? "is-next"
+                  : "is-upcoming";
+          return <span key={round} className={`hud-hero__bar-seg ${cls}`} />;
+        })}
+      </div>
+      <div className="hud-hero__labels" aria-label="เลือกเวลาเช็กอิน">
+        {rounds.map((round) => {
+          const isDone = entries.get(round)?.status === "approved";
           const isNext = nextRound === round;
           return (
             <button
               type="button"
               key={round}
               onClick={() => onOpenAirdrop(round)}
-              className={`mission-timeline__node ${isNext ? "is-next" : ""} ${done ? "is-done" : ""}`}
+              className={`hud-hero__label-btn ${isNext ? "is-next" : ""} ${isDone ? "is-done" : ""}`}
             >
-              <span className="mission-timeline__diamond" aria-hidden="true" />
-              <span className="mission-timeline__time">{round}</span>
-              <span className="mission-timeline__label">{roundState(round)}</span>
+              <span className="hud-hero__label-time">{round}</span>
+              <span className="hud-hero__label-state">{roundState(round)}</span>
             </button>
           );
         })}
       </div>
-      <div className="mission-control__status">
-        <div className="mission-control__copy">
-          <p className="label">CURRENT STATE</p>
-          <h3>{title}</h3>
-          <p>{detail}</p>
-        </div>
-        <div className="mission-control__metrics" aria-label="สถานะกิจกรรมวันนี้">
-          <span><b>{approved}/{rounds.length}</b><small>CHECK-IN</small></span>
-          <span><b>{data.myParty ? "ON" : "—"}</b><small>PARTY</small></span>
-        </div>
-        <button
-          type="button"
-          onClick={() => (done ? onOpenParty() : onOpenAirdrop(nextRound))}
-          className="mission-control__action"
-        >
-          {done ? "ไปที่ปาร์ตี้" : pending && !missing && !rejected ? "ดูสถานะ" : "เริ่มภารกิจ"}
-        </button>
+      <div className="hud-hero__metrics" aria-label="สถานะกิจกรรมวันนี้">
+        <span><b>{approved}/{rounds.length}</b><small>CHECK-IN</small></span>
+        <span><b>{data.myParty ? "ON" : "—"}</b><small>PARTY</small></span>
       </div>
     </section>
   );
@@ -251,7 +258,7 @@ function SquadRanking({
             const slot = [2, 1, 3][i];
             return (
               <div key={member.id} className={`ranking-podium__slot ranking-podium__slot--${slot}`}>
-                <div className="ranking-podium__rank">{slot}</div>
+                <div className="ranking-podium__badge"><span>{slot}</span></div>
                 <div className="ranking-podium__bar" />
                 <div className="ranking-podium__name">{member.display_name}</div>
                 <div className="ranking-podium__pt">{Number(member.score || 0)} pt</div>
