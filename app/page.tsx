@@ -2,11 +2,13 @@
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Camera,
+  CalendarOff,
   Check,
   ChevronDown,
   Clipboard,
   Clock3,
   Crosshair,
+  History,
   LogOut,
   Pencil,
   Radio,
@@ -19,6 +21,8 @@ import {
 } from "lucide-react";
 import { PartyCommandCenter } from "./party-command-center";
 
+type Round = "17:00" | "20:00" | "23:00" | "01:00";
+const ROUNDS: Round[] = ["17:00", "20:00", "23:00", "01:00"];
 type Data = {
   me: { id: number; name: string; role: string; score: number };
   date: string;
@@ -32,6 +36,8 @@ type Data = {
   myParty: any;
   partyInvites: any[];
   openParties: any[];
+  leaveRequests: any[];
+  submissionLog: any[];
 };
 const labels: Record<string, string> = {
   pending: "รอตรวจ",
@@ -54,7 +60,7 @@ function MissionControl({
   onOpenParty,
 }: {
   data: Data;
-  onOpenAirdrop: (round: "20:00" | "23:00") => void;
+  onOpenAirdrop: (round: Round) => void;
   onOpenParty: () => void;
 }) {
   const entries = new Map(
@@ -62,7 +68,7 @@ function MissionControl({
       .filter((entry: any) => entry.activity_date === data.date)
       .map((entry: any) => [entry.round_time, entry]),
   );
-  const rounds = ["20:00", "23:00"] as const;
+  const rounds = ROUNDS;
   const approved = rounds.filter(
     (round) => entries.get(round)?.status === "approved",
   ).length;
@@ -73,7 +79,7 @@ function MissionControl({
   const pending = rounds.find(
     (round) => entries.get(round)?.status === "pending",
   );
-  const nextRound = rejected || missing || pending || "20:00";
+  const nextRound = rejected || missing || pending || rounds[0];
   const done = approved === rounds.length;
   const title = done
     ? "ภารกิจแอร์ดรอปวันนี้ครบแล้ว"
@@ -89,7 +95,7 @@ function MissionControl({
       : missing
         ? "เลือกเวลา วางรูปหลักฐาน แล้วส่งเข้าคิวตรวจ"
         : "หลักฐานถูกส่งแล้ว ระบบกำลังรอแอดมินตรวจสอบ";
-  const roundState = (round: "20:00" | "23:00") => {
+  const roundState = (round: Round) => {
     const status = entries.get(round)?.status;
     return status === "approved"
       ? "ผ่านแล้ว"
@@ -115,14 +121,14 @@ function MissionControl({
         <span className="mission-control__eyebrow">AIR DROP CHECK-IN</span>
       </div>
       <div className="mission-control__rounds" aria-label="เลือกเวลาเช็กอิน">
-        {rounds.map((round) => (
+        {rounds.map((round, i) => (
           <button
             type="button"
             key={round}
             onClick={() => onOpenAirdrop(round)}
             className={`mission-control__round ${nextRound === round ? "is-next" : ""} ${entries.get(round)?.status === "approved" ? "is-complete" : ""}`}
           >
-            <small>MISSION {round === "20:00" ? "01" : "02"}</small>
+            <small>MISSION {String(i + 1).padStart(2, "0")}</small>
             <strong>{round}</strong>
             <span>{roundState(round)}</span>
           </button>
@@ -135,7 +141,7 @@ function MissionControl({
           <p>{detail}</p>
         </div>
         <div className="mission-control__metrics" aria-label="สถานะกิจกรรมวันนี้">
-          <span><b>{approved}/2</b><small>CHECK-IN</small></span>
+          <span><b>{approved}/{rounds.length}</b><small>CHECK-IN</small></span>
           <span><b>{data.myParty ? "ON" : "—"}</b><small>PARTY</small></span>
         </div>
         <button
@@ -765,6 +771,138 @@ function AdminAccessPanel({
   );
 }
 
+function LeaveRoom({
+  data,
+  call,
+  busy,
+}: {
+  data: Data;
+  call: (body: any) => void;
+  busy: boolean;
+}) {
+  const isAdmin = data.me.role === "admin";
+  const [memberId, setMemberId] = useState(data.me.id);
+  const [leaveDate, setLeaveDate] = useState(data.date);
+  const [reason, setReason] = useState("");
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim()) return;
+    call({
+      action: "leave_request",
+      memberId: isAdmin ? memberId : data.me.id,
+      leaveDate,
+      reason: reason.trim(),
+    });
+    setReason("");
+  };
+  return (
+    <section className="command-panel p-5">
+      <p className="label">LEAVE ROOM // {data.date}</p>
+      <h2 className="mt-2 text-xl font-black">แจ้งลา</h2>
+      <p className="mt-2 text-sm text-slate-400">
+        สมาชิกแจ้งลาได้ด้วยตัวเอง และแอดมินสามารถบันทึกการลาแทนสมาชิกได้
+      </p>
+      <form onSubmit={submit} className="mt-4 space-y-3">
+        {isAdmin && (
+          <select
+            value={memberId}
+            onChange={(e) => setMemberId(Number(e.target.value))}
+            className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2"
+          >
+            {data.members.map((member: any) => (
+              <option key={member.id} value={member.id}>
+                {member.id === data.me.id ? "ตัวเอง" : member.display_name}
+              </option>
+            ))}
+          </select>
+        )}
+        <input
+          type="date"
+          value={leaveDate}
+          onChange={(e) => setLeaveDate(e.target.value)}
+          required
+          className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2"
+        />
+        <div className="flex gap-2">
+          <input
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="เหตุผลการลา"
+            required
+            className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 py-2"
+          />
+          <button
+            disabled={busy}
+            className="rounded-lg bg-red-600 px-4 font-bold disabled:opacity-40"
+          >
+            แจ้งลา
+          </button>
+        </div>
+      </form>
+      <div className="mt-6">
+        <p className="label">ประวัติการลา</p>
+        <div className="mt-3 space-y-2">
+          {data.leaveRequests.length ? (
+            data.leaveRequests.map((item: any) => (
+              <div
+                key={item.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 p-3"
+              >
+                <div>
+                  <b>{item.display_name}</b>
+                  <p className="text-xs text-slate-500">
+                    {item.leave_date} · {item.reason}
+                  </p>
+                </div>
+                <span className="text-xs text-slate-500">
+                  บันทึกโดย {item.created_by_name}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-slate-500">
+              ยังไม่มีรายการลา
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+function SubmissionLog({ data }: { data: Data }) {
+  return (
+    <section className="command-panel p-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="label">SUBMISSION LOG</p>
+          <h2 className="mt-2 text-xl font-black">ประวัติการส่งทั้งหมด</h2>
+        </div>
+        <span className="text-sm text-slate-500">
+          {data.submissionLog.length} รายการ
+        </span>
+      </div>
+      <div className="mt-4 space-y-2">
+        {data.submissionLog.map((item: any) => (
+          <div
+            key={item.type + item.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 p-3"
+          >
+            <div>
+              <b>
+                {item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} · {item.detail}
+              </b>
+              <p className="text-xs text-slate-500">
+                {item.activity_date} · ส่งโดย {item.submitted_by}
+                {item.approved_by ? ` · ตรวจโดย ${item.approved_by}` : " · ยังไม่ตรวจ"}
+              </p>
+            </div>
+            <Status value={item.status} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 function AdminCommandCenter({
   data,
   call,
@@ -1070,7 +1208,7 @@ function AdminCommandCenter({
 export default function Home() {
   const [data, setData] = useState<Data | null>(null),
     [view, setView] = useState("airdrop"),
-    [round, setRound] = useState<"20:00" | "23:00">("20:00"),
+    [round, setRound] = useState<Round>(ROUNDS[0]),
     [image, setImage] = useState<File | null>(null),
     [crew, setCrew] = useState<number[]>([]),
     [notice, setNotice] = useState(""),
@@ -1317,7 +1455,7 @@ export default function Home() {
         Number(data.favorites.includes(a.id)) ||
       a.display_name.localeCompare(b.display_name),
   );
-  const todayRounds = ["20:00", "23:00"] as const;
+  const todayRounds = ROUNDS;
   const completedRounds = todayRounds.filter(
     (time) => mine.get(time)?.status === "approved",
   );
@@ -1331,6 +1469,8 @@ export default function Home() {
     ["party", "ปาร์ตี้", Users],
     ["score", "คะแนน", Trophy],
     ["admin", "จัดการแก๊ง", ShieldCheck],
+    ["leave", "ห้องลา", CalendarOff],
+    ["log", "ประวัติการส่ง", History],
   ];
   return (
     <main className="ui-v2 command-shell min-h-screen bg-[#07080b] text-white">
@@ -1404,7 +1544,7 @@ export default function Home() {
                   <span className="text-red-500">{data.me.score}</span> PTS
                 </h1>
                 <p className="mt-2 text-sm text-slate-400">
-                  แอร์ดรอป 20:00 และ 23:00 · รอบละ +3 คะแนน · ปาร์ตี้คนละ +1
+                  แอร์ดรอป {ROUNDS.join(" / ")} · รอบละ +3 คะแนน · ปาร์ตี้คนละ +1
                   คะแนน
                 </p>
               </div>
@@ -1456,14 +1596,14 @@ export default function Home() {
                 </h2>
                 <p className="mt-2 text-sm text-slate-400">
                   {checkInComplete
-                    ? "คะแนนของทั้งสองรอบถูกบันทึกแล้ว ดูหลักฐานย้อนหลังได้ทางด้านขวา"
+                    ? "คะแนนของทุกรอบถูกบันทึกแล้ว ดูหลักฐานย้อนหลังได้ทางด้านขวา"
                     : "รอบที่เลือกจากภารกิจด้านบนจะแสดงที่นี่ เพื่อส่งหลักฐานเพียงครั้งเดียว"}
                 </p>
                 {checkInComplete ? (
                   <div className="airdrop-day-complete mt-5">
                     <Check className="h-5 w-5" />
                     <div>
-                      <b>ภารกิจแอร์ดรอปเสร็จสมบูรณ์ · 2/2 รอบ</b>
+                      <b>ภารกิจแอร์ดรอปเสร็จสมบูรณ์ · {completedRounds.length}/{todayRounds.length} รอบ</b>
                       <p>ไม่ต้องส่งหลักฐานซ้ำแล้ว รอภารกิจวันถัดไปได้เลย</p>
                     </div>
                   </div>
@@ -1757,6 +1897,10 @@ export default function Home() {
                 <AdminAccessPanel data={data} call={call} busy={busy} />
               </div>
             ))}
+          {view === "leave" && (
+            <LeaveRoom data={data} call={call} busy={busy} />
+          )}
+          {view === "log" && <SubmissionLog data={data} />}
         </section>
         <aside className="command-rail hidden xl:block w-72 shrink-0 space-y-5">
           <section className="command-panel p-5">

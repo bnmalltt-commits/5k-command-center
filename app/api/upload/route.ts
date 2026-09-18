@@ -28,7 +28,7 @@ export async function POST(r: Request) {
 
     if (type === "airdrop") {
       const round = String(form.get("round"));
-      if (round !== "20:00" && round !== "23:00") throw Error("เลือกรอบไม่ถูกต้อง");
+      if (!["17:00", "20:00", "23:00", "01:00"].includes(round)) throw Error("เลือกรอบไม่ถูกต้อง");
       const old = await db.prepare("SELECT id,status,image_key FROM airdrop_submissions WHERE member_id=? AND activity_date=? AND round_time=?").bind(member.id, today, round).first<any>();
       if (old?.status === "approved") throw Error("หลักฐานที่ผ่านแล้วไม่สามารถแก้ไขได้");
       key = `airdrop/${member.id}/${Date.now()}.${ext}`;

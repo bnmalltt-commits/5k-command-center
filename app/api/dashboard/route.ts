@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     const me = await requireMember(request), date = thaiDate();
     await db.prepare("UPDATE members SET last_seen_at=? WHERE id=?").bind(now(), me.id).run();
     const since = onlineSince();
-    const [members, airdrops, parties, favorites, leaderboard, managed, partyBase, partyInvites, openParties] = await Promise.all([
+    const [members, airdrops, parties, favorites, leaderboard, managed, partyBase, partyInvites, openParties, leaveRequests, submissionLog] = await Promise.all([
       db.prepare("SELECT id,display_name,role,CASE WHEN last_seen_at IS NOT NULL AND last_seen_at>=? THEN 1 ELSE 0 END AS online FROM members WHERE active=1 ORDER BY online DESC,display_name").bind(since).all(),
       db.prepare("SELECT id,activity_date,round_time,status,image_key,created_at FROM airdrop_submissions WHERE member_id=? ORDER BY activity_date DESC,round_time DESC LIMIT 30").bind(me.id).all(),
       db.prepare("SELECT pa.id,pa.status,pa.image_key,pa.activity_date,pa.created_at,STRING_AGG(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all(),
@@ -37,6 +37,10 @@ export async function GET(request: Request) {
       db.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
       db.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all(),
       db.prepare("SELECT p.id,p.name,p.owner_member_id,owner.display_name AS owner_name,COUNT(pm.id) AS member_count FROM parties p JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id WHERE p.status='open' AND p.active=1 GROUP BY p.id,p.name,p.owner_member_id,owner.display_name HAVING COUNT(pm.id)<5 ORDER BY p.id DESC LIMIT 20").bind().all(),
+      me.role === "admin"
+        ? db.prepare("SELECT l.id,l.leave_date,l.reason,l.created_at,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all()
+        : db.prepare("SELECT l.id,l.leave_date,l.reason,l.created_at,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by WHERE l.member_id=? ORDER BY l.leave_date DESC LIMIT 100").bind(me.id).all(),
+      db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.round_time AS detail,a.activity_date,a.status,a.created_at,m.display_name AS submitted_by,approver.display_name AS approved_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id LEFT JOIN members approver ON approver.id=a.approved_by UNION ALL SELECT 'party' AS type,pa.id,'ปาร์ตี้' AS detail,pa.activity_date,pa.status,pa.created_at,submitter.display_name AS submitted_by,approver.display_name AS approved_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id LEFT JOIN members approver ON approver.id=pa.approved_by) x ORDER BY created_at DESC LIMIT 300").bind().all(),
     ]);
     const party = await partyDetails(partyBase);
     const pending = me.role === "admin"
@@ -56,6 +60,8 @@ export async function GET(request: Request) {
       myParty: party,
       partyInvites: partyInvites.results,
       openParties: openParties.results,
+      leaveRequests: leaveRequests.results,
+      submissionLog: submissionLog.results,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ";
@@ -105,6 +111,20 @@ export async function POST(request: Request) {
       if (!target || !target.active) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
       if (target.is_primary_admin) throw Error("บัญชีเจ้าของแก๊งไม่สามารถเปลี่ยนสิทธิ์ได้");
       await db.prepare("UPDATE members SET role=? WHERE id=? AND active=1").bind(body.enabled ? "admin" : "member", id).run();
+      return json({ ok: true });
+    }
+    if (body.action === "leave_request") {
+      const requestedId = Number(body.memberId) || me.id;
+      if (requestedId !== me.id) await requireAdmin(request);
+      const leaveDate = String(body.leaveDate || "").trim();
+      const reason = String(body.reason || "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(leaveDate)) throw Error("เลือกวันที่ไม่ถูกต้อง");
+      if (reason.length < 2 || reason.length > 200) throw Error("กรอกเหตุผลการลา 2–200 ตัวอักษร");
+      const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(requestedId).first();
+      if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
+      await db.prepare(
+        "INSERT INTO leave_requests (member_id,leave_date,reason,created_by,created_at) VALUES (?,?,?,?,?) ON CONFLICT (member_id,leave_date) DO UPDATE SET reason=EXCLUDED.reason,created_by=EXCLUDED.created_by,created_at=EXCLUDED.created_at"
+      ).bind(requestedId, leaveDate, reason, me.id, now()).run();
       return json({ ok: true });
     }
     if (body.action === "member") {
