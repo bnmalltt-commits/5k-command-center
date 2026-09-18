@@ -845,16 +845,19 @@ function AdminCommandCenter({
   const [memberName, setMemberName] = useState("");
   const sam = data.me.name === "Sam";
   const normalizedQuery = query.trim().toLowerCase();
-  const visibleMembers = data.managedMembers.filter((member: any) => {
+  const activeMembers = data.managedMembers.filter(
+    (member: any) => member.active,
+  );
+  // Removed members drop out of the roster entirely instead of lingering as
+  // a disabled row — the action reads "เอาออก" (remove), so the list should
+  // behave like they're actually gone.
+  const visibleMembers = activeMembers.filter((member: any) => {
     if (!normalizedQuery) return true;
     return member.display_name
       .toLowerCase()
       .split(/\s+/)
       .some((part: string) => part.startsWith(normalizedQuery));
   });
-  const activeMembers = data.managedMembers.filter(
-    (member: any) => member.active,
-  );
 
   return (
     <section className="command-panel admin-command-panel p-5">
@@ -891,7 +894,7 @@ function AdminCommandCenter({
           onClick={() => setTab("members")}
           className={tab === "members" ? "is-active" : ""}
         >
-          สมาชิก <span>{data.managedMembers.length}</span>
+          สมาชิก <span>{activeMembers.length}</span>
         </button>
         <button
           type="button"
@@ -1030,15 +1033,12 @@ function AdminCommandCenter({
                 <div key={member.id} className="admin-command-row">
                   <div className="min-w-0 flex-1">
                     <b>{member.display_name}</b>
-                    <p>
-                      {member.active ? "ใช้งาน" : "ปิดใช้งาน"} ·{" "}
-                      {member.role === "admin" ? "แอดมิน" : "สมาชิก"}
-                    </p>
+                    <p>{member.role === "admin" ? "แอดมิน" : "สมาชิก"}</p>
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <button
                       type="button"
-                      disabled={!member.active || busy}
+                      disabled={busy}
                       onClick={() => {
                         const next = window.prompt(
                           "แก้ชื่อสมาชิก",
@@ -1056,14 +1056,14 @@ function AdminCommandCenter({
                     >
                       แก้ชื่อ
                     </button>
-                    {member.id !== data.me.id && member.active && (
+                    {member.id !== data.me.id && (
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() => call({ action: "member_delete", id: member.id })}
                         className="reject-action"
                       >
-                        ปิดใช้งาน
+                        เอาออก
                       </button>
                     )}
                   </div>
@@ -1220,7 +1220,7 @@ export default function Home() {
       reject: "ยืนยันว่าไม่ผ่านหลักฐานนี้ใช่หรือไม่? สมาชิกจะต้องส่งหลักฐานใหม่",
       member: `ยืนยันเพิ่มสมาชิกใหม่ชื่อ “${body.name}” ใช่หรือไม่?`,
       member_update: `ตรวจสอบชื่อก่อนบันทึก\n\nยืนยันเปลี่ยนชื่อเป็น “${body.name}” ใช่หรือไม่?`,
-      member_delete: "ยืนยันปิดใช้งานสมาชิกนี้ใช่หรือไม่? สมาชิกจะออกจากระบบทันที",
+      member_delete: "ยืนยันเอาสมาชิกนี้ออกจากแก๊งใช่หรือไม่? สมาชิกจะออกจากระบบทันทีและจะไม่แสดงในรายชื่ออีก",
       admin_access: body.enabled
         ? "ยืนยันเพิ่มสิทธิ์แอดมินให้สมาชิกนี้ใช่หรือไม่?"
         : "ยืนยันถอนสิทธิ์แอดมินของสมาชิกนี้ใช่หรือไม่?",
