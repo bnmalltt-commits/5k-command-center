@@ -8,6 +8,11 @@ import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, js
 // reads the response) and starve the connection pool for later requests.
 export const maxDuration = 30;
 
+// Postgres returns bigint ids as strings, so a raw `Number(body.x) === me.id`
+// is always false and silently defeats these "is this me?" guards. Compare
+// both sides as numbers.
+const sameId = (a: unknown, b: unknown) => Number(a) === Number(b);
+
 const validType = (type: unknown) => {
   if (type !== "airdrop" && type !== "party") throw Error("ประเภทไม่ถูกต้อง");
   return type;
@@ -29,46 +34,88 @@ async function partyDetails(party: any) {
   return { ...party, members: members.results };
 }
 
+// Which extra payload keys each view actually reads. Everything not listed
+// here is "core" and ships on every request. The connection pool runs max: 1
+// (the session pooler caps the project at 15), so these queries serialize —
+// every query we skip is a round trip saved off the response time.
+//
+// NOTE: if a nav entry ever grows a badge count (e.g. "คำเชิญ (2)"), the key
+// behind that count has to move into core, since it'd then be read from every
+// view rather than only inside its own.
+const VIEWS = ["airdrop", "party", "score", "admin", "leave", "log"] as const;
+type View = (typeof VIEWS)[number];
+
 export async function GET(request: Request) {
   try {
     const me = await requireMember(request), date = thaiDate();
+    const requested = new URL(request.url).searchParams.get("view");
+    const view: View = (VIEWS as readonly string[]).includes(requested || "")
+      ? (requested as View)
+      : "airdrop";
+    const wants = {
+      party: view === "party",
+      admin: view === "admin" && me.role === "admin",
+      leave: view === "leave",
+      log: view === "log",
+    };
     await db.prepare("UPDATE members SET last_seen_at=? WHERE id=?").bind(now(), me.id).run();
     const since = onlineSince();
-    const [members, airdrops, parties, favorites, leaderboard, managed, partyBase, partyInvites, openParties, leaveRequests, submissionLog] = await Promise.all([
+    const empty = Promise.resolve({ results: [] as any[] });
+    const [members, airdrops, parties, favorites, leaderboard, managed, partyBase, partyInvites, openParties, leaveRequests, submissionLog, score, pending] = await Promise.all([
       db.prepare("SELECT id,display_name,role,CASE WHEN last_seen_at IS NOT NULL AND last_seen_at>=? THEN 1 ELSE 0 END AS online FROM members WHERE active=1 ORDER BY online DESC,display_name").bind(since).all(),
       db.prepare("SELECT id,activity_date,round_time,status,image_key,created_at FROM airdrop_submissions WHERE member_id=? ORDER BY activity_date DESC,round_time DESC LIMIT 30").bind(me.id).all(),
-      db.prepare("SELECT pa.id,pa.status,pa.image_key,pa.activity_date,pa.created_at,STRING_AGG(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all(),
+      wants.party
+        ? db.prepare("SELECT pa.id,pa.status,pa.image_key,pa.activity_date,pa.created_at,STRING_AGG(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all()
+        : empty,
       db.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
       db.prepare("SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN point_ledger pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100").bind(since).all(),
-      me.role === "admin" ? db.prepare("SELECT id,display_name,role,active,is_primary_admin FROM members ORDER BY active DESC,display_name").bind().all() : Promise.resolve({ results: [] }),
+      wants.admin ? db.prepare("SELECT id,display_name,role,active,is_primary_admin FROM members ORDER BY active DESC,display_name").bind().all() : empty,
       db.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
-      db.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all(),
-      db.prepare("SELECT p.id,p.name,p.owner_member_id,owner.display_name AS owner_name,COUNT(pm.id) AS member_count FROM parties p JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id WHERE p.status='open' AND p.active=1 GROUP BY p.id,p.name,p.owner_member_id,owner.display_name HAVING COUNT(pm.id)<5 ORDER BY p.id DESC LIMIT 20").bind().all(),
-      me.role === "admin"
-        ? db.prepare("SELECT l.id,l.leave_date,l.reason,l.created_at,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all()
-        : db.prepare("SELECT l.id,l.leave_date,l.reason,l.created_at,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by WHERE l.member_id=? ORDER BY l.leave_date DESC LIMIT 100").bind(me.id).all(),
-      db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.round_time AS detail,a.activity_date,a.status,a.created_at,m.display_name AS submitted_by,approver.display_name AS approved_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id LEFT JOIN members approver ON approver.id=a.approved_by UNION ALL SELECT 'party' AS type,pa.id,'ปาร์ตี้' AS detail,pa.activity_date,pa.status,pa.created_at,submitter.display_name AS submitted_by,approver.display_name AS approved_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id LEFT JOIN members approver ON approver.id=pa.approved_by) x ORDER BY created_at DESC LIMIT 300").bind().all(),
+      wants.party
+        ? db.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all()
+        : empty,
+      wants.party
+        ? db.prepare("SELECT p.id,p.name,p.owner_member_id,owner.display_name AS owner_name,COUNT(pm.id) AS member_count FROM parties p JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id WHERE p.status='open' AND p.active=1 GROUP BY p.id,p.name,p.owner_member_id,owner.display_name HAVING COUNT(pm.id)<5 ORDER BY p.id DESC LIMIT 20").bind().all()
+        : empty,
+      !wants.leave
+        ? empty
+        : me.role === "admin"
+          ? db.prepare("SELECT l.id,l.leave_date,l.reason,l.created_at,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all()
+          : db.prepare("SELECT l.id,l.leave_date,l.reason,l.created_at,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by WHERE l.member_id=? ORDER BY l.leave_date DESC LIMIT 100").bind(me.id).all(),
+      wants.log
+        ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.round_time AS detail,a.activity_date,a.status,a.created_at,m.display_name AS submitted_by,approver.display_name AS approved_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id LEFT JOIN members approver ON approver.id=a.approved_by UNION ALL SELECT 'party' AS type,pa.id,'ปาร์ตี้' AS detail,pa.activity_date,pa.status,pa.created_at,submitter.display_name AS submitted_by,approver.display_name AS approved_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id LEFT JOIN members approver ON approver.id=pa.approved_by) x ORDER BY created_at DESC LIMIT 300").bind().all()
+        : empty,
+      db.prepare("SELECT COALESCE(SUM(points),0) AS total FROM point_ledger WHERE member_id=?").bind(me.id).first<any>(),
+      wants.admin
+        ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.image_key,a.round_time AS detail,a.created_at,m.display_name AS submitted_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.status='pending' UNION ALL SELECT 'party' AS type,pa.id,pa.image_key,'ปาร์ตี้' AS detail,pa.created_at,submitter.display_name AS submitted_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id WHERE pa.status='pending') x ORDER BY created_at DESC LIMIT 200").bind().all()
+        : empty,
     ]);
+    // Dependent on partyBase.id, so it can't join the batch above. It stays on
+    // every request because myParty is core chrome (MissionControl reads it).
     const party = await partyDetails(partyBase);
-    const pending = me.role === "admin"
-      ? await db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.image_key,a.round_time AS detail,a.created_at,m.display_name AS submitted_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.status='pending' UNION ALL SELECT 'party' AS type,pa.id,pa.image_key,'ปาร์ตี้' AS detail,pa.created_at,submitter.display_name AS submitted_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id WHERE pa.status='pending') x ORDER BY created_at DESC").bind().all()
-      : { results: [] };
-    const score = await db.prepare("SELECT COALESCE(SUM(points),0) AS total FROM point_ledger WHERE member_id=?").bind(me.id).first<any>();
+    // View-scoped keys are omitted (not sent as []) when they weren't asked
+    // for, so the client can merge a response over what it already has
+    // without a poll for one view wiping another view's loaded data.
     return json({
-      me: { id: me.id, name: me.display_name, role: me.role, score: score?.total || 0 },
+      view,
+      me: { id: me.id, name: me.display_name, role: me.role, score: (score as any)?.total || 0 },
       date,
       members: members.results,
-      managedMembers: managed.results,
       airdrops: airdrops.results,
-      parties: parties.results,
       favorites: favorites.results.map((x: any) => x.favorite_member_id),
       leaderboard: leaderboard.results,
-      pending: pending.results,
       myParty: party,
-      partyInvites: partyInvites.results,
-      openParties: openParties.results,
-      leaveRequests: leaveRequests.results,
-      submissionLog: submissionLog.results,
+      ...(wants.party && {
+        parties: parties.results,
+        partyInvites: partyInvites.results,
+        openParties: openParties.results,
+      }),
+      ...(wants.admin && {
+        managedMembers: managed.results,
+        pending: pending.results,
+      }),
+      ...(wants.leave && { leaveRequests: leaveRequests.results }),
+      ...(wants.log && { submissionLog: submissionLog.results }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ";
@@ -81,7 +128,7 @@ export async function POST(request: Request) {
     const me = await requireMember(request), body = await request.json();
     if (body.action === "favorite") {
       const id = Number(body.memberId);
-      if (!id || id === me.id) throw Error("เลือกสมาชิกไม่ถูกต้อง");
+      if (!id || sameId(id, me.id)) throw Error("เลือกสมาชิกไม่ถูกต้อง");
       const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(id).first();
       if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
       if (body.enabled)
@@ -116,7 +163,7 @@ export async function POST(request: Request) {
     }
     if (body.action === "admin_access") {
       const sam = await requireSam(request), id = Number(body.memberId);
-      if (!id || id === sam.id) throw Error("ไม่สามารถเปลี่ยนสิทธิ์บัญชีเจ้าของแก๊งได้");
+      if (!id || sameId(id, sam.id)) throw Error("ไม่สามารถเปลี่ยนสิทธิ์บัญชีเจ้าของแก๊งได้");
       const target = await db.prepare("SELECT id,active,is_primary_admin FROM members WHERE id=?").bind(id).first<any>();
       if (!target || !target.active) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
       if (target.is_primary_admin) throw Error("บัญชีเจ้าของแก๊งไม่สามารถเปลี่ยนสิทธิ์ได้");
@@ -124,8 +171,8 @@ export async function POST(request: Request) {
       return json({ ok: true });
     }
     if (body.action === "leave_request") {
-      const requestedId = Number(body.memberId) || me.id;
-      if (requestedId !== me.id) await requireAdmin(request);
+      const requestedId = Number(body.memberId) || Number(me.id);
+      if (!sameId(requestedId, me.id)) await requireAdmin(request);
       const leaveDate = String(body.leaveDate || "").trim();
       const reason = String(body.reason || "").trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(leaveDate)) throw Error("เลือกวันที่ไม่ถูกต้อง");
@@ -161,7 +208,7 @@ export async function POST(request: Request) {
     }
     if (body.action === "member_delete") {
       const admin = await requireAdmin(request), id = Number(body.id);
-      if (!id || id === admin.id) throw Error("ไม่สามารถปิดใช้งานบัญชีแอดมินตัวเอง");
+      if (!id || sameId(id, admin.id)) throw Error("ไม่สามารถเอาบัญชีแอดมินของตัวเองออกได้");
       const target = await db.prepare("SELECT is_primary_admin FROM members WHERE id=?").bind(id).first<any>();
       if (!target || target.is_primary_admin) throw Error("ไม่สามารถปิดใช้งานบัญชีเจ้าของแก๊งได้");
       const owned = await db.prepare("SELECT id FROM parties WHERE owner_member_id=? AND status IN ('open','locked')").bind(id).all<any>();
