@@ -103,19 +103,33 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           <div className="grid gap-3 p-5 sm:grid-cols-5">
             {party.members.map((member: any) => {
               const isLeader = member.id === party.owner_member_id;
+              const canRemove = isOwner && !isLeader;
+              const Slot = canRemove ? "button" : "div";
               return (
-                <div
+                <Slot
                   key={member.id}
-                  className={`party-slot ${isLeader ? "party-slot--leader" : ""}`}
+                  type={canRemove ? "button" : undefined}
+                  disabled={canRemove ? busy : undefined}
+                  onClick={
+                    canRemove
+                      ? () =>
+                          call({
+                            action: "party_remove_member",
+                            partyId: party.id,
+                            memberId: member.id,
+                          })
+                      : undefined
+                  }
+                  className={`party-slot ${isLeader ? "party-slot--leader" : ""} ${canRemove ? "party-slot--removable" : ""}`}
                 >
                   <span
                     className={`status-dot ${member.online ? "" : "status-dot-offline"}`}
                   />
                   <b className="ml-2 block truncate">{member.display_name}</b>
                   <small className="mt-1 block text-slate-500">
-                    {member.online ? "ออนไลน์" : "ออฟไลน์"} · {isLeader ? "หัวหน้าทีม" : "สมาชิก"}
+                    {member.online ? "ออนไลน์" : "ออฟไลน์"} · {isLeader ? "หัวหน้าทีม" : canRemove ? "แตะเพื่อนำออก" : "สมาชิก"}
                   </small>
-                </div>
+                </Slot>
               );
             })}
             {Array.from({ length: Math.max(0, 5 - party.members.length) }).map(
