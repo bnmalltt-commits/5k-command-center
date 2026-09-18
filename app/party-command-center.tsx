@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Lock, Plus, ShieldCheck, Upload, Users, X } from "lucide-react";
+import { Check, Lock, Plus, ShieldCheck, Users, X } from "lucide-react";
+import { Picker } from "./picker";
 
 type Props = {
   data: any;
@@ -18,6 +19,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
   const [confirmDissolve, setConfirmDissolve] = useState(false);
   const [inviteeIds, setInviteeIds] = useState<number[]>([]);
   const [activityFile, setActivityFile] = useState<File | null>(null);
+  const [activityPickerReset, setActivityPickerReset] = useState(0);
   const isOwner = party?.owner_member_id === data.me.id;
   const available = useMemo(
     () =>
@@ -135,18 +137,17 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           <h3 className="mt-2 text-xl font-black">ส่งหลักฐานกิจกรรมปาร์ตี้</h3>
           <p className="mt-2 text-sm text-slate-400">ส่งรูปเดียวเพื่อบันทึกกิจกรรมให้สมาชิกในปาร์ตี้ {party.members.length} คน</p>
           <form
-            className="mt-4 flex flex-wrap items-center gap-3"
-            onSubmit={(event) => {
+            className="mt-4 space-y-3"
+            onSubmit={async (event) => {
               event.preventDefault();
-              if (activityFile) onSubmit?.(party.members.map((member: any) => member.id), activityFile);
+              if (!activityFile) return;
+              await onSubmit?.(party.members.map((member: any) => member.id), activityFile);
+              setActivityFile(null);
+              setActivityPickerReset((n) => n + 1);
             }}
           >
-            <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg border border-dashed border-white/20 bg-black/20 px-4 py-3 text-sm text-slate-300">
-              <Upload className="h-4 w-4 text-red-400" />
-              <span className="truncate">{activityFile?.name || "เลือกรูปหลักฐานกิจกรรม"}</span>
-              <input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setActivityFile(event.target.files?.[0] || null)} />
-            </label>
-            <button disabled={busy || !activityFile} className="rounded-lg bg-red-600 px-4 py-3 text-sm font-bold disabled:opacity-40">ส่งเข้าคิวตรวจ</button>
+            <Picker onChange={setActivityFile} resetToken={activityPickerReset} />
+            <button disabled={busy || !activityFile} className="w-full rounded-lg bg-red-600 px-4 py-3 text-sm font-bold disabled:opacity-40">ส่งเข้าคิวตรวจ</button>
           </form>
           <div className="mt-5 space-y-2 border-t border-white/10 pt-4">
             <p className="text-sm font-bold">ประวัติกิจกรรมปาร์ตี้</p>
