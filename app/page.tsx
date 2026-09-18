@@ -1180,7 +1180,23 @@ export default function Home() {
                 className="command-panel airdrop-submit-panel p-5"
               >
                 <p className="label">AIRDROP CHECK-IN</p>
-                <h2 className="mt-2 text-xl font-black">
+                <div className="round-switcher mt-3 flex gap-2">
+                  {ROUNDS.map((r) => {
+                    const status = mine.get(r)?.status;
+                    return (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setRound(r)}
+                        aria-current={round === r ? "true" : undefined}
+                        className={`round-switcher__item ${round === r ? "is-active" : ""} ${status ? `is-${status}` : ""}`}
+                      >
+                        {r}
+                      </button>
+                    );
+                  })}
+                </div>
+                <h2 className="mt-3 text-xl font-black">
                   {checkInComplete
                     ? "เช็กอินวันนี้ครบแล้ว"
                     : `ส่งหลักฐานรอบ ${round}`}

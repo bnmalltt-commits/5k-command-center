@@ -20,6 +20,8 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
   const [inviteeIds, setInviteeIds] = useState<number[]>([]);
   const [activityFile, setActivityFile] = useState<File | null>(null);
   const [activityPickerReset, setActivityPickerReset] = useState(0);
+  const [createSearch, setCreateSearch] = useState("");
+  const [addSearch, setAddSearch] = useState("");
   const isOwner = party?.owner_member_id === data.me.id;
   const available = useMemo(
     () =>
@@ -247,9 +249,18 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                     {inviteeIds.length}/4 คน
                   </span>
                 </div>
+                <input
+                  value={createSearch}
+                  onChange={(event) => setCreateSearch(event.target.value)}
+                  placeholder="ค้นหาชื่อเพื่อน..."
+                  className="member-search mt-3 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm"
+                />
                 <div className="mt-3 flex flex-wrap gap-2">
                   {members
                     .filter((member: any) => member.id !== data.me.id)
+                    .filter((member: any) =>
+                      member.display_name.toLowerCase().includes(createSearch.trim().toLowerCase()),
+                    )
                     .map((member: any) => {
                       const selected = inviteeIds.includes(member.id);
                       const blocked = !selected && inviteeIds.length >= 4;
@@ -289,30 +300,43 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
               <p className="mt-3 text-sm text-slate-400">
                 เลือกสมาชิกเพื่อเพิ่มเข้าปาร์ตี้ทันที ไม่ต้องรอยืนยัน
               </p>
+              <input
+                value={addSearch}
+                onChange={(event) => setAddSearch(event.target.value)}
+                placeholder="ค้นหาชื่อเพื่อน..."
+                className="member-search mt-3 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm"
+              />
               <div className="mt-4 flex flex-wrap gap-2">
-                {available.map((member: any) => (
-                  <button
-                    key={member.id}
-                    disabled={
-                      busy ||
-                      party.status !== "open" ||
-                      party.owner_member_id !== data.me.id
-                    }
-                    onClick={() =>
-                      call({
-                        action: "party_invite",
-                        partyId: party.id,
-                        memberId: member.id,
-                      })
-                    }
-                    className="rounded-lg border border-white/15 px-3 py-2 text-sm hover:border-red-400"
-                  >
-                    <span
-                      className={`status-dot mr-2 inline-block ${member.online ? "" : "status-dot-offline"}`}
-                    />
-                    {member.display_name}
-                  </button>
-                ))}
+                {available
+                  .filter((member: any) =>
+                    member.display_name.toLowerCase().includes(addSearch.trim().toLowerCase()),
+                  )
+                  .map((member: any) => (
+                    <button
+                      key={member.id}
+                      disabled={
+                        busy ||
+                        party.status !== "open" ||
+                        party.owner_member_id !== data.me.id
+                      }
+                      onClick={() =>
+                        call({
+                          action: "party_invite",
+                          partyId: party.id,
+                          memberId: member.id,
+                        })
+                      }
+                      className="rounded-lg border border-white/15 px-3 py-2 text-sm hover:border-red-400"
+                    >
+                      <span
+                        className={`status-dot mr-2 inline-block ${member.online ? "" : "status-dot-offline"}`}
+                      />
+                      {member.display_name}
+                    </button>
+                  ))}
+                {addSearch.trim() && !available.some((member: any) => member.display_name.toLowerCase().includes(addSearch.trim().toLowerCase())) && (
+                  <p className="text-sm text-slate-500">ไม่พบสมาชิกที่ค้นหา</p>
+                )}
               </div>
             </>
           )}
