@@ -204,7 +204,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
               <p className="label">CREATE SQUAD</p>
               <h3 className="mt-2 text-xl font-black">สร้างปาร์ตี้และชวนเพื่อน</h3>
               <p className="mt-2 text-sm text-slate-400">
-                ตั้งชื่อทีมและเลือกสมาชิกได้ทันที ระบบจะส่งคำเชิญหลังสร้างปาร์ตี้
+                ตั้งชื่อทีมและเลือกสมาชิก — สมาชิกที่เลือกจะเข้าทีมทันที ไม่ต้องรอยืนยัน
               </p>
               <div className="mt-4 flex max-w-xl gap-2">
                 <input
@@ -220,7 +220,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                   disabled={busy}
                   className="hud-clip-sm bg-red-600 px-4 font-bold"
                 >
-                  สร้างและส่งคำเชิญ
+                  สร้างและเพิ่มเข้าทีม
                 </button>
               </div>
               <div className="party-create-invites mt-5 border-t border-white/10 pt-4">
@@ -269,11 +269,11 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 <ShieldCheck className="h-5 w-5 text-red-400" />
                 <div>
                   <p className="label">MEMBER CONTROL</p>
-                  <h3 className="mt-1 text-xl font-black">เชิญสมาชิกเข้าทีม</h3>
+                  <h3 className="mt-1 text-xl font-black">เพิ่มสมาชิกเข้าทีม</h3>
                 </div>
               </div>
               <p className="mt-3 text-sm text-slate-400">
-                เลือกสมาชิกเพื่อส่งคำเชิญเข้าปาร์ตี้หลักของคุณ
+                เลือกสมาชิกเพื่อเพิ่มเข้าปาร์ตี้ทันที ไม่ต้องรอยืนยัน
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {available.map((member: any) => (

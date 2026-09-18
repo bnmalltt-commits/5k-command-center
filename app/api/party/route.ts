@@ -26,9 +26,17 @@ export async function POST(request: Request) {
       }
       const party = await db.prepare("INSERT INTO parties (name,owner_member_id,status,active) VALUES (?,?,?,1) RETURNING id").bind(name, me.id, "open").first<any>();
       const partyId = Number(party.id);
+      // Selected members join immediately — no invite/accept step. The
+      // WHERE guards (5-person cap, not already in another active party)
+      // re-check atomically at insert time, since the earlier loop's checks
+      // can race with a concurrent request.
       await db.batch([
         db.prepare("INSERT INTO party_members (party_id,member_id,joined_at) VALUES (?,?,?)").bind(partyId, me.id, now()),
-        ...memberIds.map((memberId) => db.prepare("INSERT INTO party_invites (party_id,inviter_member_id,invitee_member_id,status,created_at) VALUES (?,?,?,?,?)").bind(partyId, me.id, memberId, "pending", now())),
+        ...memberIds.map((memberId) =>
+          db.prepare(
+            "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
+          ).bind(partyId, memberId, now(), partyId, memberId),
+        ),
       ]);
       return json({ ok: true });
     }
@@ -43,17 +51,19 @@ export async function POST(request: Request) {
     }
 
     if (body.action === "party_invite") {
+      // Despite the name (kept so the client action string didn't need to
+      // change), this adds the member straight into the party — the leader
+      // no longer waits on the invitee to accept.
       const partyId = Number(body.partyId), memberId = Number(body.memberId);
       const party = await db.prepare("SELECT id,owner_member_id,status FROM parties WHERE id=? AND active=1").bind(partyId).first<any>();
       if (!party || party.owner_member_id !== me.id || party.status !== "open") throw Error("เฉพาะหัวหน้าปาร์ตี้ที่เปิดรับสมาชิกเท่านั้น");
-      const count = await db.prepare("SELECT COUNT(*) AS total FROM party_members WHERE party_id=?").bind(partyId).first<any>();
-      if (Number(count?.total || 0) >= 5) throw Error("ปาร์ตี้เต็มแล้ว");
       const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(memberId).first();
       if (!target || memberId === me.id) throw Error("ไม่พบสมาชิกที่เลือก");
       if (await activeParty(memberId)) throw Error("สมาชิกคนนี้อยู่ในปาร์ตี้อื่นแล้ว");
-      const existing = await db.prepare("SELECT id,status FROM party_invites WHERE party_id=? AND invitee_member_id=?").bind(partyId, memberId).first<any>();
-      if (existing) await db.prepare("UPDATE party_invites SET inviter_member_id=?,status='pending',created_at=?,responded_at=NULL WHERE id=?").bind(me.id, now(), existing.id).run();
-      else await db.prepare("INSERT INTO party_invites (party_id,inviter_member_id,invitee_member_id,status,created_at) VALUES (?,?,?,'pending',?)").bind(partyId, me.id, memberId, now()).run();
+      const joined = await db.prepare(
+        "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM parties WHERE id=? AND status='open' AND active=1) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
+      ).bind(partyId, memberId, now(), partyId, partyId, memberId).run();
+      if (!joined.meta.changes) throw Error("ปาร์ตี้นี้เต็ม ปิดรับสมาชิกแล้ว หรือสมาชิกคนนี้อยู่ในทีมอื่นแล้ว");
       return json({ ok: true });
     }
 
