@@ -1584,25 +1584,31 @@ export default function Home() {
                 <h2 className="mt-2 text-xl font-black">ประวัติแอร์ดรอป</h2>
                 <div className="mt-4 space-y-2">
                   {data.airdrops.length ? (
-                    data.airdrops.map((x: any) => (
-                      <a
-                        href={`/api/image/${x.image_key}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        key={x.id}
-                        className="airdrop-history-item flex items-center justify-between rounded-lg bg-white/5 p-3"
-                      >
-                        <div>
-                          <b>
-                            {x.activity_date} · รอบ {x.round_time}
-                          </b>
-                          <p className="text-xs text-slate-500">
-                            {new Date(x.created_at).toLocaleString("th-TH")}
-                          </p>
-                        </div>
-                        <Status value={x.status} />
-                      </a>
-                    ))
+                    data.airdrops.map((x: any) => {
+                      // Approved evidence is deleted from storage to save
+                      // space, so there's nothing left to link to.
+                      const viewable = x.status !== "approved";
+                      const Row = viewable ? "a" : "div";
+                      return (
+                        <Row
+                          {...(viewable
+                            ? { href: `/api/image/${x.image_key}`, target: "_blank", rel: "noreferrer" }
+                            : {})}
+                          key={x.id}
+                          className="airdrop-history-item flex items-center justify-between rounded-lg bg-white/5 p-3"
+                        >
+                          <div>
+                            <b>
+                              {x.activity_date} · รอบ {x.round_time}
+                            </b>
+                            <p className="text-xs text-slate-500">
+                              {new Date(x.created_at).toLocaleString("th-TH")}
+                            </p>
+                          </div>
+                          <Status value={x.status} />
+                        </Row>
+                      );
+                    })
                   ) : (
                     <p className="text-slate-400">ยังไม่มีประวัติ</p>
                   )}

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json } from "@/lib/auth";
 
 const validType = (type: unknown) => {
@@ -85,8 +86,8 @@ export async function POST(request: Request) {
     if (body.action === "approve") {
       const admin = await requireAdmin(request), type = validType(body.type), id = Number(body.id);
       const table = type === "party" ? "party_activities" : "airdrop_submissions", points = type === "party" ? 1 : 3;
-      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending'`).bind(admin.id, id).run();
-      if (!updated.meta.changes) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
+      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key`).bind(admin.id, id).first<any>();
+      if (!updated) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
       const recipients = type === "party"
         ? await db.prepare("SELECT member_id FROM party_activity_members WHERE party_activity_id=?").bind(id).all<any>()
         : { results: [await db.prepare("SELECT member_id FROM airdrop_submissions WHERE id=?").bind(id).first<any>()] };
@@ -96,6 +97,9 @@ export async function POST(request: Request) {
             .bind(r.member_id, type, id, points, type === "party" ? "ปาร์ตี้ตรวจผ่าน" : "แอร์ดรอปตรวจผ่าน", now())
         )
       );
+      // Evidence is only needed until it's verified — delete it once approved
+      // so storage doesn't fill up. Best-effort: never fail the approval over it.
+      if (updated.image_key) await storage.delete(updated.image_key).catch(() => {});
       return json({ ok: true });
     }
     if (body.action === "reject") {

@@ -151,12 +151,22 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           </form>
           <div className="mt-5 space-y-2 border-t border-white/10 pt-4">
             <p className="text-sm font-bold">ประวัติกิจกรรมปาร์ตี้</p>
-            {data.parties.length ? data.parties.map((activity: any) => (
-              <a key={activity.id} href={`/api/image/${activity.image_key}`} target="_blank" rel="noreferrer" className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 p-3 text-sm hover:border-red-400/50">
-                <span>{activity.activity_date} · {activity.members}</span>
-                <span>{activity.status === "approved" ? "ผ่านแล้ว" : activity.status === "rejected" ? "ไม่ผ่าน" : "รอตรวจ"}</span>
-              </a>
-            )) : <p className="text-sm text-slate-500">ยังไม่มีประวัติกิจกรรม</p>}
+            {data.parties.length ? data.parties.map((activity: any) => {
+              // Approved evidence is deleted from storage to save space, so
+              // there's nothing left to link to.
+              const viewable = activity.status !== "approved";
+              const Row = viewable ? "a" : "div";
+              return (
+                <Row
+                  key={activity.id}
+                  {...(viewable ? { href: `/api/image/${activity.image_key}`, target: "_blank", rel: "noreferrer" } : {})}
+                  className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 p-3 text-sm hover:border-red-400/50"
+                >
+                  <span>{activity.activity_date} · {activity.members}</span>
+                  <span>{activity.status === "approved" ? "ผ่านแล้ว" : activity.status === "rejected" ? "ไม่ผ่าน" : "รอตรวจ"}</span>
+                </Row>
+              );
+            }) : <p className="text-sm text-slate-500">ยังไม่มีประวัติกิจกรรม</p>}
           </div>
         </section>
       )}
