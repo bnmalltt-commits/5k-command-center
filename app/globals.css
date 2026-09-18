@@ -2883,16 +2883,63 @@ main.ui-v2 .airdrop-next-round:focus-visible {
 }
 .hud-hero__labels {
   display: flex;
-  margin-top: 0.7rem;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
 }
 .hud-hero__label-btn {
   flex: 1;
-  display: block;
-  padding: 0.2rem 0;
-  border: none;
-  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-height: 48px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
   text-align: left;
   cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.1s ease;
+}
+.hud-hero__label-btn:hover {
+  border-color: rgba(148, 163, 184, 0.3);
+  background: rgba(255, 255, 255, 0.06);
+}
+.hud-hero__label-btn:active {
+  transform: scale(0.98);
+}
+.hud-hero__label-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+}
+.hud-hero__label-glyph svg {
+  color: #3fe08a;
+}
+.hud-hero__label-btn.is-next .hud-hero__label-glyph::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #ff3b48;
+  box-shadow: 0 0 0 3px rgba(255, 59, 72, 0.22);
+}
+.hud-hero__label-btn.is-rejected .hud-hero__label-glyph::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #e8850f;
+}
+.hud-hero__label-btn:not(.is-done):not(.is-next):not(.is-rejected) .hud-hero__label-glyph::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  border: 1.5px solid #3a3f4d;
 }
 .hud-hero__label-time {
   display: block;
@@ -2901,12 +2948,28 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   font-size: 0.85rem;
   color: #767c8c;
 }
+.hud-hero__label-btn.is-done {
+  border-color: rgba(63, 224, 138, 0.32);
+  background: rgba(63, 224, 138, 0.06);
+}
 .hud-hero__label-btn.is-done .hud-hero__label-time {
   color: #3fe08a;
+}
+.hud-hero__label-btn.is-next {
+  border-color: rgba(255, 59, 72, 0.5);
+  background: rgba(255, 59, 72, 0.08);
+  box-shadow: 0 0 0 1px rgba(255, 59, 72, 0.12);
 }
 .hud-hero__label-btn.is-next .hud-hero__label-time {
   color: #f2f3f6;
   font-weight: 700;
+}
+.hud-hero__label-btn.is-rejected {
+  border-color: rgba(232, 133, 15, 0.4);
+  background: rgba(232, 133, 15, 0.08);
+}
+.hud-hero__label-btn.is-rejected .hud-hero__label-time {
+  color: #ffb454;
 }
 .hud-hero__label-state {
   display: block;
@@ -2915,10 +2978,62 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   color: #565b68;
 }
 .hud-hero__label-btn.is-done .hud-hero__label-state {
-  color: #4b5a52;
+  color: #6bd99a;
 }
 .hud-hero__label-btn.is-next .hud-hero__label-state {
   color: #ff8f97;
+}
+.hud-hero__label-btn.is-rejected .hud-hero__label-state {
+  color: #ffb454;
+}
+@media (max-width: 640px) {
+  .hud-hero__labels {
+    flex-wrap: wrap;
+  }
+  .hud-hero__label-btn {
+    flex: 1 1 calc(50% - 0.25rem);
+    min-width: calc(50% - 0.25rem);
+  }
+}
+
+/* Mobile tab bar: bigger tap targets + icon so tabs read at a glance instead
+   of being a row of narrow text pills. */
+.mobile-tab-nav__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  flex: 0 0 auto;
+  min-width: 4.4rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+  color: #9aa9ba;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  position: relative;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.mobile-tab-nav__item svg {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+.mobile-tab-nav__item.is-active {
+  border-color: rgba(255, 59, 72, 0.55);
+  background: linear-gradient(105deg, rgba(239, 36, 52, 0.28), rgba(112, 16, 24, 0.32));
+  color: #fff;
+}
+.mobile-tab-nav__item.is-active::after {
+  content: "";
+  position: absolute;
+  left: 14%;
+  right: 14%;
+  bottom: -1px;
+  height: 2px;
+  background: #ff3148;
+  box-shadow: 0 0 10px rgba(255, 49, 72, 0.8);
 }
 .hud-hero__metrics {
   display: flex;

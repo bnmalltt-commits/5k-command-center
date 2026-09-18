@@ -142,15 +142,20 @@ function MissionControl({
       </div>
       <div className="hud-hero__labels" aria-label="เลือกเวลาเช็กอิน">
         {rounds.map((round) => {
-          const isDone = entries.get(round)?.status === "approved";
+          const status = entries.get(round)?.status;
+          const isDone = status === "approved";
           const isNext = nextRound === round;
+          const isRejected = status === "rejected";
           return (
             <button
               type="button"
               key={round}
               onClick={() => onOpenAirdrop(round)}
-              className={`hud-hero__label-btn ${isNext ? "is-next" : ""} ${isDone ? "is-done" : ""}`}
+              className={`hud-hero__label-btn ${isNext ? "is-next" : ""} ${isDone ? "is-done" : ""} ${isRejected ? "is-rejected" : ""}`}
             >
+              <span className="hud-hero__label-glyph" aria-hidden="true">
+                {isDone ? <Check className="h-3.5 w-3.5" /> : null}
+              </span>
               <span className="hud-hero__label-time">{round}</span>
               <span className="hud-hero__label-state">{roundState(round)}</span>
             </button>
@@ -1493,12 +1498,14 @@ export default function Home() {
             onOpenParty={() => setView("party")}
           />
           <div className="mobile-tab-nav mb-5 flex gap-2 overflow-x-auto lg:hidden">
-            {nav.map(([id, label]) => (
+            {nav.map(([id, label, Icon]: any) => (
               <button
                 key={id}
                 onClick={() => setView(id)}
-                className={`hud-clip-sm whitespace-nowrap px-4 py-2 text-sm ${view === id ? "bg-red-600" : "bg-white/10"}`}
+                aria-current={view === id ? "page" : undefined}
+                className={`mobile-tab-nav__item hud-clip-sm ${view === id ? "is-active" : ""}`}
               >
+                <Icon className="h-4 w-4" />
                 {label}
               </button>
             ))}
