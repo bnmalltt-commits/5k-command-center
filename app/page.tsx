@@ -1,15 +1,19 @@
 "use client";
-import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  ChangeEvent,
+  FormEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   CalendarOff,
   Check,
-  ChevronDown,
   Crosshair,
   History,
   LogOut,
-  Pencil,
   ShieldCheck,
-  Star,
   Trophy,
   Upload,
   Users,
@@ -35,11 +39,35 @@ type Data = {
   leaveRequests: any[];
   submissionLog: any[];
 };
+// Baseline so every key is always defined even before its view has been
+// loaded — lets consumers keep doing `data.submissionLog.map(...)` unguarded.
+const EMPTY_DATA: Omit<Data, "me" | "date" | "myParty"> = {
+  members: [],
+  managedMembers: [],
+  airdrops: [],
+  parties: [],
+  favorites: [],
+  leaderboard: [],
+  pending: [],
+  partyInvites: [],
+  openParties: [],
+  leaveRequests: [],
+  submissionLog: [],
+};
 const labels: Record<string, string> = {
   pending: "รอตรวจ",
   approved: "ผ่านแล้ว",
   rejected: "ไม่ผ่าน",
 };
+// Shown the first time a view is opened, while its data is still in flight.
+// Without it the view would render its "ยังไม่มี..." empty state for a beat.
+function ViewLoading() {
+  return (
+    <section className="command-panel p-6 text-center text-slate-400">
+      กำลังโหลดข้อมูล…
+    </section>
+  );
+}
 function Status({ value }: { value: string }) {
   return (
     <span
@@ -315,389 +343,7 @@ function SquadRanking({
     </section>
   );
 }
-function PartyWorkspace({
-  data,
-  members,
-  call,
-  partyName,
-  setPartyName,
-  busy,
-}: {
-  data: Data;
-  members: any[];
-  call: (body: any) => void;
-  partyName: string;
-  setPartyName: (value: string) => void;
-  busy: boolean;
-}) {
-  const party = data.myParty;
-  const [editing, setEditing] = useState(false),
-    [editName, setEditName] = useState("");
-  const partyMemberIds = new Set(
-    party?.members?.map((member: any) => member.id) || [],
-  );
-  return (
-    <div className="space-y-5">
-      {editing && party && (
-        <PartyEditDialog
-          name={editName}
-          busy={busy}
-          onClose={() => setEditing(false)}
-          onSave={(value) => {
-            call({ action: "party_update", partyId: party.id, name: value });
-            setEditing(false);
-          }}
-        />
-      )}
-      <section className="command-panel p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="label">PARTY CONTROL</p>
-            {party ? (
-              <div className="flex items-center gap-2">
-                <h2 className="mt-2 text-xl font-black">{party.name}</h2>
-                {party.status === "open" &&
-                  (party.owner_member_id === data.me.id ||
-                    data.me.role === "admin") && (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => {
-                        setEditName(party.name);
-                        setEditing(true);
-                      }}
-                      aria-label="แก้ชื่อปาร์ตี้"
-                      title="แก้ชื่อปาร์ตี้"
-                      className="mt-2 rounded-md border border-red-400/40 p-1.5 text-red-300 hover:bg-red-500/10"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
-                  )}
-              </div>
-            ) : (
-              <h2 className="mt-2 text-xl font-black">สร้างปาร์ตี้ของคุณ</h2>
-            )}
-            {party && (
-              <p className="mt-1 text-sm text-slate-400">
-                หัวหน้าปาร์ตี้: {party.owner_name} ·{" "}
-                {party.status === "open" ? "กำลังรับสมาชิก" : "ล็อกทีมแล้ว"}
-              </p>
-            )}
-          </div>
-          {party ? (
-            <div className="flex gap-2">
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold">
-                {party.members.length}/5 คน
-              </span>
-              {party.status === "open" &&
-                party.owner_member_id === data.me.id && (
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      call({
-                        action: "party_lock",
-                        partyId: party.id,
-                        locked: true,
-                      })
-                    }
-                    className="rounded-lg bg-red-600 px-3 py-2 text-sm font-bold"
-                  >
-                    ล็อกทีม
-                  </button>
-                )}
-              <button
-                disabled={busy}
-                onClick={() => call({ action: "party_leave" })}
-                className="rounded-lg border border-white/15 px-3 py-2 text-sm"
-              >
-                ออกจากปาร์ตี้
-              </button>
-            </div>
-          ) : (
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (partyName.trim())
-                  call({ action: "party_create", name: partyName });
-              }}
-              className="flex w-full max-w-md gap-2"
-            >
-              <input
-                required
-                minLength={2}
-                maxLength={40}
-                value={partyName}
-                onChange={(event) => setPartyName(event.target.value)}
-                placeholder="ชื่อปาร์ตี้"
-                className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-              />
-              <button
-                disabled={busy}
-                className="rounded-lg bg-red-600 px-4 font-bold"
-              >
-                สร้างปาร์ตี้
-              </button>
-            </form>
-          )}
-        </div>
-        {party && (
-          <>
-            <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {party.members.map((member: any) => (
-                <div
-                  key={member.id}
-                  className="rounded-lg border border-white/10 bg-black/20 p-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`status-dot ${member.online ? "" : "status-dot-offline"}`}
-                    />
-                    <b className="truncate">{member.display_name}</b>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {member.online ? "ออนไลน์" : "ออฟไลน์"} ·{" "}
-                    {member.id === party.owner_member_id
-                      ? "หัวหน้า"
-                      : member.role}
-                  </p>
-                  {party.owner_member_id === data.me.id &&
-                    member.id !== data.me.id &&
-                    party.status === "open" && (
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          call({
-                            action: "party_remove_member",
-                            memberId: member.id,
-                          })
-                        }
-                        className="mt-2 text-xs text-red-300"
-                      >
-                        นำออก
-                      </button>
-                    )}
-                </div>
-              ))}
-            </div>
-            {party.status === "open" &&
-              party.owner_member_id === data.me.id && (
-                <div className="mt-5 border-t border-white/10 pt-4">
-                  <p className="mb-3 text-sm font-bold">
-                    เชิญสมาชิกเข้าปาร์ตี้
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {members
-                      .filter(
-                        (member: any) =>
-                          member.id !== data.me.id &&
-                          !partyMemberIds.has(member.id),
-                      )
-                      .map((member: any) => (
-                        <button
-                          key={member.id}
-                          disabled={busy}
-                          onClick={() =>
-                            call({
-                              action: "party_invite",
-                              partyId: party.id,
-                              memberId: member.id,
-                            })
-                          }
-                          className="rounded-lg border border-white/15 px-3 py-2 text-sm hover:border-red-400"
-                        >
-                          <span
-                            className={`status-dot mr-2 inline-block align-middle ${member.online ? "" : "status-dot-offline"}`}
-                          />
-                          {member.display_name}
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
-          </>
-        )}
-      </section>
-      {!party && (
-        <>
-          <section className="command-panel p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="label">PARTY INVITES</p>
-                <h2 className="mt-2 text-lg font-black">คำเชิญที่ได้รับ</h2>
-              </div>
-              <span className="text-sm text-red-300">
-                {data.partyInvites.length} รายการ
-              </span>
-            </div>
-            <div className="mt-4 space-y-2">
-              {data.partyInvites.length ? (
-                data.partyInvites.map((invite: any) => (
-                  <div
-                    key={invite.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-white/5 p-3"
-                  >
-                    <div>
-                      <b>{invite.party_name}</b>
-                      <p className="text-xs text-slate-400">
-                        เชิญโดย {invite.inviter_name} · {invite.member_count}/5
-                        คน
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          call({
-                            action: "party_respond",
-                            inviteId: invite.id,
-                            accept: true,
-                          })
-                        }
-                        className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-bold"
-                      >
-                        เข้าร่วม
-                      </button>
-                      <button
-                        disabled={busy}
-                        onClick={() =>
-                          call({
-                            action: "party_respond",
-                            inviteId: invite.id,
-                            accept: false,
-                          })
-                        }
-                        className="rounded-lg border border-white/15 px-3 py-2 text-sm"
-                      >
-                        ปฏิเสธ
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-slate-400">ยังไม่มีคำเชิญ</p>
-              )}
-            </div>
-          </section>
-          <section className="command-panel p-5">
-            <p className="label">OPEN PARTIES</p>
-            <h2 className="mt-2 text-lg font-black">ปาร์ตี้ที่เปิดรับสมาชิก</h2>
-            <div className="mt-4 space-y-2">
-              {data.openParties.length ? (
-                data.openParties.map((open: any) => (
-                  <div
-                    key={open.id}
-                    className="flex items-center justify-between gap-3 rounded-lg bg-white/5 p-3"
-                  >
-                    <div>
-                      <b>{open.name}</b>
-                      <p className="text-xs text-slate-400">
-                        หัวหน้า {open.owner_name} · {open.member_count}/5 คน
-                      </p>
-                    </div>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        call({ action: "party_join", partyId: open.id })
-                      }
-                      className="rounded-lg border border-red-400/50 px-3 py-2 text-sm font-bold text-red-200"
-                    >
-                      ขอเข้าร่วม
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-slate-400">
-                  ยังไม่มีปาร์ตี้ที่เปิดรับ
-                </p>
-              )}
-            </div>
-          </section>
-        </>
-      )}
-    </div>
-  );
-}
 
-function AdminAccessPanel({
-  data,
-  call,
-  busy,
-}: {
-  data: Data;
-  call: (body: any) => void;
-  busy: boolean;
-}) {
-  const sam = data.me.name === "Sam";
-  const candidates = data.managedMembers.filter(
-    (member: any) => member.active && member.id !== data.me.id,
-  );
-  return (
-    <section className="command-panel admin-access-v2 p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="label">ADMIN ACCESS</p>
-          <h2 className="mt-2 text-xl font-black">จัดการแอดมิน</h2>
-          <p className="mt-2 text-sm text-slate-400">
-            เฉพาะ Sam เท่านั้นที่เพิ่มหรือถอดสิทธิ์แอดมินได้
-          </p>
-        </div>
-        <span className="rounded-full border border-red-400/30 bg-red-950/30 px-3 py-1 text-xs font-bold text-red-200">
-          SAM ONLY
-        </span>
-      </div>
-      {!sam ? (
-        <p className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-slate-400">
-          บัญชีนี้ไม่มีสิทธิ์จัดการแอดมิน
-        </p>
-      ) : (
-        <div className="mt-4 space-y-2">
-          {candidates.map((member: any) => (
-            <div
-              key={member.id}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/20 p-3"
-            >
-              <div>
-                <b>{member.display_name}</b>
-                <p className="text-xs text-slate-500">
-                  {member.role === "admin" ? "แอดมิน" : "สมาชิก"}
-                </p>
-              </div>
-              {member.role === "admin" ? (
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    call({
-                      action: "admin_access",
-                      memberId: member.id,
-                      enabled: false,
-                    })
-                  }
-                  className="rounded-lg border border-red-400/40 px-3 py-2 text-xs font-bold text-red-200"
-                >
-                  ถอดแอดมิน
-                </button>
-              ) : (
-                <button
-                  disabled={busy}
-                  onClick={() =>
-                    call({
-                      action: "admin_access",
-                      memberId: member.id,
-                      enabled: true,
-                    })
-                  }
-                  className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold"
-                >
-                  เพิ่มเป็นแอดมิน
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
 
 function LeaveRoom({
   data,
@@ -1147,18 +793,30 @@ export default function Home() {
     [loginName, setLoginName] = useState(""),
     [loginPin, setLoginPin] = useState(""),
     [partyName, setPartyName] = useState(""),
+    [loadedViews, setLoadedViews] = useState<string[]>([]),
     [pickerReset, setPickerReset] = useState(0);
+  // `load` is passed straight to onClick and setInterval, so it has to stay
+  // zero-argument — the current view rides along in a ref instead.
+  const viewRef = useRef(view);
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/dashboard", { cache: "no-store" }),
+      const r = await fetch(`/api/dashboard?view=${viewRef.current}`, {
+          cache: "no-store",
+        }),
         x: any = await r.json();
       if (r.status === 401) {
         setData(null);
+        setLoadedViews([]);
         setAuthNeeded(true);
       } else if (x.error) setNotice(x.error);
       else {
-        setData(x);
+        // Merge, don't replace: the response only carries the requested
+        // view's extra keys, so this keeps other views' already-loaded data.
+        setData((prev) => ({ ...EMPTY_DATA, ...(prev ?? {}), ...x }));
+        setLoadedViews((prev) =>
+          prev.includes(x.view) ? prev : [...prev, x.view],
+        );
         setAuthNeeded(false);
       }
     } catch {
@@ -1168,7 +826,10 @@ export default function Home() {
     }
   };
   useEffect(() => {
+    viewRef.current = view;
     load();
+  }, [view]);
+  useEffect(() => {
     const timer = window.setInterval(load, 60000);
     return () => window.clearInterval(timer);
   }, []);
@@ -1623,7 +1284,10 @@ export default function Home() {
               </section>
             </div>
           )}
-          {view === "party" && (
+          {view === "party" &&
+            (!loadedViews.includes("party") ? (
+              <ViewLoading />
+            ) : (
             <PartyCommandCenter
               data={data}
               members={members}
@@ -1651,7 +1315,7 @@ export default function Home() {
                 }
               }}
             />
-          )}
+            ))}
           {view === "score" && (
             <SquadRanking
               leaderboard={data.leaderboard}
@@ -1663,184 +1327,23 @@ export default function Home() {
               <section className="command-panel p-6">
                 หน้านี้สำหรับแอดมินเท่านั้น
               </section>
+            ) : !loadedViews.includes("admin") ? (
+              <ViewLoading />
             ) : (
               <AdminCommandCenter data={data} call={call} busy={busy} />
             ))}
-          {view === "admin_legacy" &&
-            (data.me.role !== "admin" ? (
-              <section className="command-panel p-6">
-                หน้านี้สำหรับแอดมินเท่านั้น
-              </section>
+          {view === "leave" &&
+            (!loadedViews.includes("leave") ? (
+              <ViewLoading />
             ) : (
-              <div className="admin-v2 grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
-                <section className="command-panel p-5">
-                  <p className="label">VERIFY QUEUE</p>
-                  <h2 className="mt-2 text-xl font-black">รายการรอตรวจ</h2>
-                  <div className="mt-4 space-y-3">
-                    {data.pending.length ? (
-                      data.pending.map((item: any) => (
-                        <div
-                          key={item.type + item.id}
-                          className="rounded-lg border border-white/10 p-3"
-                        >
-                          <div className="flex flex-wrap items-center justify-between gap-2">
-                            <div>
-                              <b>
-                                {item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"}{" "}
-                                #{item.id}
-                              </b>
-                              <p className="text-sm text-slate-400">
-                                {item.detail}
-                                {item.submitted_by && (
-                                  <>
-                                    <span className="mx-1">·</span>ส่งโดย{" "}
-                                    {item.submitted_by}
-                                  </>
-                                )}
-                              </p>
-                            </div>
-                            <div className="flex gap-2">
-                              <a
-                                className="group flex items-center gap-2 rounded bg-white/10 px-2 py-1 text-sm"
-                                href={`/api/image/${item.image_key}`}
-                                target="_blank"
-                              >
-                                <img
-                                  src={`/api/image/${item.image_key}`}
-                                  alt="ตัวอย่างหลักฐาน"
-                                  loading="lazy"
-                                  className="h-10 w-14 rounded object-cover"
-                                />
-                                ดูรูป
-                              </a>
-                              <button
-                                disabled={busy}
-                                aria-label="อนุมัติ"
-                                onClick={() =>
-                                  call({
-                                    action: "approve",
-                                    type: item.type,
-                                    id: item.id,
-                                  })
-                                }
-                                className="rounded bg-emerald-600 px-3 py-2 text-sm"
-                              >
-                                <Check className="h-4 w-4" />
-                              </button>
-                              <button
-                                disabled={busy}
-                                onClick={() =>
-                                  call({
-                                    action: "reject",
-                                    type: item.type,
-                                    id: item.id,
-                                  })
-                                }
-                                className="rounded bg-red-700 px-3 py-2 text-sm"
-                              >
-                                ไม่ผ่าน
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <p className="text-slate-400">ไม่มีรายการรอตรวจ</p>
-                    )}
-                  </div>
-                </section>
-                <section className="command-panel p-5">
-                  <p className="label">SQUAD MANAGEMENT</p>
-                  <h2 className="mt-2 text-xl font-black">เพิ่มสมาชิก</h2>
-                  <form
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      if (name.trim()) {
-                        call({ action: "member", name });
-                        setName("");
-                      }
-                    }}
-                    className="mt-4 flex gap-2"
-                  >
-                    <input
-                      required
-                      minLength={2}
-                      maxLength={60}
-                      value={name}
-                      onChange={(event: ChangeEvent<HTMLInputElement>) =>
-                        setName(event.target.value)
-                      }
-                      placeholder="ชื่อสมาชิก"
-                      className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-                    />
-                    <button className="rounded-lg bg-red-600 px-3 font-bold">
-                      เพิ่ม
-                    </button>
-                  </form>
-                  <p className="mt-3 text-xs text-slate-400">
-                    เพิ่มด้วยชื่อได้ทันที สมาชิกใช้ชื่อนี้เพื่อเข้าใช้งาน
-                  </p>
-                  <p className="mt-5 text-sm text-slate-400">
-                    สมาชิกทั้งหมด {data.managedMembers.length} คน
-                  </p>
-                  <div className="mt-4 space-y-2">
-                    {data.managedMembers.map((member: any) => (
-                      <div
-                        key={member.id}
-                        className="flex items-center gap-2 rounded-lg bg-white/5 p-3"
-                      >
-                        <span className="flex-1">
-                          <b>{member.display_name}</b>
-                          <span className="ml-2 text-xs text-slate-500">
-                            {member.active ? "ใช้งาน" : "ปิดใช้งาน"}
-                          </span>
-                        </span>
-                        <button
-                          type="button"
-                          disabled={!member.active}
-                          onClick={() => {
-                            const next = window.prompt(
-                              "แก้ชื่อสมาชิก",
-                              member.display_name,
-                            );
-                            const nextName = next?.trim();
-                            if (nextName && nextName !== member.display_name)
-                              call({
-                                action: "member_update",
-                                id: member.id,
-                                name: nextName,
-                              });
-                          }}
-                          className="rounded bg-white/10 px-2 py-1 text-xs"
-                        >
-                          แก้ชื่อ
-                        </button>
-                        {member.id !== data.me.id && member.active && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (window.confirm("ปิดใช้งานสมาชิกนี้?"))
-                                call({
-                                  action: "member_delete",
-                                  id: member.id,
-                                });
-                            }}
-                            className="rounded bg-red-700/70 px-2 py-1 text-xs"
-                          >
-                            ปิดใช้งาน
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-                <AdminAccessPanel data={data} call={call} busy={busy} />
-              </div>
+              <LeaveRoom data={data} call={call} busy={busy} />
             ))}
-          {view === "leave" && (
-            <LeaveRoom data={data} call={call} busy={busy} />
-          )}
-          {view === "log" && <SubmissionLog data={data} />}
+          {view === "log" &&
+            (!loadedViews.includes("log") ? (
+              <ViewLoading />
+            ) : (
+              <SubmissionLog data={data} />
+            ))}
         </section>
         <aside className="command-rail hidden xl:block w-72 shrink-0 space-y-5">
           <section className="command-panel p-5">
