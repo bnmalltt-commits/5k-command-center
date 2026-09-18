@@ -120,19 +120,23 @@ function MissionControl({
         </div>
         <span className="mission-control__eyebrow">AIR DROP CHECK-IN</span>
       </div>
-      <div className="mission-control__rounds" aria-label="เลือกเวลาเช็กอิน">
-        {rounds.map((round, i) => (
-          <button
-            type="button"
-            key={round}
-            onClick={() => onOpenAirdrop(round)}
-            className={`mission-control__round ${nextRound === round ? "is-next" : ""} ${entries.get(round)?.status === "approved" ? "is-complete" : ""}`}
-          >
-            <small>MISSION {String(i + 1).padStart(2, "0")}</small>
-            <strong>{round}</strong>
-            <span>{roundState(round)}</span>
-          </button>
-        ))}
+      <div className="mission-timeline" aria-label="เลือกเวลาเช็กอิน">
+        {rounds.map((round, i) => {
+          const done = entries.get(round)?.status === "approved";
+          const isNext = nextRound === round;
+          return (
+            <button
+              type="button"
+              key={round}
+              onClick={() => onOpenAirdrop(round)}
+              className={`mission-timeline__node ${isNext ? "is-next" : ""} ${done ? "is-done" : ""}`}
+            >
+              <span className="mission-timeline__diamond" aria-hidden="true" />
+              <span className="mission-timeline__time">{round}</span>
+              <span className="mission-timeline__label">{roundState(round)}</span>
+            </button>
+          );
+        })}
       </div>
       <div className="mission-control__status">
         <div className="mission-control__copy">
@@ -241,6 +245,21 @@ function SquadRanking({
           <Trophy className="h-5 w-5 text-red-400" />
         </div>
       </div>
+      {!compact && rows.length >= 3 && (
+        <div className="ranking-podium" aria-hidden="true">
+          {[rows[1], rows[0], rows[2]].map((member: any, i: number) => {
+            const slot = [2, 1, 3][i];
+            return (
+              <div key={member.id} className={`ranking-podium__slot ranking-podium__slot--${slot}`}>
+                <div className="ranking-podium__rank">{slot}</div>
+                <div className="ranking-podium__bar" />
+                <div className="ranking-podium__name">{member.display_name}</div>
+                <div className="ranking-podium__pt">{Number(member.score || 0)} pt</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="ranking-list">
         {rows.map((member: any, index: number) => {
           const score = Number(member.score || 0),
