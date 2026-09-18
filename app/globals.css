@@ -2694,3 +2694,29 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   font-size: 0.68rem;
   color: #94a3b8;
 }
+
+/* Login screen ring + angular controls. */
+.hud-login__ring {
+  width: 76px;
+  height: 76px;
+  margin: 0 auto;
+  padding: 10px;
+  border: 2px solid #ff3148;
+  border-radius: 999px;
+  position: relative;
+}
+.hud-login__ring::before {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  border-radius: 999px;
+}
+.hud-login input.hud-clip {
+  border-radius: 0;
+}
+.hud-login input.hud-clip:focus {
+  outline: none;
+  border-color: rgba(255, 65, 82, 0.75) !important;
+  box-shadow: 0 0 0 3px rgba(255, 65, 82, 0.12);
+}

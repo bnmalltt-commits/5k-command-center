@@ -1424,13 +1424,16 @@ export default function Home() {
   if (!data && authNeeded)
     return (
       <main className="grid min-h-screen place-items-center bg-[#07080b] p-5 text-white">
-        <section className="command-panel w-full max-w-md p-7 text-center">
-          <img
-            src="/5k-logo.png"
-            alt="5K Fivethousand"
-            className="mx-auto h-28 w-full object-contain"
-          />
-          <h1 className="mt-5 text-2xl font-black">เข้าสู่ระบบแก๊ง</h1>
+        <section className="command-panel hud-login w-full max-w-md p-7 text-center">
+          <div className="hud-login__ring">
+            <img
+              src="/5k-logo.png"
+              alt="5K Fivethousand"
+              className="mx-auto h-full w-full object-contain"
+            />
+          </div>
+          <p className="label mt-4">ACCESS TERMINAL</p>
+          <h1 className="mt-1 text-2xl font-black">เข้าสู่ระบบแก๊ง</h1>
           <p className="mt-3 text-sm text-slate-400">
             พิมพ์ชื่อและตั้งรหัสสมาชิก 6 หลัก · ชื่อใหม่จะสมัครเป็นสมาชิกให้อัตโนมัติ
             <br />
@@ -1444,12 +1447,12 @@ export default function Home() {
               value={loginName}
               onChange={(e) => setLoginName(e.target.value)}
               placeholder="ชื่อสำหรับเข้าแก๊ง หรือรหัสแอดมิน"
-              className="w-full rounded-lg border border-white/15 bg-black/30 px-4 py-3"
+              className="hud-clip w-full border border-white/15 bg-black/30 px-4 py-3"
             />
-            <input required inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={loginPin} onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="รหัสสมาชิก 6 หลัก" className="w-full rounded-lg border border-white/15 bg-black/30 px-4 py-3 tracking-[0.35em]" />
+            <input required inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={loginPin} onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="รหัสสมาชิก 6 หลัก" className="hud-clip w-full border border-white/15 bg-black/30 px-4 py-3 text-center tracking-[0.35em]" />
             <button
               disabled={busy}
-              className="red-action w-full disabled:opacity-40"
+              className="red-action hud-clip w-full disabled:opacity-40"
             >
               เข้าสู่ระบบ
             </button>
@@ -1513,7 +1516,7 @@ export default function Home() {
                 key={id}
                 onClick={() => setView(id)}
                 aria-current={view === id ? "page" : undefined}
-                className={`flex w-full items-center gap-3 rounded-lg px-4 py-3 text-left font-bold ${view === id ? "bg-red-600" : "text-slate-400 hover:bg-white/5"}`}
+                className={`hud-clip-sm flex w-full items-center gap-3 px-4 py-3 text-left font-bold ${view === id ? "bg-red-600" : "text-slate-400 hover:bg-white/5"}`}
               >
                 <Icon className="h-4 w-4" />
                 {label}
@@ -1569,7 +1572,7 @@ export default function Home() {
               </div>
               <button
                 onClick={load}
-                className="hero-refresh"
+                className="hero-refresh hud-clip-sm"
                 aria-label="รีเฟรชข้อมูล"
               >
                 รีเฟรช
@@ -1589,7 +1592,7 @@ export default function Home() {
               <button
                 key={id}
                 onClick={() => setView(id)}
-                className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm ${view === id ? "bg-red-600" : "bg-white/10"}`}
+                className={`hud-clip-sm whitespace-nowrap px-4 py-2 text-sm ${view === id ? "bg-red-600" : "bg-white/10"}`}
               >
                 {label}
               </button>
