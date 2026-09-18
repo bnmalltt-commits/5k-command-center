@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800&family=Rajdhani:wght@600;700&display=swap");
+﻿@import url("https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;800&family=Rajdhani:wght@600;700&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "../vendor/shadcn-tailwind-4.13.0.css";
@@ -116,7 +116,7 @@ body {
       rgba(4, 6, 9, 0.04) 52%,
       rgba(4, 6, 9, 0.24)
     ),
-    url("/command-center-depth-v1.png") center / cover no-repeat;
+    url("/command-center-depth-v1.jpg") center / cover no-repeat;
 }
 
 .command-scene::after {
@@ -479,7 +479,7 @@ main > div.relative.mx-auto > section > header {
 }
 
 main > div.relative.mx-auto > section > header::before {
-  content: "PLAY   •   CHECK-IN   •   EARN   •   TOGETHER";
+  content: "PLAY   â€¢   CHECK-IN   â€¢   EARN   â€¢   TOGETHER";
   position: absolute;
   left: 31%;
   top: 50%;
@@ -544,7 +544,7 @@ form.command-panel > .grid.grid-cols-2 > button {
 }
 
 form.command-panel > .grid.grid-cols-2 > button::before {
-  content: "✓";
+  content: "âœ“";
   position: absolute;
   top: 20px;
   right: 20px;
@@ -571,7 +571,7 @@ form.command-panel > .grid.grid-cols-2 > button::before {
 }
 
 form.command-panel > .grid.grid-cols-2 > button:last-child::before {
-  content: "⌛";
+  content: "âŒ›";
   color: #fda4af;
   font-size: 1.25rem;
 }
@@ -1265,7 +1265,7 @@ main.ui-v2 .mission-control__action { min-width: 156px; margin-left: 0; }
       rgba(7, 8, 11, 0.46) 50%,
       rgba(7, 8, 11, 0.7) 100%
     ),
-    url("/command-center-depth-v1.png");
+    url("/command-center-depth-v1.jpg");
   background-position: center;
   background-size: cover;
   background-attachment: fixed;
@@ -2721,7 +2721,7 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   box-shadow: 0 0 0 3px rgba(255, 65, 82, 0.12);
 }
 
-/* HUD v4 — professional polish (2026-09-18): real depth, grain, glow, dimensional podium. */
+/* HUD v4 â€” professional polish (2026-09-18): real depth, grain, glow, dimensional podium. */
 .command-shell {
   position: relative;
   isolation: isolate;
@@ -3038,4 +3038,46 @@ main.ui-v2 .airdrop-next-round:focus-visible {
   border-color: rgba(239, 44, 56, 0.4);
   background: linear-gradient(180deg, #1c1216 0%, #120d0f 100%);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+/* Defensive responsive fallback: guarantees the desktop sidebar/rail and mobile
+   tab bar never both show (or both hide) even if a Tailwind utility fails to
+   apply in a given browser/build. Plain, unconditional media queries only. */
+@media (max-width: 1023px) {
+  .command-sidebar,
+  .topbar-info--desktop,
+  .system-online {
+    display: none !important;
+  }
+  .topbar-logo--mobile {
+    display: block !important;
+  }
+  .mobile-tab-nav {
+    display: flex !important;
+  }
+}
+@media (min-width: 1024px) {
+  .topbar-logo--mobile,
+  .mobile-tab-nav {
+    display: none !important;
+  }
+  .command-sidebar {
+    display: block !important;
+  }
+  .topbar-info--desktop {
+    display: block !important;
+  }
+  .system-online {
+    display: inline-flex !important;
+  }
+}
+@media (max-width: 1279px) {
+  .command-rail {
+    display: none !important;
+  }
+}
+@media (min-width: 1280px) {
+  .command-rail {
+    display: block !important;
+  }
 }

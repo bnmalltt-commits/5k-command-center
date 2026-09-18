@@ -700,23 +700,23 @@ function LeaveRoom({
   busy,
 }: {
   data: Data;
-  call: (body: any) => void;
+  call: (body: any) => Promise<boolean>;
   busy: boolean;
 }) {
   const isAdmin = data.me.role === "admin";
   const [memberId, setMemberId] = useState(data.me.id);
   const [leaveDate, setLeaveDate] = useState(data.date);
   const [reason, setReason] = useState("");
-  const submit = (e: FormEvent) => {
+  const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!reason.trim()) return;
-    call({
+    const ok = await call({
       action: "leave_request",
       memberId: isAdmin ? memberId : data.me.id,
       leaveDate,
       reason: reason.trim(),
     });
-    setReason("");
+    if (ok) setReason("");
   };
   return (
     <section className="command-panel p-5">
@@ -1230,6 +1230,7 @@ export default function Home() {
         ? "ยืนยันรับคำเชิญและเข้าร่วมปาร์ตี้ใช่หรือไม่?"
         : "ยืนยันปฏิเสธคำเชิญปาร์ตี้ใช่หรือไม่?",
       party_dissolve: "ยืนยันยุบปาร์ตี้ใช่หรือไม่? การดำเนินการนี้ย้อนกลับไม่ได้",
+      leave_request: "ยืนยันบันทึกการแจ้งลานี้ใช่หรือไม่?",
     };
     return messages[action] || "ยืนยันดำเนินการนี้ใช่หรือไม่?";
   };
@@ -1434,9 +1435,9 @@ export default function Home() {
               <img
                 src="/5k-logo.png"
                 alt="5K"
-                className="h-12 w-24 object-contain lg:hidden"
+                className="topbar-logo--mobile h-12 w-24 object-contain lg:hidden"
               />
-              <div className="hidden lg:block">
+              <div className="topbar-info--desktop hidden lg:block">
                 <p className="label">LIVE COMMAND // THAILAND</p>
                 <p className="mt-1 text-sm text-slate-300">{data.date} · เล่นด้วยกัน ไปได้ไกลกว่า</p>
               </div>
@@ -1491,7 +1492,7 @@ export default function Home() {
             }}
             onOpenParty={() => setView("party")}
           />
-          <div className="mb-5 flex gap-2 overflow-x-auto lg:hidden">
+          <div className="mobile-tab-nav mb-5 flex gap-2 overflow-x-auto lg:hidden">
             {nav.map(([id, label]) => (
               <button
                 key={id}

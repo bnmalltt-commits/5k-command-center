@@ -2,7 +2,7 @@
 
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Sparkles } from "@react-three/drei";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 function OrbitalCore() {
   const rig = useRef<any>(null);
@@ -135,12 +135,23 @@ function OrbitalCore() {
 }
 
 export default function CommandScene() {
+  // Pause the render loop while the tab is backgrounded — no point spending
+  // GPU/battery animating a decorative scene no one can see.
+  const [tabVisible, setTabVisible] = useState(true);
+
+  useEffect(() => {
+    const onVisibility = () => setTabVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
   return (
     <div className="command-scene" aria-hidden="true">
       <Canvas
         dpr={[1, 1.5]}
         camera={{ position: [0, 0, 6], fov: 42 }}
         gl={{ alpha: true, antialias: true }}
+        frameloop={tabVisible ? "always" : "never"}
       >
         <fog attach="fog" args={["#07080b", 4, 11]} />
         <OrbitalCore />

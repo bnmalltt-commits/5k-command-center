@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import CommandScene from "./command-scene";
+import CommandScene from "./command-scene-loader";
 
 export const metadata: Metadata = {
   title: "5K Fivethousand Command Center",
