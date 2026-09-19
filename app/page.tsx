@@ -74,8 +74,10 @@ const labels: Record<string, string> = {
 // Without it the view would render its "ยังไม่มี..." empty state for a beat.
 function ViewLoading() {
   return (
-    <section className="command-panel p-6 text-center text-slate-400">
-      กำลังโหลดข้อมูล…
+    <section className="ui-panel">
+      <p className="ui-panel__body text-center text-sm text-slate-400">
+        กำลังโหลดข้อมูล…
+      </p>
     </section>
   );
 }
@@ -1210,9 +1212,9 @@ export default function Home() {
           )}
           {view === "admin" &&
             (data.me.role !== "admin" ? (
-              <section className="command-panel p-6">
-                หน้านี้สำหรับแอดมินเท่านั้น
-              </section>
+              <Panel>
+                <EmptyState title="หน้านี้สำหรับแอดมินเท่านั้น" />
+              </Panel>
             ) : !loadedViews.includes("admin") ? (
               <ViewLoading />
             ) : (

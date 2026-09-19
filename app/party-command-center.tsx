@@ -3,7 +3,15 @@
 import { useMemo, useState } from "react";
 import { Check, Lock, ShieldCheck, Users, X } from "lucide-react";
 import { Picker } from "./picker";
-import { Dot, EmptyState, Panel, Row, SearchInput } from "./ui";
+import {
+  ConfirmDialog,
+  Dot,
+  EmptyState,
+  Panel,
+  Row,
+  SearchInput,
+  Segmented,
+} from "./ui";
 
 type Props = {
   data: any;
@@ -36,73 +44,62 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
 
   return (
     <section className="party-v2 space-y-5">
-      <div className="command-panel overflow-hidden">
-        <div className="border-b border-white/10 bg-gradient-to-r from-red-950/45 to-transparent p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="label">PARTY MISSION CONTROL</p>
-              <h2 className="mt-2 flex items-center gap-2 text-2xl font-black">
-                <Users className="h-6 w-6 text-red-400" />
-                {party ? party.name : "รวมทีมสำหรับภารกิจ"}
-              </h2>
-              <p className="mt-2 text-sm text-slate-400">
-                {party
-                  ? `${party.members.length}/5 คน · ${party.status === "open" ? "กำลังจัดทีม" : "ล็อกทีมแล้ว"}`
-                  : "สร้างปาร์ตี้หรือเข้าร่วมทีมที่กำลังเปิดรับ"}
-              </p>
+      <Panel
+        label="PARTY MISSION CONTROL"
+        title={party ? party.name : "รวมทีมสำหรับภารกิจ"}
+        subtitle={
+          party
+            ? `${party.members.length}/5 คน · ${party.status === "open" ? "กำลังจัดทีม" : "ล็อกทีมแล้ว"}`
+            : "สร้างปาร์ตี้หรือเข้าร่วมทีมที่กำลังเปิดรับ"
+        }
+        trailing={
+          party && (
+            <div className="flex gap-2">
+              {party.status === "open" && isOwner && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    call({ action: "party_lock", partyId: party.id, locked: true })
+                  }
+                  className="ui-btn ui-btn--primary ui-btn--sm"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  ล็อกทีม
+                </button>
+              )}
+              {party.status === "locked" && isOwner && (
+                <button
+                  disabled={busy}
+                  onClick={() =>
+                    call({ action: "party_lock", partyId: party.id, locked: false })
+                  }
+                  className="ui-btn ui-btn--ghost ui-btn--sm"
+                >
+                  ปลดล็อกทีม
+                </button>
+              )}
+              {isOwner ? (
+                <button
+                  disabled={busy}
+                  onClick={() => setConfirmDissolve(true)}
+                  className="ui-btn ui-btn--ghost ui-btn--sm"
+                >
+                  ยุบปาร์ตี้
+                </button>
+              ) : (
+                <button
+                  disabled={busy}
+                  onClick={() => call({ action: "party_leave" })}
+                  className="ui-btn ui-btn--ghost ui-btn--sm"
+                >
+                  ออก
+                </button>
+              )}
             </div>
-            {party && (
-              <div className="flex gap-2">
-                <span className="rounded-full border border-white/15 bg-black/20 px-3 py-2 text-sm font-bold">
-                  {party.members.length}/5
-                </span>
-                {party.status === "open" &&
-                  isOwner && (
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        call({
-                          action: "party_lock",
-                          partyId: party.id,
-                          locked: true,
-                        })
-                      }
-                      className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold"
-                    >
-                      <Lock className="mr-1 inline h-4 w-4" />
-                      ล็อกทีม
-                    </button>
-                  )}
-                {party.status === "locked" && isOwner && (
-                  <button
-                    disabled={busy}
-                    onClick={() => call({ action: "party_lock", partyId: party.id, locked: false })}
-                    className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold"
-                  >
-                    ปลดล็อกทีม
-                  </button>
-                )}
-                {isOwner ? (
-                  <button
-                    disabled={busy}
-                    onClick={() => setConfirmDissolve(true)}
-                    className="rounded-lg border border-red-400/50 px-4 py-2 text-sm font-bold text-red-200 hover:bg-red-500/10"
-                  >
-                    ยุบปาร์ตี้
-                  </button>
-                ) : (
-                  <button
-                    disabled={busy}
-                    onClick={() => call({ action: "party_leave" })}
-                    className="rounded-lg border border-white/15 px-4 py-2 text-sm"
-                  >
-                    ออก
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
+          )
+        }
+        flush
+      >
         {party && (
           <div>
             {party.members.map((member: any) => {
@@ -139,7 +136,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
             })}
           </div>
         )}
-      </div>
+      </Panel>
       {party && (
         <>
           <Panel
@@ -234,29 +231,18 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           </Panel>
         </>
       )}
-      <div className="flex gap-2 overflow-x-auto">
-        <button
-          onClick={() => setTab("team")}
-          className={`hud-clip-sm px-4 py-2 text-sm font-bold ${tab === "team" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
-        >
-          ทีมของฉัน
-        </button>
-        <button
-          onClick={() => setTab("find")}
-          className={`hud-clip-sm px-4 py-2 text-sm font-bold ${tab === "find" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
-        >
-          ค้นหาปาร์ตี้
-        </button>
-        <button
-          onClick={() => setTab("invites")}
-          className={`hud-clip-sm px-4 py-2 text-sm font-bold ${tab === "invites" ? "bg-red-600" : "bg-white/5 text-slate-400"}`}
-        >
-          คำเชิญ{" "}
-          {data.partyInvites.length ? `(${data.partyInvites.length})` : ""}
-        </button>
-      </div>
+      <Segmented
+        label="เมนูปาร์ตี้"
+        value={tab}
+        onChange={(next) => setTab(next as typeof tab)}
+        options={[
+          { id: "team", label: "ทีมของฉัน" },
+          { id: "find", label: "ค้นหาปาร์ตี้" },
+          { id: "invites", label: "คำเชิญ", count: data.partyInvites.length },
+        ]}
+      />
       {tab === "team" && (
-        <div className="command-panel p-5">
+        <Panel>
           {!party ? (
             <form
               onSubmit={(event) => {
@@ -401,60 +387,49 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
               </div>
             </>
           )}
-        </div>
+        </Panel>
       )}
       {tab === "find" && (
-        <div className="command-panel p-5">
-          <p className="label">OPEN SQUADS</p>
-          <h3 className="mt-2 text-xl font-black">ปาร์ตี้ที่เปิดรับ</h3>
-          <div className="mt-4 space-y-2">
-            {data.openParties.length ? (
-              data.openParties.map((open: any) => (
-                <div
-                  key={open.id}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 p-3"
-                >
-                  <div>
-                    <b>{open.name}</b>
-                    <p className="text-xs text-slate-500">
-                      หัวหน้า {open.owner_name} · {open.member_count}/5 คน
-                    </p>
-                  </div>
+        <Panel label="OPEN SQUADS" title="ปาร์ตี้ที่เปิดรับ" flush>
+          {data.openParties.length ? (
+            data.openParties.map((open: any) => (
+              <Row
+                key={open.id}
+                inset={false}
+                title={open.name}
+                subtitle={`หัวหน้า ${open.owner_name} · ${open.member_count}/5 คน`}
+                trailing={
                   <button
                     disabled={busy || party}
                     onClick={() =>
                       call({ action: "party_join", partyId: open.id })
                     }
-                    className="rounded-lg border border-red-400/50 px-3 py-2 text-sm font-bold text-red-200"
+                    className="ui-btn ui-btn--ghost ui-btn--sm"
                   >
                     {party ? "ทีมของคุณ" : "เข้าร่วมทันที"}
                   </button>
-                </div>
-              ))
-            ) : (
-              <p className="text-slate-400">ยังไม่มีปาร์ตี้เปิดรับ</p>
-            )}
-          </div>
-        </div>
+                }
+              />
+            ))
+          ) : (
+            <EmptyState
+              title="ยังไม่มีปาร์ตี้เปิดรับ"
+              hint="ลองสร้างทีมของคุณเองจากแท็บทีมของฉัน"
+            />
+          )}
+        </Panel>
       )}
       {tab === "invites" && (
-        <div className="command-panel p-5">
-          <p className="label">PARTY INVITES</p>
-          <h3 className="mt-2 text-xl font-black">คำเชิญของคุณ</h3>
-          <div className="mt-4 space-y-2">
-            {data.partyInvites.length ? (
-              data.partyInvites.map((invite: any) => (
-                <div
-                  key={invite.id}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-black/20 p-3"
-                >
-                  <div>
-                    <b>{invite.party_name}</b>
-                    <p className="text-xs text-slate-500">
-                      เชิญโดย {invite.inviter_name}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
+        <Panel label="PARTY INVITES" title="คำเชิญของคุณ" flush>
+          {data.partyInvites.length ? (
+            data.partyInvites.map((invite: any) => (
+              <Row
+                key={invite.id}
+                inset={false}
+                title={invite.party_name}
+                subtitle={`เชิญโดย ${invite.inviter_name}`}
+                trailing={
+                  <>
                     <button
                       onClick={() =>
                         call({
@@ -463,7 +438,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                           accept: true,
                         })
                       }
-                      className="rounded-lg bg-emerald-600 px-3 py-2 text-sm"
+                      className="ui-btn ui-btn--ok ui-btn--sm"
                     >
                       เข้าร่วม
                     </button>
@@ -475,31 +450,29 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                           accept: false,
                         })
                       }
-                      className="rounded-lg border border-white/15 px-3 py-2 text-sm"
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
                     >
                       <X className="h-4 w-4" />
                     </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="text-slate-400">ยังไม่มีคำเชิญ</p>
-            )}
-          </div>
-        </div>
+                  </>
+                }
+              />
+            ))
+          ) : (
+            <EmptyState title="ยังไม่มีคำเชิญ" />
+          )}
+        </Panel>
       )}
       {confirmDissolve && party && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-labelledby="dissolve-party-title">
-          <div className="command-panel w-full max-w-md p-5 shadow-2xl">
-            <p className="label text-red-300">PARTY CONTROL // DISSOLVE</p>
-            <h3 id="dissolve-party-title" className="mt-2 text-xl font-black">ยุบปาร์ตี้ “{party.name}” ?</h3>
-            <p className="mt-3 text-sm leading-6 text-slate-300">สมาชิกทั้งหมดจะออกจากปาร์ตี้และกลับไปสร้างหรือเข้าทีมใหม่ได้ทันที การดำเนินการนี้ย้อนกลับไม่ได้</p>
-            <div className="mt-5 flex justify-end gap-2">
-              <button type="button" disabled={busy} onClick={() => setConfirmDissolve(false)} className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold">ยกเลิก</button>
-              <button type="button" disabled={busy} onClick={() => { call({ action: "party_dissolve", partyId: party.id, confirmed: true }); setConfirmDissolve(false); }} className="rounded-lg bg-red-600 px-4 py-2 text-sm font-black text-white">ยืนยันยุบปาร์ตี้</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message={`ยุบปาร์ตี้ "${party.name}" ?\nสมาชิกทั้งหมดจะออกจากปาร์ตี้ทันที การดำเนินการนี้ย้อนกลับไม่ได้`}
+          busy={busy}
+          onResolve={(ok) => {
+            setConfirmDissolve(false);
+            if (ok)
+              call({ action: "party_dissolve", partyId: party.id, confirmed: true });
+          }}
+        />
       )}
     </section>
   );
