@@ -44,9 +44,19 @@ export async function POST(r: Request) {
       if (old?.image_key) await storage.delete(old.image_key);
     } else if (type === "party") {
       const ids = JSON.parse(String(form.get("memberIds") || "[]")).map(Number);
+      // Postgres bigint columns come back as strings from this driver, so
+      // member.id must be coerced before comparing against the numeric ids.
+      const myId = Number(member.id);
       if (ids.length < 1 || ids.length > 5 || new Set(ids).size !== ids.length) throw Error("เลือกสมาชิกปาร์ตี้ได้ 1 ถึง 5 คน");
-      const check = await db.prepare(`SELECT id FROM members WHERE active=1 AND id IN (${ids.map(() => "?").join(",")})`).bind(...ids).all();
-      if (check.results.length !== ids.length) throw Error("พบสมาชิกที่เลือกไม่ถูกต้อง");
+      if (!ids.includes(myId)) throw Error("ต้องมีตัวคุณเองอยู่ในรายชื่อที่ส่ง");
+      // The submitter can only claim points for people who are actually their
+      // current teammates — otherwise anyone could name arbitrary members and
+      // farm points for them once an admin approves the photo.
+      const myParty = await db.prepare("SELECT p.id FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1").bind(myId).first<any>();
+      if (!myParty) throw Error("คุณยังไม่ได้อยู่ในปาร์ตี้");
+      const roster = await db.prepare("SELECT member_id FROM party_members WHERE party_id=?").bind(myParty.id).all<any>();
+      const rosterIds = new Set(roster.results.map((r: any) => Number(r.member_id)));
+      if (!ids.every((id: number) => rosterIds.has(id))) throw Error("เลือกได้เฉพาะสมาชิกในปาร์ตี้ของคุณ");
       key = `party/${member.id}/${Date.now()}.${ext}`;
       await storage.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
       const party = await db.prepare("INSERT INTO parties (name,active) VALUES (?,0) RETURNING id").bind(`กิจกรรม ${today} ${Date.now()}`).first<any>();

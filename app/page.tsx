@@ -557,7 +557,10 @@ function AdminCommandCenter({
           <Segmented
             label="จัดการแก๊ง"
             value={tab}
-            onChange={(next) => setTab(next as typeof tab)}
+            onChange={(next) => {
+              setTab(next as typeof tab);
+              setQuery("");
+            }}
             options={[
               { id: "verify", label: "รอตรวจ", count: data.pending.length },
               { id: "members", label: "สมาชิก", count: activeMembers.length },
@@ -770,9 +773,15 @@ export default function Home() {
       resolve: (ok: boolean) => void;
     } | null>(null);
   // Styled stand-in for window.confirm. Same await-a-boolean shape, so every
-  // caller keeps its existing control flow.
-  const confirmAsync = (message: string) =>
-    new Promise<boolean>((resolve) => setConfirmState({ message, resolve }));
+  // caller keeps its existing control flow. Only one dialog can be pending at
+  // a time — setConfirmState would silently replace an earlier unresolved
+  // one otherwise, stranding whichever caller was waiting on it forever.
+  const confirmStateRef = useRef(confirmState);
+  confirmStateRef.current = confirmState;
+  const confirmAsync = (message: string) => {
+    if (confirmStateRef.current) confirmStateRef.current.resolve(false);
+    return new Promise<boolean>((resolve) => setConfirmState({ message, resolve }));
+  };
   // `load` is passed straight to onClick and setInterval, so it has to stay
   // zero-argument — the current view rides along in a ref instead.
   const viewRef = useRef(view);
