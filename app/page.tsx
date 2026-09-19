@@ -1053,7 +1053,10 @@ export default function Home() {
     <main className="ui-v2 command-shell min-h-screen bg-[#07080b] text-white">
       <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
       <div className="command-desktop relative mx-auto max-w-[1600px] p-4 lg:p-7">
-        <aside className="command-sidebar hidden w-60 shrink-0 lg:block">
+        {/* No fixed width: the grid tracks on .command-desktop own the column
+            widths, and a hard w-* here overflows its track and covers the
+            content column. */}
+        <aside className="command-sidebar hidden lg:block">
           <div className="side-brand">
             <img
               src="/5k-logo.png"
@@ -1233,7 +1236,7 @@ export default function Home() {
               <SubmissionLog data={data} />
             ))}
         </section>
-        <aside className="command-rail hidden xl:block w-72 shrink-0 space-y-5">
+        <aside className="command-rail hidden xl:block space-y-5">
           <Panel
             label="SQUAD STATUS"
             title="สถานะแก๊ง"
