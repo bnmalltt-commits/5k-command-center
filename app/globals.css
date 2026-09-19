@@ -52,16 +52,26 @@
 
   /* Redesign palette. One source for every surface, line, text and status
      colour the UI uses — everything below reads these rather than repeating
-     hex literals per component. */
-  --ui-bg: #0f1115;
-  --ui-card: #171a20;
-  --ui-raised: #1f232b;
-  --ui-line: rgba(255, 255, 255, 0.06);
-  --ui-line-strong: rgba(255, 255, 255, 0.11);
-  --ui-text: #e8e9ec;
-  --ui-text-2: #8b909c;
-  --ui-text-3: #5c616b;
-  --ui-red: #ff4155;
+     hex literals per component.
+
+     Text steps are picked for contrast against --ui-card, not by eye:
+     text 15.5:1, text-2 10.3:1, text-3 6.2:1. The old muted step sat at
+     3.0:1, under the 4.5:1 minimum, which is why body copy read as
+     unreadable. */
+  --ui-bg: #0d0d0d;
+  --ui-card: #161616;
+  --ui-raised: #242424;
+  --ui-line: rgba(242, 242, 242, 0.1);
+  --ui-line-strong: rgba(242, 242, 242, 0.18);
+  --ui-text: #f2f2f2;
+  --ui-text-2: #c7c7c7;
+  --ui-text-3: #9a9a9a;
+  --ui-red: #f20505;
+  --ui-red-deep: #8c0303;
+  --ui-red-dark: #400101;
+  /* #f20505 only reaches ~4.4:1 on the dark ground, so red *text* uses this
+     lighter tint (7.1:1) while the saturated red stays for fills and edges. */
+  --ui-red-light: #ff8f8f;
   --ui-green: #4ade80;
   --ui-amber: #fbbf24;
   --ui-radius: 12px;
@@ -196,7 +206,7 @@ body > main {
 .command-panel {
   position: relative;
   overflow: hidden;
-  border-color: rgba(255, 65, 76, 0.28);
+  border-color: rgba(242, 5, 5, 0.34);
 }
 .command-panel::before {
   content: "";
@@ -218,8 +228,8 @@ body > main {
   right: 0;
   width: 62px;
   height: 2px;
-  background: #ef4444;
-  box-shadow: -14px 0 #7f1d1d;
+  background: var(--ui-red);
+  box-shadow: -14px 0 var(--ui-red-deep);
 }
 .command-panel > * {
   position: relative;
@@ -240,11 +250,11 @@ body > main {
   height: 9px;
   flex: 0 0 auto;
   border-radius: 999px;
-  background: #39e56d;
-  box-shadow: 0 0 12px rgba(57, 229, 109, 0.7);
+  background: var(--ui-green);
+  box-shadow: 0 0 12px rgba(74, 222, 128, 0.6);
 }
 .status-dot-offline {
-  background: #475569;
+  background: #4a4a4a;
   box-shadow: none;
 }
 .red-action {
@@ -260,7 +270,7 @@ body > main {
 }
 
 .label {
-  color: #7f8da3;
+  color: var(--ui-text-3);
   font-size: 0.66rem;
   font-weight: 900;
   letter-spacing: 0.16em;
@@ -272,13 +282,13 @@ body > main {
   justify-content: center;
   gap: 0.65rem;
   border-radius: 0.5rem;
-  background: linear-gradient(135deg, #ef4444, #b91c1c);
+  background: linear-gradient(135deg, var(--ui-red), var(--ui-red-deep));
   padding: 0.9rem 1rem;
-  color: white;
+  color: #fff;
   font-size: 0.84rem;
   font-weight: 900;
   box-shadow:
-    0 10px 22px rgba(185, 28, 28, 0.2),
+    0 10px 22px rgba(140, 3, 3, 0.3),
     inset 0 1px 0 rgba(255, 255, 255, 0.2);
   transition:
     transform 0.18s ease,
@@ -335,15 +345,20 @@ button:disabled {
 
 /* Command deck v3: mirrors the dedicated mission-console reference while retaining live app controls. */
 .ui-v2.command-shell {
-  --deck-line: rgba(161, 186, 208, 0.32);
-  --deck-red: #ff3148;
-  --deck-dark: rgba(5, 9, 13, 0.91);
-  --hud-red: #ff3148;
-  --hud-green: #3fe08a;
-  --hud-amber: #ffb454;
+  --deck-line: var(--ui-line-strong);
+  --deck-red: var(--ui-red);
+  --deck-dark: rgba(13, 13, 13, 0.91);
+  --hud-red: var(--ui-red);
+  --hud-green: var(--ui-green);
+  --hud-amber: var(--ui-amber);
   background:
-    linear-gradient(90deg, rgba(1, 3, 6, 0.92), rgba(4, 7, 11, 0.62) 47%, rgba(1, 3, 6, 0.78)),
-    #05070a;
+    linear-gradient(
+      90deg,
+      rgba(13, 13, 13, 0.92),
+      rgba(22, 22, 22, 0.62) 47%,
+      rgba(13, 13, 13, 0.78)
+    ),
+    var(--ui-bg);
 }
 
 .ui-v2 .command-desktop {
@@ -360,7 +375,7 @@ button:disabled {
   border: 1px solid rgba(146, 176, 200, 0.18);
   border-radius: 0.6rem;
   background: linear-gradient(180deg, rgba(8, 13, 18, 0.92), rgba(3, 6, 9, 0.86));
-  box-shadow: inset 3px 0 0 rgba(255, 49, 72, 0.72), 0 20px 42px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 3px 0 0 rgba(242, 5, 5, 0.85), 0 20px 42px rgba(0, 0, 0, 0.35);
 }
 
 .ui-v2 .command-sidebar .side-brand {
@@ -388,10 +403,29 @@ button:disabled {
   text-align: center;
 }
 .ui-v2 .command-sidebar nav button svg { width: 1.5rem; height: 1.5rem; }
-.ui-v2 .command-sidebar nav button[class*="bg-red-600"]::before {
+/* Keyed on aria-current rather than a utility class, so the styling can't
+   silently detach if the markup's classes change. */
+.side-nav__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-weight: 700;
+  color: var(--ui-text-2);
+  background: none;
+  border: none;
+}
+.side-nav__item:hover { background: rgba(242, 242, 242, 0.06); color: var(--ui-text); }
+.side-nav__item[aria-current="page"] {
+  background: var(--ui-red-deep);
+  color: #fff;
+}
+.ui-v2 .command-sidebar nav button[aria-current="page"]::before {
   position: absolute;
   top: 16%; left: -0.58rem; bottom: 16%; width: 3px;
-  content: ""; background: var(--hud-red); box-shadow: 0 0 12px var(--hud-red);
+  content: ""; background: var(--ui-red); box-shadow: 0 0 12px var(--ui-red);
 }
 .ui-v2 .command-rail { position: sticky; top: 1rem; }
 .ui-v2 .command-rail .command-panel:first-child { max-height: 480px; }
@@ -667,8 +701,8 @@ button:disabled {
   clip-path: polygon(7px 0, 100% 0, 100% 100%, 0 100%, 0 7px);
 }
 @keyframes hud-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 49, 72, 0.5); }
-  50% { box-shadow: 0 0 0 6px rgba(255, 49, 72, 0); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(242, 5, 5, 0.5); }
+  50% { box-shadow: 0 0 0 6px rgba(242, 5, 5, 0); }
 }
 
 /* Login screen ring + angular controls. */
@@ -697,7 +731,7 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(255, 65, 82, 0.12);
 }
 
-/* HUD v4 â€” professional polish (2026-09-18): real depth, grain, glow, dimensional podium. */
+/* HUD v4 — professional polish (2026-09-18): real depth, grain, glow, dimensional podium. */
 .command-shell {
   position: relative;
   isolation: isolate;
@@ -782,7 +816,7 @@ button:disabled {
 .ui-panel__sub {
   margin: 3px 0 0;
   color: var(--ui-text-3);
-  font-size: 12px;
+  font-size: 12.5px;
 }
 .ui-panel__trailing {
   display: flex;
@@ -796,7 +830,7 @@ button:disabled {
   margin: 0 0 4px;
   color: var(--ui-text-3);
   font-family: var(--font-hud);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -837,7 +871,7 @@ button:disabled {
 .ui-row__sub {
   margin-top: 2px;
   color: var(--ui-text-3);
-  font-size: 11px;
+  font-size: 12px;
   overflow-wrap: anywhere;
 }
 .ui-row__trail {
@@ -857,14 +891,14 @@ button:disabled {
 .ui-dot--green { background: var(--ui-green); }
 .ui-dot--amber { background: var(--ui-amber); }
 .ui-dot--red { background: var(--ui-red); }
-.ui-dot--idle { background: #3a3f4a; }
+.ui-dot--idle { background: #4a4a4a; }
 
 .ui-empty {
   padding: 28px 16px;
   text-align: center;
 }
 .ui-empty__title { margin: 0; color: var(--ui-text-2); font-size: 13px; }
-.ui-empty__hint { margin: 5px 0 0; color: var(--ui-text-3); font-size: 11px; }
+.ui-empty__hint { margin: 5px 0 0; color: var(--ui-text-3); font-size: 12px; }
 .ui-empty__action { margin-top: 12px; }
 
 .ui-search {
@@ -947,8 +981,8 @@ button:disabled {
   min-height: 38px;
   padding: 0 15px;
   border-radius: var(--ui-radius-sm);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 14px;
+  font-weight: 700;
   cursor: pointer;
   border: 1px solid transparent;
 }
@@ -960,7 +994,7 @@ button:disabled {
   color: var(--ui-text-2);
   font-weight: 500;
 }
-.ui-btn--ok { background: var(--ui-green); color: #0b2015; }
+.ui-btn--ok { background: var(--ui-green); color: #08160d; }
 .ui-btn--sm { min-height: 32px; padding: 0 11px; font-size: 12px; }
 .ui-btn--block { width: 100%; }
 
@@ -1022,16 +1056,16 @@ button:disabled {
 }
 .topbar__logo { height: 30px; width: 54px; object-fit: contain; flex-shrink: 0; }
 .topbar__name { color: var(--ui-text); font-size: 13px; font-weight: 600; }
-.topbar__meta { color: var(--ui-text-3); font-size: 11px; margin-top: 1px; }
+.topbar__meta { color: var(--ui-text-3); font-size: 12px; margin-top: 1px; }
 .topbar__score {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
   padding: 5px 10px;
   border-radius: 99px;
-  border: 1px solid rgba(255, 65, 85, 0.3);
-  background: rgba(255, 65, 85, 0.1);
-  color: #ff8590;
+  border: 1px solid rgba(242, 5, 5, 0.45);
+  background: rgba(140, 3, 3, 0.35);
+  color: #ff8f8f;
   font-size: 10px;
   flex-shrink: 0;
 }
@@ -1052,7 +1086,7 @@ button:disabled {
   padding: 14px;
   margin-bottom: 14px;
   background: var(--ui-card);
-  border: 1px solid rgba(255, 65, 85, 0.26);
+  border: 1px solid rgba(242, 5, 5, 0.4);
   border-radius: var(--ui-radius);
 }
 .mission__head {
@@ -1067,7 +1101,7 @@ button:disabled {
 .mission__count b { color: var(--ui-green); font-size: 19px; font-weight: 700; }
 .mission__count span { color: var(--ui-text-3); font-size: 13px; }
 .mission__bar { display: flex; gap: 4px; margin-bottom: 12px; }
-.mission__seg { flex: 1; height: 4px; border-radius: 2px; background: #22252d; }
+.mission__seg { flex: 1; height: 4px; border-radius: 2px; background: #2b2b2b; }
 .mission__seg.is-done { background: var(--ui-green); }
 .mission__seg.is-pending { background: var(--ui-amber); }
 .mission__seg.is-rejected { background: var(--ui-red); }
@@ -1095,18 +1129,18 @@ button:disabled {
   color: var(--ui-text-2);
 }
 .mission__tile-time { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.mission__tile-state { color: var(--ui-text-3); font-size: 11px; }
-.mission__tile.is-done { border-color: rgba(74, 222, 128, 0.3); }
+.mission__tile-state { color: var(--ui-text-3); font-size: 12px; }
+.mission__tile.is-done { border-color: rgba(74, 222, 128, 0.42); }
 .mission__tile.is-done .mission__tile-top,
 .mission__tile.is-done .mission__tile-state { color: var(--ui-green); }
 .mission__tile.is-pending .mission__tile-top,
 .mission__tile.is-pending .mission__tile-state { color: var(--ui-amber); }
-.mission__tile.is-rejected { border-color: rgba(255, 65, 85, 0.3); }
+.mission__tile.is-rejected { border-color: rgba(242, 5, 5, 0.45); }
 .mission__tile.is-rejected .mission__tile-top,
 .mission__tile.is-rejected .mission__tile-state { color: var(--ui-red); }
 .mission__tile.is-active {
   border-color: var(--ui-red);
-  background: rgba(255, 65, 85, 0.08);
+  background: rgba(140, 3, 3, 0.3);
 }
 .mission__tile.is-active .mission__tile-time { color: var(--ui-text); }
 .mission__submit {
@@ -1125,7 +1159,7 @@ button:disabled {
   gap: 11px;
   margin: 12px 16px;
   padding: 11px 13px;
-  border: 1px solid rgba(255, 65, 85, 0.32);
+  border: 1px solid rgba(242, 5, 5, 0.45);
   border-radius: 11px;
 }
 .rank-me__pos {
@@ -1135,7 +1169,7 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 .rank-me__label { color: var(--ui-text); font-size: 12px; font-weight: 500; }
-.rank-me__hint { color: var(--ui-text-3); font-size: 11px; margin-top: 1px; }
+.rank-me__hint { color: var(--ui-text-3); font-size: 12px; margin-top: 1px; }
 .rank-me__score {
   color: var(--ui-text);
   font-size: 16px;
@@ -1151,8 +1185,8 @@ button:disabled {
   text-align: center;
 }
 .rank-num--1 { color: var(--ui-amber); font-weight: 700; }
-.rank-num--2 { color: #b9bec9; font-weight: 700; }
-.rank-num--3 { color: #c98b4b; font-weight: 700; }
+.rank-num--2 { color: #c7c7c7; font-weight: 700; }
+.rank-num--3 { color: #d08a4a; font-weight: 700; }
 .rank-score {
   color: var(--ui-text);
   font-size: 13px;
@@ -1169,7 +1203,7 @@ button:disabled {
   left: 0;
   z-index: 40;
   display: flex;
-  background: #12151c;
+  background: #111111;
   border-top: 1px solid var(--ui-line-strong);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -1186,10 +1220,18 @@ button:disabled {
   margin-top: -1px;
   background: none;
   color: var(--ui-text-3);
-  font-size: 10px;
+  font-size: 11px;
   cursor: pointer;
 }
-.bottom-nav__item.is-active { border-top-color: var(--ui-red); color: var(--ui-red); font-weight: 600; }
+/* The bar and icon carry the accent; the label stays near-white, because
+   #f20505 on this bar only reaches 4.3:1 and the label is the smallest
+   text on screen. */
+.bottom-nav__item.is-active {
+  border-top-color: var(--ui-red);
+  color: var(--ui-text);
+  font-weight: 600;
+}
+.bottom-nav__item.is-active svg { color: var(--ui-red); }
 
 @media (max-width: 1023px) {
   .ui-v2.command-shell { padding-bottom: 68px; }
@@ -1212,7 +1254,7 @@ button:disabled {
   cursor: pointer;
 }
 .party-remove:hover:not(:disabled) {
-  border-color: rgba(255, 65, 85, 0.4);
+  border-color: rgba(242, 5, 5, 0.55);
   color: var(--ui-red);
 }
 .party-remove:disabled { opacity: 0.4; cursor: default; }

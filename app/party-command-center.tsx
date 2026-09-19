@@ -199,7 +199,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                     title={activity.activity_date}
                     subtitle={activity.members}
                     trailing={
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-[var(--ui-text-3)]">
                         {activity.status === "approved"
                           ? "ผ่านแล้ว"
                           : activity.status === "rejected"
@@ -253,7 +253,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
             >
               <p className="label">CREATE SQUAD</p>
               <h3 className="mt-2 text-xl font-black">สร้างปาร์ตี้และชวนเพื่อน</h3>
-              <p className="mt-2 text-sm text-slate-400">
+              <p className="mt-2 text-sm text-[var(--ui-text-3)]">
                 ตั้งชื่อทีมและเลือกสมาชิก — สมาชิกที่เลือกจะเข้าทีมทันที ไม่ต้องรอยืนยัน
               </p>
               <div className="mt-4 flex max-w-xl gap-2">
@@ -268,7 +268,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 />
                 <button
                   disabled={busy}
-                  className="hud-clip-sm bg-red-600 px-4 font-bold"
+                  className="ui-btn ui-btn--primary"
                 >
                   สร้างและเพิ่มเข้าทีม
                 </button>
@@ -277,9 +277,9 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="text-sm font-black">เลือกเพื่อนเข้าปาร์ตี้</p>
-                    <p className="mt-1 text-xs text-slate-400">เลือกได้สูงสุด 4 คน นอกเหนือจากคุณ</p>
+                    <p className="mt-1 text-xs text-[var(--ui-text-3)]">เลือกได้สูงสุด 4 คน นอกเหนือจากคุณ</p>
                   </div>
-                  <span className="rounded-full border border-red-400/35 bg-red-500/10 px-3 py-1 text-xs font-bold text-red-200">
+                  <span className="rounded-full border border-red-400/35 bg-red-500/10 px-3 py-1 text-xs font-bold text-[var(--ui-text)]">
                     {inviteeIds.length}/4 คน
                   </span>
                 </div>
@@ -326,13 +326,13 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           ) : (
             <>
               <div className="flex items-center gap-2">
-                <ShieldCheck className="h-5 w-5 text-red-400" />
+                <ShieldCheck className="h-5 w-5 text-[var(--ui-red)]" />
                 <div>
                   <p className="label">MEMBER CONTROL</p>
                   <h3 className="mt-1 text-xl font-black">เพิ่มสมาชิกเข้าทีม</h3>
                 </div>
               </div>
-              <p className="mt-3 text-sm text-slate-400">
+              <p className="mt-3 text-sm text-[var(--ui-text-3)]">
                 เลือกสมาชิกเพื่อเพิ่มเข้าปาร์ตี้ทันที ไม่ต้องรอยืนยัน
               </p>
               <div className="mt-3">
@@ -362,7 +362,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                           memberId: member.id,
                         })
                       }
-                      className="rounded-lg border border-white/15 px-3 py-2 text-sm hover:border-red-400"
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
                     >
                       <span
                         className={`status-dot mr-2 inline-block ${member.online ? "" : "status-dot-offline"}`}

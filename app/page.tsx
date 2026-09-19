@@ -75,7 +75,7 @@ const labels: Record<string, string> = {
 function ViewLoading() {
   return (
     <section className="ui-panel">
-      <p className="ui-panel__body text-center text-sm text-slate-400">
+      <p className="ui-panel__body text-center text-sm text-[var(--ui-text-3)]">
         กำลังโหลดข้อมูล…
       </p>
     </section>
@@ -84,7 +84,7 @@ function ViewLoading() {
 function Status({ value }: { value: string }) {
   return (
     <span
-      className={`rounded-full px-3 py-1 text-xs font-bold ${value === "approved" ? "bg-emerald-500/15 text-emerald-300" : value === "rejected" ? "bg-red-500/15 text-red-300" : "bg-amber-400/15 text-amber-200"}`}
+      className={`rounded-full px-3 py-1 text-xs font-bold ${value === "approved" ? "bg-emerald-500/15 text-[var(--ui-green)]" : value === "rejected" ? "bg-red-500/15 text-[var(--ui-red-light)]" : "bg-amber-400/15 text-[var(--ui-amber)]"}`}
     >
       {labels[value] || value}
     </span>
@@ -218,7 +218,7 @@ function SquadRanking({
       label="SQUAD RANKING"
       title={`ตารางคะแนน${compact ? "" : "ทั้งหมด"}`}
       subtitle={compact ? undefined : `${leaderboard.length} คน`}
-      trailing={<Trophy className="h-4 w-4 text-red-400" />}
+      trailing={<Trophy className="h-4 w-4 text-[var(--ui-red)]" />}
       flush
     >
       {!compact && me && (
@@ -371,7 +371,7 @@ function LeaveRoom({
                 title={item.display_name}
                 subtitle={`${item.leave_date} · ${item.reason}`}
                 trailing={
-                  <span className="text-xs text-slate-500">
+                  <span className="text-xs text-[var(--ui-text-3)]">
                     โดย {item.created_by_name}
                   </span>
                 }
@@ -973,7 +973,7 @@ export default function Home() {
   };
   if (!data && authNeeded)
     return (
-      <main className="grid min-h-screen place-items-center bg-[#07080b] p-5 text-white">
+      <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
         <section className="command-panel hud-login w-full max-w-md p-7 text-center">
           <div className="hud-login__ring">
             <img
@@ -984,7 +984,7 @@ export default function Home() {
           </div>
           <p className="label mt-4">ACCESS TERMINAL</p>
           <h1 className="mt-1 text-2xl font-black">เข้าสู่ระบบแก๊ง</h1>
-          <p className="mt-3 text-sm text-slate-400">
+          <p className="mt-3 text-sm text-[var(--ui-text-3)]">
             พิมพ์ชื่อและตั้งรหัสสมาชิก 6 หลัก · ชื่อใหม่จะสมัครเป็นสมาชิกให้อัตโนมัติ
             <br />
             แอดมินใช้รหัสสมาชิกของตัวเอง
@@ -1007,16 +1007,16 @@ export default function Home() {
               เข้าสู่ระบบ
             </button>
           </form>
-          {notice && <p className="mt-4 text-sm text-red-300">{notice}</p>}
+          {notice && <p className="mt-4 text-sm text-[var(--ui-text)]">{notice}</p>}
         </section>
       </main>
     );
   if (!data)
     return (
-      <main className="grid min-h-screen place-items-center bg-[#07080b] p-5 text-white">
+      <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
         <section className="command-panel max-w-md p-6 text-center">
           <p>{loading ? "กำลังเปิดศูนย์บัญชาการ…" : "ยังเปิดข้อมูลไม่ได้"}</p>
-          {!loading && <><p className="mt-2 text-sm text-slate-400">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p><button onClick={load} className="red-action mt-5">ลองใหม่</button></>}
+          {!loading && <><p className="mt-2 text-sm text-[var(--ui-text-3)]">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p><button onClick={load} className="red-action mt-5">ลองใหม่</button></>}
         </section>
       </main>
     );
@@ -1050,7 +1050,7 @@ export default function Home() {
     ([id]) => id !== "admin" || data.me.role === "admin",
   );
   return (
-    <main className="ui-v2 command-shell min-h-screen bg-[#07080b] text-white">
+    <main className="ui-v2 command-shell min-h-screen bg-[#0d0d0d] text-white">
       <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
       <div className="command-desktop relative mx-auto max-w-[1600px] p-4 lg:p-7">
         {/* No fixed width: the grid tracks on .command-desktop own the column
@@ -1074,7 +1074,7 @@ export default function Home() {
                 key={id}
                 onClick={() => setView(id)}
                 aria-current={view === id ? "page" : undefined}
-                className={`hud-clip-sm flex w-full items-center gap-3 px-4 py-3 text-left font-bold ${view === id ? "bg-red-600" : "text-slate-400 hover:bg-white/5"}`}
+                className="hud-clip-sm side-nav__item"
               >
                 <Icon className="h-4 w-4" />
                 {label}
@@ -1251,7 +1251,7 @@ export default function Home() {
                   leading={<Dot tone={member.online ? "green" : "idle"} />}
                   title={member.display_name}
                   trailing={
-                    <span className="text-xs text-slate-500">
+                    <span className="text-xs text-[var(--ui-text-3)]">
                       {member.online ? "ออนไลน์" : "ออฟไลน์"}
                     </span>
                   }
