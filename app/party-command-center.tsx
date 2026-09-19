@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Lock, Plus, ShieldCheck, Users, X } from "lucide-react";
+import { Check, Lock, ShieldCheck, Users, X } from "lucide-react";
 import { Picker } from "./picker";
+import { Dot, EmptyState, Row, SearchInput } from "./ui";
 
 type Props = {
   data: any;
@@ -102,48 +103,39 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           </div>
         </div>
         {party && (
-          <div className="grid gap-3 p-5 sm:grid-cols-5">
+          <div>
             {party.members.map((member: any) => {
               const isLeader = member.id === party.owner_member_id;
               const canRemove = isOwner && !isLeader;
-              const Slot = canRemove ? "button" : "div";
               return (
-                <Slot
+                <Row
                   key={member.id}
-                  type={canRemove ? "button" : undefined}
-                  disabled={canRemove ? busy : undefined}
-                  onClick={
-                    canRemove
-                      ? () =>
+                  inset={false}
+                  leading={<Dot tone={member.online ? "green" : "idle"} />}
+                  title={member.display_name}
+                  subtitle={`${member.online ? "ออนไลน์" : "ออฟไลน์"} · ${isLeader ? "หัวหน้าทีม" : "สมาชิก"}`}
+                  trailing={
+                    canRemove ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        aria-label={`นำ ${member.display_name} ออกจากทีม`}
+                        onClick={() =>
                           call({
                             action: "party_remove_member",
                             partyId: party.id,
                             memberId: member.id,
                           })
-                      : undefined
+                        }
+                        className="party-remove"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : undefined
                   }
-                  className={`party-slot ${isLeader ? "party-slot--leader" : ""} ${canRemove ? "party-slot--removable" : ""}`}
-                >
-                  <span
-                    className={`status-dot ${member.online ? "" : "status-dot-offline"}`}
-                  />
-                  <b className="ml-2 block truncate">{member.display_name}</b>
-                  <small className="mt-1 block text-slate-500">
-                    {member.online ? "ออนไลน์" : "ออฟไลน์"} · {isLeader ? "หัวหน้าทีม" : canRemove ? "แตะเพื่อนำออก" : "สมาชิก"}
-                  </small>
-                </Slot>
+                />
               );
             })}
-            {Array.from({ length: Math.max(0, 5 - party.members.length) }).map(
-              (_, index) => (
-                <div
-                  key={index}
-                  className="grid min-h-20 place-items-center rounded-xl border border-dashed border-white/15 text-slate-600"
-                >
-                  <Plus className="h-5 w-5" />
-                </div>
-              ),
-            )}
           </div>
         )}
       </div>
@@ -249,12 +241,13 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                     {inviteeIds.length}/4 คน
                   </span>
                 </div>
-                <input
-                  value={createSearch}
-                  onChange={(event) => setCreateSearch(event.target.value)}
-                  placeholder="ค้นหาชื่อเพื่อน..."
-                  className="member-search mt-3 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm"
-                />
+                <div className="mt-3">
+                  <SearchInput
+                    value={createSearch}
+                    onChange={setCreateSearch}
+                    placeholder="ค้นหาชื่อเพื่อน"
+                  />
+                </div>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {members
                     .filter((member: any) => member.id !== data.me.id)
@@ -300,12 +293,13 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
               <p className="mt-3 text-sm text-slate-400">
                 เลือกสมาชิกเพื่อเพิ่มเข้าปาร์ตี้ทันที ไม่ต้องรอยืนยัน
               </p>
-              <input
-                value={addSearch}
-                onChange={(event) => setAddSearch(event.target.value)}
-                placeholder="ค้นหาชื่อเพื่อน..."
-                className="member-search mt-3 w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm"
-              />
+              <div className="mt-3">
+                <SearchInput
+                  value={addSearch}
+                  onChange={setAddSearch}
+                  placeholder="ค้นหาชื่อเพื่อน"
+                />
+              </div>
               <div className="mt-4 flex flex-wrap gap-2">
                 {available
                   .filter((member: any) =>
@@ -334,8 +328,19 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                       {member.display_name}
                     </button>
                   ))}
-                {addSearch.trim() && !available.some((member: any) => member.display_name.toLowerCase().includes(addSearch.trim().toLowerCase())) && (
-                  <p className="text-sm text-slate-500">ไม่พบสมาชิกที่ค้นหา</p>
+                {!available.some((member: any) =>
+                  member.display_name
+                    .toLowerCase()
+                    .includes(addSearch.trim().toLowerCase()),
+                ) && (
+                  <EmptyState
+                    title={
+                      addSearch.trim()
+                        ? "ไม่พบสมาชิกที่ค้นหา"
+                        : "ทุกคนอยู่ในทีมแล้ว"
+                    }
+                    hint={addSearch.trim() ? "ลองเปลี่ยนคำค้น" : undefined}
+                  />
                 )}
               </div>
             </>

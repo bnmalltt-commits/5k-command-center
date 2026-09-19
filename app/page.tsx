@@ -1,6 +1,5 @@
 "use client";
 import {
-  ChangeEvent,
   FormEvent,
   useEffect,
   useMemo,
@@ -13,6 +12,7 @@ import {
   Crosshair,
   History,
   LogOut,
+  RefreshCw,
   ShieldCheck,
   Trophy,
   Upload,
@@ -20,6 +20,17 @@ import {
 } from "lucide-react";
 import { PartyCommandCenter } from "./party-command-center";
 import { Picker } from "./picker";
+import {
+  Chips,
+  ConfirmDialog,
+  Dot,
+  EmptyState,
+  Panel,
+  PromptDialog,
+  Row,
+  SearchInput,
+  Segmented,
+} from "./ui";
 
 type Round = "17:00" | "20:00" | "23:00" | "01:00";
 const ROUNDS: Round[] = ["17:00", "20:00", "23:00", "01:00"];
@@ -78,179 +89,110 @@ function Status({ value }: { value: string }) {
   );
 }
 
-function MissionControl({
+// The day's four rounds as one card: progress, per-round state, and the
+// upload for the selected round all in one place. Replaces the old hero
+// clock + progress bar + label buttons + separate check-in panel, which
+// between them rendered the same round state three times over.
+function MissionCard({
   data,
-  onOpenAirdrop,
-  onOpenParty,
+  round,
+  setRound,
+  mine,
+  busy,
+  image,
+  setImage,
+  pickerReset,
+  onSubmit,
 }: {
   data: Data;
-  onOpenAirdrop: (round: Round) => void;
-  onOpenParty: () => void;
+  round: Round;
+  setRound: (round: Round) => void;
+  mine: Map<any, any>;
+  busy: boolean;
+  image: File | null;
+  setImage: (file: File | null) => void;
+  pickerReset: number;
+  onSubmit: (event: FormEvent) => void;
 }) {
-  const entries = new Map(
-    data.airdrops
-      .filter((entry: any) => entry.activity_date === data.date)
-      .map((entry: any) => [entry.round_time, entry]),
-  );
-  const rounds = ROUNDS;
-  const approved = rounds.filter(
-    (round) => entries.get(round)?.status === "approved",
+  const approved = ROUNDS.filter(
+    (r) => mine.get(r)?.status === "approved",
   ).length;
-  const rejected = rounds.find(
-    (round) => entries.get(round)?.status === "rejected",
-  );
-  const missing = rounds.find((round) => !entries.get(round));
-  const pending = rounds.find(
-    (round) => entries.get(round)?.status === "pending",
-  );
-  const nextRound = rejected || missing || pending || rounds[0];
-  const done = approved === rounds.length;
-  const title = done
-    ? "ภารกิจแอร์ดรอปวันนี้ครบแล้ว"
-    : rejected
-      ? `ส่งหลักฐานรอบ ${rejected} ใหม่`
-      : missing
-        ? `เช็กอินแอร์ดรอปรอบ ${missing}`
-        : `รอตรวจหลักฐานรอบ ${pending}`;
-  const detail = done
-    ? "ไปสร้างหรือเข้าปาร์ตี้ต่อเพื่อเก็บคะแนนทีมเพิ่ม"
-    : rejected
-      ? "หลักฐานเดิมไม่ผ่านการตรวจ เลือกรูปใหม่แล้วส่งได้ทันที"
-      : missing
-        ? "เลือกเวลา วางรูปหลักฐาน แล้วส่งเข้าคิวตรวจ"
-        : "หลักฐานถูกส่งแล้ว ระบบกำลังรอแอดมินตรวจสอบ";
-  const roundState = (round: Round) => {
-    const status = entries.get(round)?.status;
+  const done = approved === ROUNDS.length;
+  const selected = mine.get(round);
+  const stateOf = (r: Round) => {
+    const status = mine.get(r)?.status;
     return status === "approved"
-      ? "ผ่านแล้ว"
+      ? { label: "ผ่านแล้ว · +3", tone: "done" }
       : status === "pending"
-        ? "รอตรวจ"
+        ? { label: "รอตรวจ", tone: "pending" }
         : status === "rejected"
-          ? "ส่งใหม่"
-          : "พร้อมเช็กอิน";
+          ? { label: "ไม่ผ่าน ส่งใหม่", tone: "rejected" }
+          : { label: "ยังไม่ส่ง", tone: "idle" };
   };
-
   return (
-    <section className={`hud-hero ${done ? "hud-hero--complete" : ""}`}>
-      <p className="hud-hero__eyebrow">
-        {done ? "ภารกิจวันนี้ครบแล้ว" : `ภารกิจถัดไป · รอบ ${nextRound}`}
-      </p>
-      <div className="hud-hero__main">
-        <div className="hud-hero__clock-wrap">
-          <span className="hud-hero__clock-glow" aria-hidden="true" />
-          <span className="hud-hero__clock">
-            {done ? <Check className="hud-hero__clock-icon" /> : nextRound}
-          </span>
+    <section className="mission">
+      <header className="mission__head">
+        <div>
+          <p className="ui-eyebrow">ภารกิจวันนี้ · {data.date}</p>
+          <h2 className="mission__title">
+            {done ? "ครบทุกรอบแล้ว" : `เหลืออีก ${ROUNDS.length - approved} รอบ`}
+          </h2>
         </div>
-        <div className="hud-hero__body">
-          <h3 className="hud-hero__title">{title}</h3>
-          <p className="hud-hero__desc">{detail}</p>
-          <button
-            type="button"
-            onClick={() => (done ? onOpenParty() : onOpenAirdrop(nextRound))}
-            className="hud-hero__cta"
-          >
-            {done ? "ไปที่ปาร์ตี้" : pending && !missing && !rejected ? "ดูสถานะ" : "เริ่มภารกิจ"}
-          </button>
+        <div className="mission__count">
+          <b>{approved}</b>
+          <span>/{ROUNDS.length}</span>
         </div>
+      </header>
+      <div className="mission__bar" aria-hidden="true">
+        {ROUNDS.map((r) => (
+          <span key={r} className={`mission__seg is-${stateOf(r).tone}`} />
+        ))}
       </div>
-      <div className="hud-hero__bar" aria-hidden="true">
-        {rounds.map((round) => {
-          const status = entries.get(round)?.status;
-          const cls =
-            status === "approved"
-              ? "is-done"
-              : status === "rejected"
-                ? "is-rejected"
-                : nextRound === round
-                  ? "is-next"
-                  : "is-upcoming";
-          return <span key={round} className={`hud-hero__bar-seg ${cls}`} />;
-        })}
-      </div>
-      <div className="hud-hero__labels" aria-label="เลือกเวลาเช็กอิน">
-        {rounds.map((round) => {
-          const status = entries.get(round)?.status;
-          const isDone = status === "approved";
-          const isNext = nextRound === round;
-          const isRejected = status === "rejected";
+      <div className="mission__grid">
+        {ROUNDS.map((r) => {
+          const state = stateOf(r);
+          const active = r === round;
           return (
             <button
+              key={r}
               type="button"
-              key={round}
-              onClick={() => onOpenAirdrop(round)}
-              className={`hud-hero__label-btn ${isNext ? "is-next" : ""} ${isDone ? "is-done" : ""} ${isRejected ? "is-rejected" : ""}`}
+              onClick={() => setRound(r)}
+              aria-current={active ? "true" : undefined}
+              className={`mission__tile is-${state.tone} ${active ? "is-active" : ""}`}
             >
-              <span className="hud-hero__label-glyph" aria-hidden="true">
-                {isDone ? <Check className="h-3.5 w-3.5" /> : null}
+              <span className="mission__tile-top">
+                <span className="mission__tile-time">{r}</span>
+                {state.tone === "done" && <Check className="h-4 w-4" />}
               </span>
-              <span className="hud-hero__label-time">{round}</span>
-              <span className="hud-hero__label-state">{roundState(round)}</span>
+              <span className="mission__tile-state">{state.label}</span>
             </button>
           );
         })}
       </div>
-      <div className="hud-hero__metrics" aria-label="สถานะกิจกรรมวันนี้">
-        <span><b>{approved}/{rounds.length}</b><small>CHECK-IN</small></span>
-        <span><b>{data.myParty ? "ON" : "—"}</b><small>PARTY</small></span>
-      </div>
+      {selected?.status === "approved" ? (
+        <p className="mission__note">
+          รอบ {round} ผ่านการตรวจแล้ว ไม่ต้องส่งซ้ำ
+        </p>
+      ) : (
+        <form onSubmit={onSubmit} className="mission__submit">
+          <p className="mission__note">
+            {selected?.status === "pending"
+              ? `หลักฐานรอบ ${round} กำลังรอตรวจ · เลือกรูปใหม่เพื่อส่งแก้ไข`
+              : selected?.status === "rejected"
+                ? `หลักฐานรอบ ${round} ไม่ผ่าน · เลือกรูปใหม่แล้วส่งอีกครั้ง`
+                : `ส่งหลักฐานรอบ ${round}`}
+          </p>
+          <Picker onChange={setImage} resetToken={`${round}-${pickerReset}`} />
+          <button
+            disabled={busy || !image}
+            className="ui-btn ui-btn--primary ui-btn--block"
+          >
+            <Upload className="h-4 w-4" />
+            {selected ? "ส่งหลักฐานใหม่" : `ส่งรอบ ${round}`}
+          </button>
+        </form>
+      )}
     </section>
-  );
-}
-function PartyEditDialog({
-  name,
-  busy,
-  onClose,
-  onSave,
-}: {
-  name: string;
-  busy: boolean;
-  onClose: () => void;
-  onSave: (name: string) => void;
-}) {
-  const [value, setValue] = useState(name);
-  return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="แก้ไขชื่อปาร์ตี้"
-    >
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (value.trim()) onSave(value.trim());
-        }}
-        className="command-panel w-full max-w-md p-5"
-      >
-        <p className="label">PARTY CONTROL // EDIT</p>
-        <h2 className="mt-2 text-xl font-black">แก้ไขชื่อปาร์ตี้</h2>
-        <input
-          autoFocus
-          required
-          minLength={2}
-          maxLength={40}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          className="mt-5 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-3"
-        />
-        <div className="mt-4 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg border border-white/15 px-4 py-2 text-sm"
-          >
-            ยกเลิก
-          </button>
-          <button
-            disabled={busy}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold"
-          >
-            บันทึก
-          </button>
-        </div>
-      </form>
-    </div>
   );
 }
 function SquadRanking({
@@ -262,85 +204,65 @@ function SquadRanking({
   compact?: boolean;
   highlightId?: number;
 }) {
-  const rows = compact ? leaderboard.slice(0, 5) : leaderboard,
-    myRank = highlightId
-      ? leaderboard.findIndex((member: any) => member.id === highlightId) + 1
-      : 0,
-    maxScore = Math.max(Number(rows[0]?.score || 0), 1);
+  const rows = compact ? leaderboard.slice(0, 5) : leaderboard;
+  const myIndex = highlightId
+    ? leaderboard.findIndex((member: any) => member.id === highlightId)
+    : -1;
+  const me = myIndex >= 0 ? leaderboard[myIndex] : null;
+  const ahead = myIndex > 0 ? leaderboard[myIndex - 1] : null;
+  const gap = ahead ? Number(ahead.score || 0) - Number(me.score || 0) : 0;
   return (
-    <section
-      className={`command-panel ranking-panel ${compact ? "ranking-panel--compact" : ""}`}
+    <Panel
+      label="SQUAD RANKING"
+      title={`ตารางคะแนน${compact ? "" : "ทั้งหมด"}`}
+      subtitle={compact ? undefined : `${leaderboard.length} คน`}
+      trailing={<Trophy className="h-4 w-4 text-red-400" />}
+      flush
     >
-      <div className="ranking-panel__header">
-        <div>
-          <p className="label">SQUAD RANKING</p>
-          <h2 className="mt-2 text-xl font-black">
-            ตารางคะแนน{compact ? "" : "ทั้งหมด"}
-          </h2>
-        </div>
-        <div className="ranking-panel__tools">
-          {!compact && <span className="ranking-filter">{rows.length} คน</span>}
-          <Trophy className="h-5 w-5 text-red-400" />
-        </div>
-      </div>
-      {!compact && rows.length >= 3 && (
-        <div className="ranking-podium" aria-hidden="true">
-          {[rows[1], rows[0], rows[2]].map((member: any, i: number) => {
-            const slot = [2, 1, 3][i];
-            return (
-              <div key={member.id} className={`ranking-podium__slot ranking-podium__slot--${slot}`}>
-                <div className="ranking-podium__badge"><span>{slot}</span></div>
-                <div className="ranking-podium__bar" />
-                <div className="ranking-podium__name">{member.display_name}</div>
-                <div className="ranking-podium__pt">{Number(member.score || 0)} pt</div>
-              </div>
-            );
-          })}
+      {!compact && me && (
+        <div className="rank-me">
+          <span className="rank-me__pos">#{myIndex + 1}</span>
+          <div className="min-w-0 flex-1">
+            <div className="rank-me__label">อันดับของคุณ</div>
+            <div className="rank-me__hint">
+              {ahead
+                ? `อีก ${gap === 0 ? 1 : gap} แต้มจะแซง ${ahead.display_name}`
+                : "คุณอยู่อันดับหนึ่งของแก๊ง"}
+            </div>
+          </div>
+          <span className="rank-me__score">{Number(me.score || 0)}</span>
         </div>
       )}
-      <div className="ranking-list">
-        {rows.map((member: any, index: number) => {
-          const score = Number(member.score || 0),
-            progress = Math.max(8, Math.round((score / maxScore) * 100));
-          return (
-            <div
-              key={member.id}
-              className={`ranking-row ${index === 0 ? "ranking-row--leader" : ""} ${member.id === highlightId ? "ranking-row--mine" : ""}`}
-            >
-              <span className={`rank-badge rank-badge--${index + 1}`}>
+      {rows.length ? (
+        rows.map((member: any, index: number) => (
+          <Row
+            key={member.id}
+            inset={false}
+            leading={
+              <span className={`rank-num rank-num--${index + 1}`}>
                 {index + 1}
               </span>
-              <span
-                className={`status-dot ranking-status ${!member.online ? "status-dot-offline" : ""}`}
-              />
-              <div className="ranking-row__main">
-                <div className="ranking-row__top">
-                  <span className="ranking-name">{member.display_name}</span>
-                  <span className="ranking-score">
-                    <strong>{score}</strong>
-                    <small>PTS</small>
-                  </span>
-                </div>
-                <span className="ranking-progress">
-                  <span style={{ width: `${progress}%` }} />
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {!compact && myRank > 0 && (
-        <p className="ranking-position">
-          อันดับของคุณ <b>#{myRank}</b> จาก {leaderboard.length} คน
-        </p>
+            }
+            title={
+              member.id === highlightId ? (
+                <span className="text-white">{member.display_name} · คุณ</span>
+              ) : (
+                member.display_name
+              )
+            }
+            subtitle={member.online ? "ออนไลน์" : undefined}
+            trailing={
+              <span className="rank-score">{Number(member.score || 0)}</span>
+            }
+          />
+        ))
+      ) : (
+        <EmptyState
+          title="ยังไม่มีคะแนนในตาราง"
+          hint="เมื่อมีคนเช็กอินผ่าน คะแนนจะขึ้นที่นี่"
+        />
       )}
-      <div className="ranking-footer">
-        <span />
-        {compact ? "MORE PLAYERS" : "ALL SQUAD MEMBERS"} <b>//</b> HIGHER
-        MOMENTS
-        <span />
-      </div>
-    </section>
+    </Panel>
   );
 }
 
@@ -369,112 +291,221 @@ function LeaveRoom({
     });
     if (ok) setReason("");
   };
+  const [query, setQuery] = useState("");
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const needle = query.trim().toLowerCase();
+  const history = data.leaveRequests.filter((item: any) =>
+    needle
+      ? `${item.display_name} ${item.reason} ${item.leave_date}`
+          .toLowerCase()
+          .includes(needle)
+      : true,
+  );
+  const visible = history.slice(0, shown);
   return (
-    <section className="command-panel p-5">
-      <p className="label">LEAVE ROOM // {data.date}</p>
-      <h2 className="mt-2 text-xl font-black">แจ้งลา</h2>
-      <p className="mt-2 text-sm text-slate-400">
-        สมาชิกแจ้งลาได้ด้วยตัวเอง และแอดมินสามารถบันทึกการลาแทนสมาชิกได้
-      </p>
-      <form onSubmit={submit} className="mt-4 space-y-3">
-        {isAdmin && (
-          <select
-            value={memberId}
-            onChange={(e) => setMemberId(Number(e.target.value))}
-            className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-          >
-            {data.members.map((member: any) => (
-              <option key={member.id} value={member.id}>
-                {member.id === data.me.id ? "ตัวเอง" : member.display_name}
-              </option>
-            ))}
-          </select>
-        )}
-        <input
-          type="date"
-          value={leaveDate}
-          onChange={(e) => setLeaveDate(e.target.value)}
-          required
-          className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-        />
-        <div className="flex gap-2">
-          <input
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="เหตุผลการลา"
-            required
-            className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 py-2"
-          />
-          <button
-            disabled={busy}
-            className="hud-clip-sm bg-red-600 px-4 font-bold disabled:opacity-40"
-          >
-            แจ้งลา
-          </button>
-        </div>
-      </form>
-      <div className="mt-6">
-        <p className="label">ประวัติการลา</p>
-        <div className="mt-3 space-y-2">
-          {data.leaveRequests.length ? (
-            data.leaveRequests.map((item: any) => (
-              <div
-                key={item.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 p-3"
-              >
-                <div>
-                  <b>{item.display_name}</b>
-                  <p className="text-xs text-slate-500">
-                    {item.leave_date} · {item.reason}
-                  </p>
-                </div>
-                <span className="text-xs text-slate-500">
-                  บันทึกโดย {item.created_by_name}
-                </span>
-              </div>
-            ))
-          ) : (
-            <p className="rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-slate-500">
-              ยังไม่มีรายการลา
-            </p>
+    <>
+      <Panel
+        label={`LEAVE ROOM // ${data.date}`}
+        title="แจ้งลา"
+        subtitle="สมาชิกแจ้งลาได้ด้วยตัวเอง แอดมินบันทึกแทนสมาชิกได้"
+      >
+        <form onSubmit={submit} className="space-y-2.5">
+          {isAdmin && (
+            <select
+              value={memberId}
+              onChange={(e) => setMemberId(Number(e.target.value))}
+              className="ui-input"
+            >
+              {data.members.map((member: any) => (
+                <option key={member.id} value={member.id}>
+                  {member.id === data.me.id ? "ตัวเอง" : member.display_name}
+                </option>
+              ))}
+            </select>
           )}
+          <input
+            type="date"
+            value={leaveDate}
+            onChange={(e) => setLeaveDate(e.target.value)}
+            required
+            className="ui-input"
+          />
+          <div className="flex gap-2">
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="เหตุผลการลา"
+              required
+              className="ui-input min-w-0 flex-1"
+            />
+            <button disabled={busy} className="ui-btn ui-btn--primary">
+              แจ้งลา
+            </button>
+          </div>
+        </form>
+      </Panel>
+      <Panel
+        label="LEAVE HISTORY"
+        title="ประวัติการลา"
+        subtitle={`${history.length} รายการ`}
+        flush
+      >
+        <div className="p-4">
+          <SearchInput
+            value={query}
+            onChange={(value) => {
+              setQuery(value);
+              setShown(PAGE_SIZE);
+            }}
+            placeholder="ค้นหาชื่อ เหตุผล หรือวันที่"
+          />
         </div>
-      </div>
-    </section>
+        {visible.length ? (
+          <>
+            {visible.map((item: any) => (
+              <Row
+                key={item.id}
+                inset={false}
+                title={item.display_name}
+                subtitle={`${item.leave_date} · ${item.reason}`}
+                trailing={
+                  <span className="text-xs text-slate-500">
+                    โดย {item.created_by_name}
+                  </span>
+                }
+              />
+            ))}
+            {history.length > visible.length && (
+              <div className="p-3 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShown((n) => n + PAGE_SIZE)}
+                  className="ui-btn ui-btn--ghost ui-btn--sm"
+                >
+                  โหลดเพิ่ม {Math.min(PAGE_SIZE, history.length - visible.length)} รายการ
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
+          <EmptyState
+            title={
+              data.leaveRequests.length
+                ? "ไม่พบรายการที่ค้นหา"
+                : "ยังไม่มีรายการลา"
+            }
+            hint={
+              data.leaveRequests.length
+                ? "ลองเปลี่ยนคำค้น"
+                : "เมื่อมีคนแจ้งลา รายการจะขึ้นที่นี่"
+            }
+          />
+        )}
+      </Panel>
+    </>
   );
 }
+const PAGE_SIZE = 50;
 function SubmissionLog({ data }: { data: Data }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("all");
+  const [shown, setShown] = useState(PAGE_SIZE);
+  const needle = query.trim().toLowerCase();
+  const filtered = data.submissionLog.filter((item: any) => {
+    if (status !== "all" && item.status !== status) return false;
+    if (!needle) return true;
+    return `${item.submitted_by || ""} ${item.detail || ""} ${item.activity_date || ""}`
+      .toLowerCase()
+      .includes(needle);
+  });
+  const visible = filtered.slice(0, shown);
   return (
-    <section className="command-panel p-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="label">SUBMISSION LOG</p>
-          <h2 className="mt-2 text-xl font-black">ประวัติการส่งทั้งหมด</h2>
-        </div>
-        <span className="text-sm text-slate-500">
-          {data.submissionLog.length} รายการ
-        </span>
+    <Panel
+      label="SUBMISSION LOG"
+      title="ประวัติการส่งทั้งหมด"
+      subtitle={`${filtered.length} รายการ`}
+      flush
+    >
+      <div className="space-y-3 p-4">
+        <SearchInput
+          value={query}
+          onChange={(value) => {
+            setQuery(value);
+            setShown(PAGE_SIZE);
+          }}
+          placeholder="ค้นหาชื่อ รอบ หรือวันที่"
+        />
+        <Chips
+          value={status}
+          onChange={(next) => {
+            setStatus(next);
+            setShown(PAGE_SIZE);
+          }}
+          options={[
+            { id: "all", label: "ทั้งหมด" },
+            { id: "pending", label: "รอตรวจ" },
+            { id: "approved", label: "ผ่านแล้ว" },
+            { id: "rejected", label: "ไม่ผ่าน" },
+          ]}
+        />
       </div>
-      <div className="mt-4 space-y-2">
-        {data.submissionLog.map((item: any) => (
-          <div
-            key={item.type + item.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/20 p-3"
-          >
-            <div>
-              <b>
-                {item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} · {item.detail}
-              </b>
-              <p className="text-xs text-slate-500">
-                {item.activity_date} · ส่งโดย {item.submitted_by}
-                {item.approved_by ? ` · ตรวจโดย ${item.approved_by}` : " · ยังไม่ตรวจ"}
-              </p>
+      {visible.length ? (
+        <>
+          {visible.map((item: any) => {
+            // Approved evidence is deleted from storage to save space, so
+            // there's nothing left to open.
+            const viewable = item.status !== "approved" && item.image_key;
+            return (
+              <Row
+                key={item.type + item.id}
+                inset={false}
+                href={viewable ? `/api/image/${item.image_key}` : undefined}
+                leading={
+                  <Dot
+                    tone={
+                      item.status === "approved"
+                        ? "green"
+                        : item.status === "rejected"
+                          ? "red"
+                          : "amber"
+                    }
+                  />
+                }
+                title={`${item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} · ${item.detail}`}
+                subtitle={`${item.activity_date} · ส่งโดย ${item.submitted_by}${
+                  item.approved_by ? ` · ตรวจโดย ${item.approved_by}` : " · ยังไม่ตรวจ"
+                }`}
+                trailing={<Status value={item.status} />}
+              />
+            );
+          })}
+          {filtered.length > visible.length && (
+            <div className="p-3 text-center">
+              <button
+                type="button"
+                onClick={() => setShown((n) => n + PAGE_SIZE)}
+                className="ui-btn ui-btn--ghost ui-btn--sm"
+              >
+                โหลดเพิ่ม {Math.min(PAGE_SIZE, filtered.length - visible.length)} รายการ
+              </button>
             </div>
-            <Status value={item.status} />
-          </div>
-        ))}
-      </div>
-    </section>
+          )}
+        </>
+      ) : (
+        <EmptyState
+          title={
+            data.submissionLog.length
+              ? "ไม่พบรายการที่ค้นหา"
+              : "ยังไม่มีประวัติการส่ง"
+          }
+          hint={
+            data.submissionLog.length
+              ? "ลองเปลี่ยนคำค้นหรือตัวกรองสถานะ"
+              : "เมื่อมีคนส่งหลักฐาน รายการจะขึ้นที่นี่"
+          }
+        />
+      )}
+    </Panel>
   );
 }
 function AdminCommandCenter({
@@ -489,216 +520,158 @@ function AdminCommandCenter({
   const [tab, setTab] = useState<"verify" | "members" | "admins">("verify");
   const [query, setQuery] = useState("");
   const [memberName, setMemberName] = useState("");
+  const [renaming, setRenaming] = useState<any>(null);
   const sam = data.me.name === "Sam";
   const normalizedQuery = query.trim().toLowerCase();
   const activeMembers = data.managedMembers.filter(
     (member: any) => member.active,
   );
+  // Substring, not prefix-per-token: a prefix match can't find a name by the
+  // middle of it, which is how people actually search a roster.
+  const matches = (text: string) =>
+    !normalizedQuery || String(text || "").toLowerCase().includes(normalizedQuery);
   // Removed members drop out of the roster entirely instead of lingering as
   // a disabled row — the action reads "เอาออก" (remove), so the list should
   // behave like they're actually gone.
-  const visibleMembers = activeMembers.filter((member: any) => {
-    if (!normalizedQuery) return true;
-    return member.display_name
-      .toLowerCase()
-      .split(/\s+/)
-      .some((part: string) => part.startsWith(normalizedQuery));
-  });
+  const visibleMembers = activeMembers.filter((member: any) =>
+    matches(member.display_name),
+  );
+  const visiblePending = data.pending.filter((item: any) =>
+    matches(`${item.submitted_by} ${item.detail}`),
+  );
+  const visibleAdmins = activeMembers.filter(
+    (member: any) => member.id !== data.me.id && matches(member.display_name),
+  );
 
   return (
-    <section className="command-panel admin-command-panel p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="label">SQUAD COMMAND</p>
-          <h2 className="mt-2 text-xl font-black">จัดการแก๊ง</h2>
-          <p className="mt-2 text-sm text-slate-400">
-            จัดการคิวตรวจ สมาชิก และสิทธิ์แอดมินจากพื้นที่เดียว
-          </p>
-        </div>
-        <span className="rounded-full border border-white/15 bg-black/20 px-3 py-1 text-xs font-bold text-slate-300">
-          {activeMembers.length} สมาชิกใช้งาน
-        </span>
-      </div>
-      <div
-        className="admin-command-tabs mt-5"
-        role="tablist"
-        aria-label="จัดการแก๊ง"
+    <>
+      <Panel
+        label="SQUAD COMMAND"
+        title="จัดการแก๊ง"
+        subtitle={`${activeMembers.length} สมาชิกใช้งาน`}
+        flush
       >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "verify"}
-          onClick={() => setTab("verify")}
-          className={tab === "verify" ? "is-active" : ""}
-        >
-          รอตรวจ <span>{data.pending.length}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "members"}
-          onClick={() => setTab("members")}
-          className={tab === "members" ? "is-active" : ""}
-        >
-          สมาชิก <span>{activeMembers.length}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "admins"}
-          onClick={() => setTab("admins")}
-          className={tab === "admins" ? "is-active" : ""}
-        >
-          แอดมิน{" "}
-          <span>
-            {
-              activeMembers.filter((member: any) => member.role === "admin")
-                .length
+        <div className="space-y-3 p-4">
+          <Segmented
+            label="จัดการแก๊ง"
+            value={tab}
+            onChange={(next) => setTab(next as typeof tab)}
+            options={[
+              { id: "verify", label: "รอตรวจ", count: data.pending.length },
+              { id: "members", label: "สมาชิก", count: activeMembers.length },
+              {
+                id: "admins",
+                label: "แอดมิน",
+                count: activeMembers.filter((m: any) => m.role === "admin").length,
+              },
+            ]}
+          />
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder={
+              tab === "verify" ? "ค้นหาผู้ส่งหรือรอบ" : "ค้นหาชื่อสมาชิก"
             }
-          </span>
-        </button>
-      </div>
+          />
+          {tab === "members" && (
+            <form
+              className="flex gap-2"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (memberName.trim())
+                  void call({ action: "member", name: memberName.trim() }).then(
+                    (saved) => {
+                      if (saved) setMemberName("");
+                    },
+                  );
+              }}
+            >
+              <input
+                required
+                minLength={2}
+                maxLength={60}
+                value={memberName}
+                onChange={(event) => setMemberName(event.target.value)}
+                placeholder="ชื่อสมาชิกใหม่"
+                className="ui-input min-w-0 flex-1"
+              />
+              <button disabled={busy} className="ui-btn ui-btn--primary">
+                เพิ่ม
+              </button>
+            </form>
+          )}
+        </div>
 
-      {tab === "verify" && (
-        <div className="admin-command-content mt-5">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="label">VERIFY QUEUE</p>
-              <h3 className="mt-1 text-lg font-black">รายการรอตรวจ</h3>
-            </div>
-            <span className="text-sm text-amber-200">
-              {data.pending.length} รายการ
-            </span>
-          </div>
-          <div className="admin-command-list mt-4">
-            {data.pending.length ? (
-              data.pending.map((item: any) => (
-                <div key={item.type + item.id} className="admin-command-row">
-                  <div className="min-w-0 flex-1">
-                    <b>
-                      {item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} #
-                      {item.id}
-                    </b>
-                    <p>
-                      {item.detail}
-                      {item.submitted_by
-                        ? ` · ส่งโดย ${item.submitted_by}`
-                        : ""}
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-2">
+        {tab === "verify" &&
+          (visiblePending.length ? (
+            visiblePending.map((item: any) => (
+              <Row
+                key={item.type + item.id}
+                inset={false}
+                title={`${item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} · ${item.detail}`}
+                subtitle={
+                  item.submitted_by ? `ส่งโดย ${item.submitted_by}` : undefined
+                }
+                trailing={
+                  <>
+                    {/* Opens the full asset on demand instead of every row
+                        eagerly fetching one to shrink into a thumbnail. */}
                     <a
                       href={`/api/image/${item.image_key}`}
                       target="_blank"
-                      className="evidence-link"
+                      rel="noreferrer"
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
                     >
-                      <img
-                        src={`/api/image/${item.image_key}`}
-                        alt="ตัวอย่างหลักฐาน"
-                        loading="lazy"
-                      />
                       ดูรูป
                     </a>
                     <button
                       disabled={busy}
-                      aria-label="อนุมัติ"
                       onClick={() =>
-                        call({
-                          action: "approve",
-                          type: item.type,
-                          id: item.id,
-                        })
+                        call({ action: "approve", type: item.type, id: item.id })
                       }
-                      className="approval-action"
+                      className="ui-btn ui-btn--ok ui-btn--sm"
                     >
-                      <Check className="h-4 w-4" />
+                      ผ่าน
                     </button>
                     <button
                       disabled={busy}
                       onClick={() =>
                         call({ action: "reject", type: item.type, id: item.id })
                       }
-                      className="reject-action"
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
                     >
                       ไม่ผ่าน
                     </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="admin-command-empty">
-                ไม่มีรายการรอตรวจในตอนนี้
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === "members" && (
-        <div className="admin-command-content mt-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <p className="label">MEMBER DIRECTORY</p>
-              <h3 className="mt-1 text-lg font-black">สมาชิกแก๊ง</h3>
-            </div>
-            <label className="admin-member-search">
-              <span className="sr-only">ค้นหาสมาชิก</span>
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="ค้นหาสมาชิก"
+                  </>
+                }
               />
-            </label>
-          </div>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (memberName.trim()) {
-                void call({ action: "member", name: memberName.trim() }).then(
-                  (saved) => {
-                    if (saved) setMemberName("");
-                  },
-                );
+            ))
+          ) : (
+            <EmptyState
+              title={
+                data.pending.length
+                  ? "ไม่พบรายการที่ค้นหา"
+                  : "ไม่มีรายการรอตรวจในตอนนี้"
               }
-            }}
-            className="admin-member-add mt-4"
-          >
-            <input
-              required
-              minLength={2}
-              maxLength={60}
-              value={memberName}
-              onChange={(event) => setMemberName(event.target.value)}
-              placeholder="ชื่อสมาชิกใหม่"
+              hint={data.pending.length ? "ลองเปลี่ยนคำค้น" : "คิวตรวจว่างแล้ว"}
             />
-            <button disabled={busy}>เพิ่มสมาชิก</button>
-          </form>
-          <div className="admin-command-list mt-4">
-            {visibleMembers.length ? (
-              visibleMembers.map((member: any) => (
-                <div key={member.id} className="admin-command-row">
-                  <div className="min-w-0 flex-1">
-                    <b>{member.display_name}</b>
-                    <p>{member.role === "admin" ? "แอดมิน" : "สมาชิก"}</p>
-                  </div>
-                  <div className="flex shrink-0 gap-2">
+          ))}
+
+        {tab === "members" &&
+          (visibleMembers.length ? (
+            visibleMembers.map((member: any) => (
+              <Row
+                key={member.id}
+                inset={false}
+                title={member.display_name}
+                subtitle={member.role === "admin" ? "แอดมิน" : "สมาชิก"}
+                trailing={
+                  <>
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => {
-                        const next = window.prompt(
-                          "แก้ชื่อสมาชิก",
-                          member.display_name,
-                        );
-                        const nextName = next?.trim();
-                        if (nextName && nextName !== member.display_name)
-                          call({
-                            action: "member_update",
-                            id: member.id,
-                            name: nextName,
-                          });
-                      }}
-                      className="member-edit-action"
+                      onClick={() => setRenaming(member)}
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
                     >
                       แก้ชื่อ
                     </button>
@@ -706,76 +679,71 @@ function AdminCommandCenter({
                       <button
                         type="button"
                         disabled={busy}
-                        onClick={() => call({ action: "member_delete", id: member.id })}
-                        className="reject-action"
+                        onClick={() =>
+                          call({ action: "member_delete", id: member.id })
+                        }
+                        className="ui-btn ui-btn--ghost ui-btn--sm"
                       >
                         เอาออก
                       </button>
                     )}
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="admin-command-empty">ไม่พบสมาชิกที่ค้นหา</div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {tab === "admins" && (
-        <div className="admin-command-content mt-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="label">ADMIN ACCESS</p>
-              <h3 className="mt-1 text-lg font-black">จัดการแอดมิน</h3>
-              <p className="mt-1 text-sm text-slate-400">
-                เฉพาะ Sam เท่านั้นที่เพิ่มหรือถอดสิทธิ์แอดมินได้
-              </p>
-            </div>
-            <span className="rounded-full border border-red-400/30 bg-red-950/30 px-3 py-1 text-xs font-bold text-red-200">
-              SAM ONLY
-            </span>
-          </div>
-          {sam ? (
-            <div className="admin-command-list mt-4">
-              {activeMembers
-                .filter((member: any) => member.id !== data.me.id)
-                .map((member: any) => (
-                  <div key={member.id} className="admin-command-row">
-                    <div className="min-w-0 flex-1">
-                      <b>{member.display_name}</b>
-                      <p>{member.role === "admin" ? "แอดมิน" : "สมาชิก"}</p>
-                    </div>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        call({
-                          action: "admin_access",
-                          memberId: member.id,
-                          enabled: member.role !== "admin",
-                        })
-                      }
-                      className={
-                        member.role === "admin"
-                          ? "member-edit-action"
-                          : "admin-promote-action"
-                      }
-                    >
-                      {member.role === "admin"
-                        ? "ถอดแอดมิน"
-                        : "เพิ่มเป็นแอดมิน"}
-                    </button>
-                  </div>
-                ))}
-            </div>
+                  </>
+                }
+              />
+            ))
           ) : (
-            <div className="admin-command-empty mt-4">
-              บัญชีนี้ไม่มีสิทธิ์จัดการแอดมิน
-            </div>
-          )}
-        </div>
+            <EmptyState title="ไม่พบสมาชิกที่ค้นหา" hint="ลองเปลี่ยนคำค้น" />
+          ))}
+
+        {tab === "admins" &&
+          (!sam ? (
+            <EmptyState
+              title="บัญชีนี้ไม่มีสิทธิ์จัดการแอดมิน"
+              hint="เฉพาะ Sam เท่านั้นที่เพิ่มหรือถอดสิทธิ์แอดมินได้"
+            />
+          ) : visibleAdmins.length ? (
+            visibleAdmins.map((member: any) => (
+              <Row
+                key={member.id}
+                inset={false}
+                title={member.display_name}
+                subtitle={member.role === "admin" ? "แอดมิน" : "สมาชิก"}
+                trailing={
+                  <button
+                    disabled={busy}
+                    onClick={() =>
+                      call({
+                        action: "admin_access",
+                        memberId: member.id,
+                        enabled: member.role !== "admin",
+                      })
+                    }
+                    className="ui-btn ui-btn--ghost ui-btn--sm"
+                  >
+                    {member.role === "admin" ? "ถอดแอดมิน" : "เพิ่มเป็นแอดมิน"}
+                  </button>
+                }
+              />
+            ))
+          ) : (
+            <EmptyState title="ไม่พบสมาชิกที่ค้นหา" hint="ลองเปลี่ยนคำค้น" />
+          ))}
+      </Panel>
+      {renaming && (
+        <PromptDialog
+          title={`แก้ชื่อสมาชิก “${renaming.display_name}”`}
+          initial={renaming.display_name}
+          busy={busy}
+          onCancel={() => setRenaming(null)}
+          onSave={(next) => {
+            const target = renaming;
+            setRenaming(null);
+            if (next !== target.display_name)
+              call({ action: "member_update", id: target.id, name: next });
+          }}
+        />
       )}
-    </section>
+    </>
   );
 }
 
@@ -794,7 +762,15 @@ export default function Home() {
     [loginPin, setLoginPin] = useState(""),
     [partyName, setPartyName] = useState(""),
     [loadedViews, setLoadedViews] = useState<string[]>([]),
-    [pickerReset, setPickerReset] = useState(0);
+    [pickerReset, setPickerReset] = useState(0),
+    [confirmState, setConfirmState] = useState<{
+      message: string;
+      resolve: (ok: boolean) => void;
+    } | null>(null);
+  // Styled stand-in for window.confirm. Same await-a-boolean shape, so every
+  // caller keeps its existing control flow.
+  const confirmAsync = (message: string) =>
+    new Promise<boolean>((resolve) => setConfirmState({ message, resolve }));
   // `load` is passed straight to onClick and setInterval, so it has to stay
   // zero-argument — the current view rides along in a ref instead.
   const viewRef = useRef(view);
@@ -901,7 +877,8 @@ export default function Home() {
     return messages[action] || "ยืนยันดำเนินการนี้ใช่หรือไม่?";
   };
   const call = async (body: any) => {
-    if (!body.confirmed && !window.confirm(confirmationMessage(body))) return false;
+    if (!body.confirmed && !(await confirmAsync(confirmationMessage(body))))
+      return false;
     const { confirmed: _confirmed, ...payload } = body;
     setBusy(true);
     try {
@@ -931,11 +908,11 @@ export default function Home() {
     event.preventDefault();
     if (!image) return setNotice("กรุณาเลือกรูปหลักฐาน");
     if (
-      !window.confirm(
+      !(await confirmAsync(
         type === "airdrop"
           ? `ยืนยันส่งหลักฐานแอร์ดรอปรอบ ${round} เข้าคิวตรวจใช่หรือไม่?`
           : "ยืนยันส่งหลักฐานกิจกรรมปาร์ตี้เข้าคิวตรวจใช่หรือไม่?",
-      )
+      ))
     )
       return;
     setBusy(true);
@@ -1065,6 +1042,11 @@ export default function Home() {
     ["leave", "ห้องลา", CalendarOff],
     ["log", "ประวัติการส่ง", History],
   ];
+  // จัดการแก๊ง is admin-only, so it shouldn't occupy a slot in either nav for
+  // everyone else — the view itself already refuses non-admins.
+  const visibleNav = nav.filter(
+    ([id]) => id !== "admin" || data.me.role === "admin",
+  );
   return (
     <main className="ui-v2 command-shell min-h-screen bg-[#07080b] text-white">
       <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
@@ -1082,7 +1064,7 @@ export default function Home() {
             </div>
           </div>
           <nav className="mt-7 space-y-2">
-            {nav.map(([id, label, Icon]: any) => (
+            {visibleNav.map(([id, label, Icon]: any) => (
               <button
                 key={id}
                 onClick={() => setView(id)}
@@ -1096,77 +1078,49 @@ export default function Home() {
           </nav>
         </aside>
         <section className="min-w-0 flex-1">
-          <div className="command-header mb-4 overflow-hidden rounded-xl border border-red-500/25">
-            <header className="command-header__identity flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <div>
-                <img
-                  src="/5k-logo.png"
-                  alt="5K"
-                  className="topbar-logo--mobile h-12 w-24 object-contain lg:hidden"
-                />
-                <div className="topbar-info--desktop hidden lg:block">
-                  <p className="label">LIVE COMMAND // THAILAND</p>
-                  <p className="mt-1 text-sm text-slate-300">{data.date} · เล่นด้วยกัน ไปได้ไกลกว่า</p>
-                </div>
+          <header className="topbar">
+            <img
+              src="/5k-logo.png"
+              alt="5K"
+              className="topbar__logo lg:hidden"
+            />
+            <div className="min-w-0 flex-1">
+              <div className="topbar__name">{data.me.name}</div>
+              <div className="topbar__meta">
+                {data.date} · {data.me.role === "admin" ? "แอดมิน" : "สมาชิก"}
               </div>
-              <div className="flex items-center gap-3 text-right">
-                <span className="system-online hidden lg:inline-flex"><i /> SYSTEM ONLINE</span>
-                <div>
-                  <b>{data.me.name}</b>
-                  <p className="text-xs text-red-400">
-                    {data.me.role === "admin" ? "ADMINISTRATOR" : "MEMBER"}
-                  </p>
-                </div>
-                <button
-                  onClick={logout}
-                  aria-label="ออกจากระบบ"
-                  className="rounded-lg border border-white/15 p-2 text-slate-300 hover:text-white"
-                >
-                  <LogOut className="h-4 w-4" />
-                </button>
-              </div>
-            </header>
-            <div className="command-header__score flex items-end justify-between gap-4 px-5 py-4">
-              <div>
-                <p className="command-hero__title">แต้มสะสมของคุณ</p>
-                <h1 className="text-2xl font-black sm:text-3xl">
-                  <span className="text-red-500">{data.me.score}</span> PTS
-                </h1>
-                <p className="mt-2 text-sm text-slate-400">
-                  แอร์ดรอป {ROUNDS.join(" / ")} · รอบละ +3 คะแนน · ปาร์ตี้คนละ +1
-                  คะแนน
-                </p>
-              </div>
-              <button
-                onClick={load}
-                className="hero-refresh hud-clip-sm"
-                aria-label="รีเฟรชข้อมูล"
-              >
-                รีเฟรช
-              </button>
             </div>
-          </div>
-          <MissionControl
-            data={data}
-            onOpenAirdrop={(nextRound) => {
-              setRound(nextRound);
-              setView("airdrop");
-            }}
-            onOpenParty={() => setView("party")}
-          />
-          <div className="mobile-tab-nav mb-5 flex gap-2 overflow-x-auto lg:hidden">
-            {nav.map(([id, label, Icon]: any) => (
-              <button
-                key={id}
-                onClick={() => setView(id)}
-                aria-current={view === id ? "page" : undefined}
-                className={`mobile-tab-nav__item hud-clip-sm ${view === id ? "is-active" : ""}`}
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </button>
-            ))}
-          </div>
+            <span className="topbar__score">
+              <b>{data.me.score}</b> PTS
+            </span>
+            <button
+              onClick={load}
+              aria-label="รีเฟรชข้อมูล"
+              className="topbar__icon"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+            <button
+              onClick={logout}
+              aria-label="ออกจากระบบ"
+              className="topbar__icon"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </header>
+          {view === "airdrop" && (
+            <MissionCard
+              data={data}
+              round={round}
+              setRound={setRound}
+              mine={mine}
+              busy={busy}
+              image={image}
+              setImage={setImage}
+              pickerReset={pickerReset}
+              onSubmit={(e) => send("airdrop", e)}
+            />
+          )}
           {notice && (
             <div className="mb-5 flex items-center justify-between rounded-lg border border-red-400/30 bg-red-950/30 px-4 py-3 text-sm">
               <span>{notice}</span>
@@ -1174,127 +1128,42 @@ export default function Home() {
             </div>
           )}
           {view === "airdrop" && (
-            <div className="airdrop-workspace grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
-              <form
-                onSubmit={(e) => send("airdrop", e)}
-                className="command-panel airdrop-submit-panel p-5"
-              >
-                <p className="label">AIRDROP CHECK-IN</p>
-                <div className="round-switcher mt-3 flex gap-2">
-                  {ROUNDS.map((r) => {
-                    const status = mine.get(r)?.status;
-                    return (
-                      <button
-                        key={r}
-                        type="button"
-                        onClick={() => setRound(r)}
-                        aria-current={round === r ? "true" : undefined}
-                        className={`round-switcher__item ${round === r ? "is-active" : ""} ${status ? `is-${status}` : ""}`}
-                      >
-                        {r}
-                      </button>
-                    );
-                  })}
-                </div>
-                <h2 className="mt-3 text-xl font-black">
-                  {checkInComplete
-                    ? "เช็กอินวันนี้ครบแล้ว"
-                    : `ส่งหลักฐานรอบ ${round}`}
-                </h2>
-                <p className="mt-2 text-sm text-slate-400">
-                  {checkInComplete
-                    ? "คะแนนของทุกรอบถูกบันทึกแล้ว ดูหลักฐานย้อนหลังได้ทางด้านขวา"
-                    : "รอบที่เลือกจากภารกิจด้านบนจะแสดงที่นี่ เพื่อส่งหลักฐานเพียงครั้งเดียว"}
-                </p>
-                {checkInComplete ? (
-                  <div className="airdrop-day-complete mt-5">
-                    <Check className="h-5 w-5" />
-                    <div>
-                      <b>ภารกิจแอร์ดรอปเสร็จสมบูรณ์ · {completedRounds.length}/{todayRounds.length} รอบ</b>
-                      <p>ไม่ต้องส่งหลักฐานซ้ำแล้ว รอภารกิจวันถัดไปได้เลย</p>
-                    </div>
-                  </div>
-                ) : selectedAirdrop?.status === "approved" ? (
-                  <>
-                    <div className="airdrop-complete mt-5">
-                      <Check className="h-5 w-5" />
-                      <div>
-                        <b>รอบ {round} ผ่านการตรวจแล้ว</b>
-                        <p>คะแนนถูกบันทึกเรียบร้อย ไม่ต้องส่งหลักฐานซ้ำ</p>
-                      </div>
-                    </div>
-                    {nextIncompleteRound && (
-                      <button
-                        type="button"
-                        onClick={() => setRound(nextIncompleteRound)}
-                        className="airdrop-next-round mt-4"
-                      >
-                        ไปส่งหลักฐานรอบ {nextIncompleteRound}
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <p className="airdrop-next mt-5">
-                      {selectedAirdrop?.status === "pending"
-                        ? "หลักฐานกำลังรอตรวจ หากต้องการเปลี่ยน ให้เลือกรูปใหม่แล้วส่งแก้ไข"
-                        : selectedAirdrop?.status === "rejected"
-                          ? "หลักฐานไม่ผ่านการตรวจ กรุณาเลือกรูปใหม่และส่งอีกครั้ง"
-                          : `ยังไม่มีหลักฐานสำหรับรอบ ${round}`}
-                    </p>
-                    <div className="mt-3">
-                      <Picker onChange={setImage} resetToken={`${round}-${pickerReset}`} />
-                    </div>
-                    <button
-                      disabled={busy}
-                      className="red-action mt-4 w-full disabled:opacity-40"
-                    >
-                      <Upload className="h-5 w-5" />
-                      {selectedAirdrop?.status === "rejected"
-                        ? "ส่งหลักฐานใหม่"
-                        : selectedAirdrop?.status === "pending"
-                          ? "ส่งหลักฐานแก้ไข"
-                          : "ส่งรอบ " + round}
-                    </button>
-                  </>
-                )}
-              </form>
-              <section className="command-panel airdrop-history-panel p-5">
-                <p className="label">AIRDROP LOG</p>
-                <h2 className="mt-2 text-xl font-black">ประวัติแอร์ดรอป</h2>
-                <div className="mt-4 space-y-2">
-                  {data.airdrops.length ? (
-                    data.airdrops.map((x: any) => {
-                      // Approved evidence is deleted from storage to save
-                      // space, so there's nothing left to link to.
-                      const viewable = x.status !== "approved";
-                      const Row = viewable ? "a" : "div";
-                      return (
-                        <Row
-                          {...(viewable
-                            ? { href: `/api/image/${x.image_key}`, target: "_blank", rel: "noreferrer" }
-                            : {})}
-                          key={x.id}
-                          className="airdrop-history-item flex items-center justify-between rounded-lg bg-white/5 p-3"
-                        >
-                          <div>
-                            <b>
-                              {x.activity_date} · รอบ {x.round_time}
-                            </b>
-                            <p className="text-xs text-slate-500">
-                              {new Date(x.created_at).toLocaleString("th-TH")}
-                            </p>
-                          </div>
-                          <Status value={x.status} />
-                        </Row>
-                      );
-                    })
-                  ) : (
-                    <p className="text-slate-400">ยังไม่มีประวัติ</p>
-                  )}
-                </div>
-              </section>
-            </div>
+            <Panel label="AIRDROP LOG" title="ประวัติแอร์ดรอปของคุณ" flush>
+              {data.airdrops.length ? (
+                data.airdrops.map((x: any) => (
+                  <Row
+                    key={x.id}
+                    inset={false}
+                    // Approved evidence is deleted from storage to save
+                    // space, so there's nothing left to link to.
+                    href={
+                      x.status !== "approved"
+                        ? `/api/image/${x.image_key}`
+                        : undefined
+                    }
+                    leading={
+                      <Dot
+                        tone={
+                          x.status === "approved"
+                            ? "green"
+                            : x.status === "rejected"
+                              ? "red"
+                              : "amber"
+                        }
+                      />
+                    }
+                    title={`${x.activity_date} · รอบ ${x.round_time}`}
+                    subtitle={new Date(x.created_at).toLocaleString("th-TH")}
+                    trailing={<Status value={x.status} />}
+                  />
+                ))
+              ) : (
+                <EmptyState
+                  title="ยังไม่มีประวัติแอร์ดรอป"
+                  hint="ส่งหลักฐานรอบแรกจากการ์ดภารกิจด้านบน"
+                />
+              )}
+            </Panel>
           )}
           {view === "party" &&
             (!loadedViews.includes("party") ? (
@@ -1306,7 +1175,12 @@ export default function Home() {
               call={call}
               busy={busy}
               onSubmit={async (ids, file) => {
-                if (!window.confirm(`ยืนยันส่งหลักฐานกิจกรรมให้สมาชิก ${ids.length} คนเข้าคิวตรวจใช่หรือไม่?`)) return;
+                if (
+                  !(await confirmAsync(
+                    `ยืนยันส่งหลักฐานกิจกรรมให้สมาชิก ${ids.length} คนเข้าคิวตรวจใช่หรือไม่?`,
+                  ))
+                )
+                  return;
                 setBusy(true);
                 try {
                   const form = new FormData();
@@ -1358,41 +1232,55 @@ export default function Home() {
             ))}
         </section>
         <aside className="command-rail hidden xl:block w-72 shrink-0 space-y-5">
-          <section className="command-panel p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="label">SQUAD STATUS // ALL MEMBERS</p>
-                <h2 className="mt-2 text-lg font-black">สถานะแก๊ง</h2>
-              </div>
-              <span className="text-sm text-emerald-300">
-                {data.members.filter((member: any) => member.online).length}/{data.members.length}
-                คนออนไลน์
-              </span>
-            </div>
-            <div className="mt-4 space-y-2">
+          <Panel
+            label="SQUAD STATUS"
+            title="สถานะแก๊ง"
+            subtitle={`${data.members.filter((m: any) => m.online).length}/${data.members.length} คนออนไลน์`}
+            flush
+          >
+            <div className="rail-scroll">
               {members.map((member: any) => (
-                <div
+                <Row
                   key={member.id}
-                  className="flex items-center gap-3 rounded-lg border border-white/10 bg-black/20 p-3"
-                >
-                  <span
-                    className={`status-dot ${member.online ? "" : "status-dot-offline"}`}
-                  />
-                  <span className="min-w-0 flex-1 truncate font-bold">
-                    {member.display_name}
-                  </span>
-                  <span
-                    className={`text-xs ${member.online ? "text-slate-500" : "text-slate-600"}`}
-                  >
-                    {member.online ? "ออนไลน์" : "ออฟไลน์"}
-                  </span>
-                </div>
+                  inset={false}
+                  leading={<Dot tone={member.online ? "green" : "idle"} />}
+                  title={member.display_name}
+                  trailing={
+                    <span className="text-xs text-slate-500">
+                      {member.online ? "ออนไลน์" : "ออฟไลน์"}
+                    </span>
+                  }
+                />
               ))}
             </div>
-          </section>
+          </Panel>
           <SquadRanking leaderboard={data.leaderboard} compact />
         </aside>
       </div>
+      <nav className="bottom-nav lg:hidden" aria-label="เมนูหลัก">
+        {visibleNav
+          .map(([id, label, Icon]: any) => (
+            <button
+              key={id}
+              onClick={() => setView(id)}
+              aria-current={view === id ? "page" : undefined}
+              className={`bottom-nav__item ${view === id ? "is-active" : ""}`}
+            >
+              <Icon className="h-5 w-5" />
+              <span>{label}</span>
+            </button>
+          ))}
+      </nav>
+      {confirmState && (
+        <ConfirmDialog
+          message={confirmState.message}
+          busy={busy}
+          onResolve={(ok) => {
+            confirmState.resolve(ok);
+            setConfirmState(null);
+          }}
+        />
+      )}
     </main>
   );
 }
