@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, Lock, ShieldCheck, Users, X } from "lucide-react";
 import { Picker } from "./picker";
-import { Dot, EmptyState, Row, SearchInput } from "./ui";
+import { Dot, EmptyState, Panel, Row, SearchInput } from "./ui";
 
 type Props = {
   data: any;
@@ -23,6 +23,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
   const [activityPickerReset, setActivityPickerReset] = useState(0);
   const [createSearch, setCreateSearch] = useState("");
   const [addSearch, setAddSearch] = useState("");
+  const [activityShown, setActivityShown] = useState(10);
   const isOwner = party?.owner_member_id === data.me.id;
   const available = useMemo(
     () =>
@@ -140,43 +141,98 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
         )}
       </div>
       {party && (
-        <section className="command-panel p-5">
-          <p className="label">PARTY ACTIVITY</p>
-          <h3 className="mt-2 text-xl font-black">ส่งหลักฐานกิจกรรมปาร์ตี้</h3>
-          <p className="mt-2 text-sm text-slate-400">ส่งรูปเดียวเพื่อบันทึกกิจกรรมให้สมาชิกในปาร์ตี้ {party.members.length} คน</p>
-          <form
-            className="mt-4 space-y-3"
-            onSubmit={async (event) => {
-              event.preventDefault();
-              if (!activityFile) return;
-              await onSubmit?.(party.members.map((member: any) => member.id), activityFile);
-              setActivityFile(null);
-              setActivityPickerReset((n) => n + 1);
-            }}
+        <>
+          <Panel
+            label="PARTY ACTIVITY"
+            title="ส่งหลักฐานกิจกรรมปาร์ตี้"
+            subtitle={`ส่งรูปเดียวเพื่อบันทึกกิจกรรมให้สมาชิก ${party.members.length} คน`}
           >
-            <Picker onChange={setActivityFile} resetToken={activityPickerReset} />
-            <button disabled={busy || !activityFile} className="w-full rounded-lg bg-red-600 px-4 py-3 text-sm font-bold disabled:opacity-40">ส่งเข้าคิวตรวจ</button>
-          </form>
-          <div className="mt-5 space-y-2 border-t border-white/10 pt-4">
-            <p className="text-sm font-bold">ประวัติกิจกรรมปาร์ตี้</p>
-            {data.parties.length ? data.parties.map((activity: any) => {
-              // Approved evidence is deleted from storage to save space, so
-              // there's nothing left to link to.
-              const viewable = activity.status !== "approved";
-              const Row = viewable ? "a" : "div";
-              return (
-                <Row
-                  key={activity.id}
-                  {...(viewable ? { href: `/api/image/${activity.image_key}`, target: "_blank", rel: "noreferrer" } : {})}
-                  className="flex items-center justify-between rounded-lg border border-white/10 bg-black/20 p-3 text-sm hover:border-red-400/50"
-                >
-                  <span>{activity.activity_date} · {activity.members}</span>
-                  <span>{activity.status === "approved" ? "ผ่านแล้ว" : activity.status === "rejected" ? "ไม่ผ่าน" : "รอตรวจ"}</span>
-                </Row>
-              );
-            }) : <p className="text-sm text-slate-500">ยังไม่มีประวัติกิจกรรม</p>}
-          </div>
-        </section>
+            <form
+              className="space-y-3"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                if (!activityFile) return;
+                await onSubmit?.(
+                  party.members.map((member: any) => member.id),
+                  activityFile,
+                );
+                setActivityFile(null);
+                setActivityPickerReset((n) => n + 1);
+              }}
+            >
+              <Picker onChange={setActivityFile} resetToken={activityPickerReset} />
+              <button
+                disabled={busy || !activityFile}
+                className="ui-btn ui-btn--primary ui-btn--block"
+              >
+                ส่งเข้าคิวตรวจ
+              </button>
+            </form>
+          </Panel>
+          <Panel
+            label="ACTIVITY LOG"
+            title="ประวัติกิจกรรมปาร์ตี้"
+            subtitle={`${data.parties.length} รายการ`}
+            flush
+          >
+            {data.parties.length ? (
+              <>
+                {data.parties.slice(0, activityShown).map((activity: any) => (
+                  <Row
+                    key={activity.id}
+                    inset={false}
+                    // Approved evidence is deleted from storage to save space,
+                    // so there's nothing left to link to.
+                    href={
+                      activity.status !== "approved"
+                        ? `/api/image/${activity.image_key}`
+                        : undefined
+                    }
+                    leading={
+                      <Dot
+                        tone={
+                          activity.status === "approved"
+                            ? "green"
+                            : activity.status === "rejected"
+                              ? "red"
+                              : "amber"
+                        }
+                      />
+                    }
+                    title={activity.activity_date}
+                    subtitle={activity.members}
+                    trailing={
+                      <span className="text-xs text-slate-500">
+                        {activity.status === "approved"
+                          ? "ผ่านแล้ว"
+                          : activity.status === "rejected"
+                            ? "ไม่ผ่าน"
+                            : "รอตรวจ"}
+                      </span>
+                    }
+                  />
+                ))}
+                {data.parties.length > activityShown && (
+                  <div className="p-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setActivityShown((n) => n + 10)}
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
+                    >
+                      โหลดเพิ่ม{" "}
+                      {Math.min(10, data.parties.length - activityShown)} รายการ
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <EmptyState
+                title="ยังไม่มีประวัติกิจกรรม"
+                hint="ส่งหลักฐานกิจกรรมทีมจากด้านบนเพื่อเริ่มเก็บคะแนน"
+              />
+            )}
+          </Panel>
+        </>
       )}
       <div className="flex gap-2 overflow-x-auto">
         <button
