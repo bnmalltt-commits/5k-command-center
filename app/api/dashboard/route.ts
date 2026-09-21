@@ -229,6 +229,20 @@ export async function POST(request: Request) {
       await db.batch(statements);
       return json({ ok: true });
     }
+    if (body.action === "member_pin_reset") {
+      const admin = await requireAdmin(request), id = Number(body.id);
+      if (!id) throw Error("ไม่พบสมาชิก");
+      const target = await db.prepare("SELECT id,is_primary_admin FROM members WHERE id=? AND active=1").bind(id).first<any>();
+      if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
+      if (target.is_primary_admin && !sameId(id, admin.id)) throw Error("ไม่สามารถรีเซ็ต PIN บัญชีเจ้าของแก๊งได้");
+      await db.prepare("UPDATE members SET pin_hash=NULL WHERE id=?").bind(id).run();
+      return json({ ok: true });
+    }
+    if (body.action === "member_pin_reset_all") {
+      await requireSam(request);
+      await db.prepare("UPDATE members SET pin_hash=NULL WHERE active=1 AND is_primary_admin=0").bind().run();
+      return json({ ok: true });
+    }
     throw Error("คำสั่งไม่ถูกต้อง");
   } catch (error) {
     return json({ error: error instanceof Error ? error.message : "บันทึกไม่สำเร็จ" }, 400);

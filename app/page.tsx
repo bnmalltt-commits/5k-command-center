@@ -605,6 +605,16 @@ function AdminCommandCenter({
               </button>
             </form>
           )}
+          {tab === "members" && sam && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => call({ action: "member_pin_reset_all" })}
+              className="ui-btn ui-btn--ghost ui-btn--sm"
+            >
+              รีเซ็ต PIN ทั้งหมด
+            </button>
+          )}
         </div>
 
         {tab === "verify" &&
@@ -680,6 +690,20 @@ function AdminCommandCenter({
                     >
                       แก้ชื่อ
                     </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        call({
+                          action: "member_pin_reset",
+                          id: member.id,
+                          name: member.display_name,
+                        })
+                      }
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
+                    >
+                      รีเซ็ต PIN
+                    </button>
                     {member.id !== data.me.id && (
                       <button
                         type="button"
@@ -714,19 +738,35 @@ function AdminCommandCenter({
                 title={member.display_name}
                 subtitle={member.role === "admin" ? "แอดมิน" : "สมาชิก"}
                 trailing={
-                  <button
-                    disabled={busy}
-                    onClick={() =>
-                      call({
-                        action: "admin_access",
-                        memberId: member.id,
-                        enabled: member.role !== "admin",
-                      })
-                    }
-                    className="ui-btn ui-btn--ghost ui-btn--sm"
-                  >
-                    {member.role === "admin" ? "ถอดแอดมิน" : "เพิ่มเป็นแอดมิน"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        call({
+                          action: "member_pin_reset",
+                          id: member.id,
+                          name: member.display_name,
+                        })
+                      }
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
+                    >
+                      รีเซ็ต PIN
+                    </button>
+                    <button
+                      disabled={busy}
+                      onClick={() =>
+                        call({
+                          action: "admin_access",
+                          memberId: member.id,
+                          enabled: member.role !== "admin",
+                        })
+                      }
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
+                    >
+                      {member.role === "admin" ? "ถอดแอดมิน" : "เพิ่มเป็นแอดมิน"}
+                    </button>
+                  </>
                 }
               />
             ))
@@ -869,6 +909,8 @@ export default function Home() {
       member: `ยืนยันเพิ่มสมาชิกใหม่ชื่อ “${body.name}” ใช่หรือไม่?`,
       member_update: `ตรวจสอบชื่อก่อนบันทึก\n\nยืนยันเปลี่ยนชื่อเป็น “${body.name}” ใช่หรือไม่?`,
       member_delete: "ยืนยันเอาสมาชิกนี้ออกจากแก๊งใช่หรือไม่? สมาชิกจะออกจากระบบทันทีและจะไม่แสดงในรายชื่ออีก",
+      member_pin_reset: `ยืนยันรีเซ็ต PIN ของ “${body.name}” ใช่หรือไม่? สมาชิกคนนี้ต้องตั้ง PIN ใหม่ตอนเข้าสู่ระบบครั้งถัดไป`,
+      member_pin_reset_all: "ยืนยันรีเซ็ต PIN ของสมาชิกทุกคน (ยกเว้นเจ้าของแก๊ง) ใช่หรือไม่? ทุกคนต้องตั้ง PIN ใหม่ตอนเข้าสู่ระบบครั้งถัดไป",
       admin_access: body.enabled
         ? "ยืนยันเพิ่มสิทธิ์แอดมินให้สมาชิกนี้ใช่หรือไม่?"
         : "ยืนยันถอนสิทธิ์แอดมินของสมาชิกนี้ใช่หรือไม่?",
