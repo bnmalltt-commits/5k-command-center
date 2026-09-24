@@ -1042,6 +1042,37 @@ button:disabled {
 }
 .ui-dialog .ui-input { margin-top: 14px; }
 
+.pin-list {
+  max-height: 46vh;
+  overflow-y: auto;
+  margin-top: 14px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-sm);
+}
+.pin-list__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--ui-line);
+}
+.pin-list__row:last-child { border-bottom: 0; }
+.pin-list__name {
+  min-width: 0;
+  color: var(--ui-text-2);
+  font-size: 13px;
+  word-break: break-word;
+}
+.pin-list__pin {
+  flex-shrink: 0;
+  color: var(--ui-text);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  font-variant-numeric: tabular-nums;
+}
+
 /* --- Redesigned shell --- */
 
 .topbar {

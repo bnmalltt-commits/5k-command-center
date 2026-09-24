@@ -1,17 +1,12 @@
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
-import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json } from "@/lib/auth";
+import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin } from "@/lib/auth";
 
 // Give the ~11 parallel queries this route fires room to finish instead of
 // Vercel killing the function mid-flight, which would abandon their Postgres
 // connections (they'd sit "active" on the server forever since nobody ever
 // reads the response) and starve the connection pool for later requests.
 export const maxDuration = 30;
-
-// Postgres returns bigint ids as strings, so a raw `Number(body.x) === me.id`
-// is always false and silently defeats these "is this me?" guards. Compare
-// both sides as numbers.
-const sameId = (a: unknown, b: unknown) => Number(a) === Number(b);
 
 const validType = (type: unknown) => {
   if (type !== "airdrop" && type !== "party") throw Error("ประเภทไม่ถูกต้อง");
@@ -69,7 +64,7 @@ export async function GET(request: Request) {
         : empty,
       db.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
       db.prepare("SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN point_ledger pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100").bind(since).all(),
-      wants.admin ? db.prepare("SELECT id,display_name,role,active,is_primary_admin FROM members ORDER BY active DESC,display_name").bind().all() : empty,
+      wants.admin ? db.prepare("SELECT id,username,display_name,role,active,is_primary_admin FROM members ORDER BY active DESC,display_name").bind().all() : empty,
       db.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
       wants.party
         ? db.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all()
@@ -229,19 +224,36 @@ export async function POST(request: Request) {
       await db.batch(statements);
       return json({ ok: true });
     }
+    // A reset issues a new random PIN rather than clearing pin_hash: the login
+    // route treats a null pin_hash as "accept any PIN and adopt it", so a
+    // cleared account is claimable by whoever types the display name first.
     if (body.action === "member_pin_reset") {
       const admin = await requireAdmin(request), id = Number(body.id);
       if (!id) throw Error("ไม่พบสมาชิก");
-      const target = await db.prepare("SELECT id,is_primary_admin FROM members WHERE id=? AND active=1").bind(id).first<any>();
+      const target = await db.prepare("SELECT id,display_name,is_primary_admin FROM members WHERE id=? AND active=1").bind(id).first<any>();
       if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
       if (target.is_primary_admin && !sameId(id, admin.id)) throw Error("ไม่สามารถรีเซ็ต PIN บัญชีเจ้าของแก๊งได้");
-      await db.prepare("UPDATE members SET pin_hash=NULL WHERE id=?").bind(id).run();
-      return json({ ok: true });
+      const pin = randomPin();
+      const statements = [db.prepare("UPDATE members SET pin_hash=? WHERE id=?").bind(await pinDigest(pin), id)];
+      // Evict the member so a reset also cuts off anyone already signed in as
+      // them — except when you reset your own PIN, which keeps you logged in.
+      if (!sameId(id, admin.id)) statements.push(db.prepare("DELETE FROM sessions WHERE member_id=?").bind(id));
+      await db.batch(statements);
+      return json({ ok: true, pins: [{ name: target.display_name, pin }] });
     }
     if (body.action === "member_pin_reset_all") {
       await requireSam(request);
-      await db.prepare("UPDATE members SET pin_hash=NULL WHERE active=1 AND is_primary_admin=0").bind().run();
-      return json({ ok: true });
+      const targets = await db.prepare("SELECT id,display_name FROM members WHERE active=1 AND is_primary_admin=0 ORDER BY display_name").bind().all<any>();
+      const pins: { name: string; pin: string }[] = [];
+      const statements = [];
+      for (const target of targets.results) {
+        const pin = randomPin();
+        pins.push({ name: target.display_name, pin });
+        statements.push(db.prepare("UPDATE members SET pin_hash=? WHERE id=?").bind(await pinDigest(pin), target.id));
+        statements.push(db.prepare("DELETE FROM sessions WHERE member_id=?").bind(target.id));
+      }
+      await db.batch(statements);
+      return json({ ok: true, pins });
     }
     throw Error("คำสั่งไม่ถูกต้อง");
   } catch (error) {

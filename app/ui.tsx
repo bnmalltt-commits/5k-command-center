@@ -185,6 +185,72 @@ export function Segmented({
   );
 }
 
+// Shown once after a PIN reset. The plain PIN exists only in this response —
+// it is hashed in the database — so the admin has to hand it over from here.
+export function PinDialog({
+  pins,
+  onClose,
+}: {
+  pins: { name: string; pin: string }[];
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const asText = pins.map((entry) => `${entry.name}: ${entry.pin}`).join("\n");
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div
+      className="ui-dialog-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-label="PIN ใหม่"
+    >
+      <div className="ui-dialog">
+        <p className="ui-dialog__message">
+          {pins.length > 1
+            ? `ตั้ง PIN ใหม่ให้ ${pins.length} คนแล้ว — ส่ง PIN ให้เจ้าตัว แล้วให้เปลี่ยนเองภายหลัง`
+            : "ตั้ง PIN ใหม่แล้ว — ส่ง PIN นี้ให้เจ้าตัว แล้วให้เปลี่ยนเองภายหลัง"}
+        </p>
+        <div className="pin-list">
+          {pins.map((entry) => (
+            <div key={entry.name} className="pin-list__row">
+              <span className="pin-list__name">{entry.name}</span>
+              <span className="pin-list__pin">{entry.pin}</span>
+            </div>
+          ))}
+        </div>
+        <div className="ui-dialog__actions">
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard?.writeText(asText).then(
+                () => setCopied(true),
+                () => setCopied(false),
+              );
+            }}
+            className="ui-btn ui-btn--ghost"
+          >
+            {copied ? "คัดลอกแล้ว" : "คัดลอกทั้งหมด"}
+          </button>
+          <button
+            type="button"
+            autoFocus
+            onClick={onClose}
+            className="ui-btn ui-btn--primary"
+          >
+            ปิด
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Replaces window.confirm so the confirmation matches the rest of the app and
 // stays usable on a phone. Resolves through the promise the caller is awaiting.
 export function ConfirmDialog({

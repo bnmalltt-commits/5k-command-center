@@ -26,6 +26,7 @@ import {
   Dot,
   EmptyState,
   Panel,
+  PinDialog,
   PromptDialog,
   Row,
   SearchInput,
@@ -524,6 +525,15 @@ function AdminCommandCenter({
   const [memberName, setMemberName] = useState("");
   const [renaming, setRenaming] = useState<any>(null);
   const sam = data.me.name === "Sam";
+  // A non-owner admin can only sign in with their member code, and this list
+  // is the only place it is ever shown — without it, promoting someone locks
+  // them out for good once their session expires.
+  const adminSubtitle = (member: any) =>
+    member.role === "admin" && !member.is_primary_admin
+      ? `แอดมิน · รหัสเข้าระบบ ${member.username}`
+      : member.role === "admin"
+        ? "แอดมิน (เจ้าของแก๊ง)"
+        : "สมาชิก";
   const normalizedQuery = query.trim().toLowerCase();
   const activeMembers = data.managedMembers.filter(
     (member: any) => member.active,
@@ -679,7 +689,7 @@ function AdminCommandCenter({
                 key={member.id}
                 inset={false}
                 title={member.display_name}
-                subtitle={member.role === "admin" ? "แอดมิน" : "สมาชิก"}
+                subtitle={adminSubtitle(member)}
                 trailing={
                   <>
                     <button
@@ -736,7 +746,7 @@ function AdminCommandCenter({
                 key={member.id}
                 inset={false}
                 title={member.display_name}
-                subtitle={member.role === "admin" ? "แอดมิน" : "สมาชิก"}
+                subtitle={adminSubtitle(member)}
                 trailing={
                   <>
                     <button
@@ -808,6 +818,7 @@ export default function Home() {
     [partyName, setPartyName] = useState(""),
     [loadedViews, setLoadedViews] = useState<string[]>([]),
     [pickerReset, setPickerReset] = useState(0),
+    [pinResult, setPinResult] = useState<{ name: string; pin: string }[] | null>(null),
     [confirmState, setConfirmState] = useState<{
       message: string;
       resolve: (ok: boolean) => void;
@@ -909,8 +920,8 @@ export default function Home() {
       member: `ยืนยันเพิ่มสมาชิกใหม่ชื่อ “${body.name}” ใช่หรือไม่?`,
       member_update: `ตรวจสอบชื่อก่อนบันทึก\n\nยืนยันเปลี่ยนชื่อเป็น “${body.name}” ใช่หรือไม่?`,
       member_delete: "ยืนยันเอาสมาชิกนี้ออกจากแก๊งใช่หรือไม่? สมาชิกจะออกจากระบบทันทีและจะไม่แสดงในรายชื่ออีก",
-      member_pin_reset: `ยืนยันรีเซ็ต PIN ของ “${body.name}” ใช่หรือไม่? สมาชิกคนนี้ต้องตั้ง PIN ใหม่ตอนเข้าสู่ระบบครั้งถัดไป`,
-      member_pin_reset_all: "ยืนยันรีเซ็ต PIN ของสมาชิกทุกคน (ยกเว้นเจ้าของแก๊ง) ใช่หรือไม่? ทุกคนต้องตั้ง PIN ใหม่ตอนเข้าสู่ระบบครั้งถัดไป",
+      member_pin_reset: `ยืนยันรีเซ็ต PIN ของ “${body.name}” ใช่หรือไม่?\n\nระบบจะสุ่ม PIN ใหม่มาแสดงให้คุณส่งต่อ และสมาชิกคนนี้จะถูกออกจากระบบทันที`,
+      member_pin_reset_all: "ยืนยันรีเซ็ต PIN ของสมาชิกทุกคน (ยกเว้นเจ้าของแก๊ง) ใช่หรือไม่?\n\nระบบจะสุ่ม PIN ใหม่ให้ทุกคนมาแสดงให้คุณส่งต่อ และทุกคนจะถูกออกจากระบบทันที",
       admin_access: body.enabled
         ? "ยืนยันเพิ่มสิทธิ์แอดมินให้สมาชิกนี้ใช่หรือไม่?"
         : "ยืนยันถอนสิทธิ์แอดมินของสมาชิกนี้ใช่หรือไม่?",
@@ -946,6 +957,7 @@ export default function Home() {
         x: any = await r.json();
       setNotice(x.error || "บันทึกแล้ว");
       if (!x.error) {
+        if (x.pins?.length) setPinResult(x.pins);
         await load();
         return true;
       }
@@ -1011,11 +1023,7 @@ export default function Home() {
         }),
         x: any = await r.json();
       if (x.error) setNotice(x.error);
-      else {
-        if (x.loginId)
-          setNotice(`สร้างบัญชีแอดมินแล้ว รหัสสมาชิกของคุณคือ ${x.loginId}`);
-        await load();
-      }
+      else await load();
     } catch {
       setNotice("เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง");
     } finally {
@@ -1336,6 +1344,9 @@ export default function Home() {
             setConfirmState(null);
           }}
         />
+      )}
+      {pinResult && (
+        <PinDialog pins={pinResult} onClose={() => setPinResult(null)} />
       )}
     </main>
   );

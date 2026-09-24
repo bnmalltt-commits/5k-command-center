@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { now, requireMember, json } from "@/lib/auth";
+import { now, requireMember, json, sameId } from "@/lib/auth";
 
 export const maxDuration = 30;
 
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
     if (body.action === "party_create") {
       const name = String(body.name || "").trim();
-      const memberIds: number[] = [...new Set<number>((Array.isArray(body.memberIds) ? body.memberIds : []).map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && id !== me.id))];
+      const memberIds: number[] = [...new Set<number>((Array.isArray(body.memberIds) ? body.memberIds : []).map((id: unknown) => Number(id)).filter((id: number) => Number.isInteger(id) && !sameId(id, me.id)))];
       if (name.length < 2 || name.length > 40) throw Error("ชื่อปาร์ตี้ต้องมี 2–40 ตัวอักษร");
       if (memberIds.length > 4) throw Error("เลือกสมาชิกได้สูงสุด 4 คน");
       if (await activeParty(me.id)) throw Error("คุณอยู่ในปาร์ตี้ที่กำลังใช้งานอยู่แล้ว");
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
       const party = await db.prepare("SELECT id,owner_member_id,status FROM parties WHERE id=? AND active=1").bind(partyId).first<any>();
       if (!party || party.owner_member_id !== me.id || party.status !== "open") throw Error("เฉพาะหัวหน้าปาร์ตี้ที่เปิดรับสมาชิกเท่านั้น");
       const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(memberId).first();
-      if (!target || memberId === me.id) throw Error("ไม่พบสมาชิกที่เลือก");
+      if (!target || sameId(memberId, me.id)) throw Error("ไม่พบสมาชิกที่เลือก");
       if (await activeParty(memberId)) throw Error("สมาชิกคนนี้อยู่ในปาร์ตี้อื่นแล้ว");
       const joined = await db.prepare(
         "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM parties WHERE id=? AND status='open' AND active=1) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
       const party = await activeParty(me.id);
       if (!party || party.owner_member_id !== me.id) throw Error("เฉพาะหัวหน้าปาร์ตี้เท่านั้น");
       const memberId = Number(body.memberId);
-      if (memberId === me.id) throw Error("หัวหน้าต้องใช้ปุ่มออกจากปาร์ตี้");
+      if (sameId(memberId, me.id)) throw Error("หัวหน้าต้องใช้ปุ่มออกจากปาร์ตี้");
       await db.prepare("DELETE FROM party_members WHERE party_id=? AND member_id=?").bind(party.id, memberId).run();
       return json({ ok: true });
     }
