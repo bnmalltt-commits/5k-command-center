@@ -53,6 +53,7 @@ type Data = {
   adminParties: any[];
   ledger: any[];
   adminLeaves: any[];
+  boards?: Record<string, any[]>;
 };
 // Baseline so every key is always defined even before its view has been
 // loaded — lets consumers keep doing `data.submissionLog.map(...)` unguarded.
@@ -204,15 +205,26 @@ function MissionCard({
     </section>
   );
 }
+const PERIODS = [
+  { id: "day", label: "วันนี้", title: "ตารางคะแนนวันนี้" },
+  { id: "week", label: "สัปดาห์นี้", title: "ตารางคะแนนสัปดาห์นี้" },
+  { id: "month", label: "เดือนนี้", title: "ตารางคะแนนเดือนนี้" },
+  { id: "all", label: "ทั้งหมด", title: "ตารางคะแนนทั้งหมด" },
+];
 function SquadRanking({
-  leaderboard,
+  leaderboard: allTime,
+  boards,
   compact = false,
   highlightId,
 }: {
   leaderboard: any[];
+  boards?: Record<string, any[]>;
   compact?: boolean;
   highlightId?: number;
 }) {
+  const [period, setPeriod] = useState("all");
+  const leaderboard =
+    period === "all" || !boards?.[period] ? allTime : boards[period];
   const rows = compact ? leaderboard.slice(0, 5) : leaderboard;
   const myIndex = highlightId
     ? leaderboard.findIndex((member: any) => member.id === highlightId)
@@ -223,11 +235,25 @@ function SquadRanking({
   return (
     <Panel
       label="SQUAD RANKING"
-      title={`ตารางคะแนน${compact ? "" : "ทั้งหมด"}`}
+      title={
+        compact
+          ? "ตารางคะแนน"
+          : PERIODS.find((p) => p.id === period)!.title
+      }
       subtitle={compact ? undefined : `${leaderboard.length} คน`}
       trailing={<Trophy className="h-4 w-4 text-[var(--ui-red)]" />}
       flush
     >
+      {!compact && boards && (
+        <div className="px-4 pt-3">
+          <Segmented
+            label="ช่วงเวลา"
+            value={period}
+            onChange={setPeriod}
+            options={PERIODS.map(({ id, label }) => ({ id, label }))}
+          />
+        </div>
+      )}
       {!compact && me && (
         <div className="rank-me">
           <span className="rank-me__pos">#{myIndex + 1}</span>
@@ -267,8 +293,12 @@ function SquadRanking({
         ))
       ) : (
         <EmptyState
-          title="ยังไม่มีคะแนนในตาราง"
-          hint="เมื่อมีคนเช็กอินผ่าน คะแนนจะขึ้นที่นี่"
+          title={
+            period === "all"
+              ? "ยังไม่มีคะแนนในตาราง"
+              : `ยังไม่มีใครได้แต้ม${PERIODS.find((p) => p.id === period)!.label}`
+          }
+          hint="เมื่อหลักฐานตรวจผ่าน คะแนนจะขึ้นที่นี่"
         />
       )}
     </Panel>
@@ -1574,6 +1604,7 @@ export default function Home() {
           {view === "score" && (
             <SquadRanking
               leaderboard={data.leaderboard}
+              boards={data.boards}
               highlightId={data.me.id}
             />
           )}

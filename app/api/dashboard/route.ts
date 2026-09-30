@@ -13,6 +13,15 @@ const validType = (type: unknown) => {
   return type;
 };
 
+// First Bangkok date of today / this week (Monday) / this month, as
+// YYYY-MM-DD so it compares directly against activity_date text.
+function periodStarts(today: string) {
+  const [y, m, d] = today.split("-").map(Number);
+  const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
+  const monday = new Date(Date.UTC(y, m - 1, d - weekday)).toISOString().slice(0, 10);
+  return { day: today, week: monday, month: `${today.slice(0, 7)}-01` };
+}
+
 async function activeParty(memberId: number) {
   return db
     .prepare("SELECT p.id,p.name,p.status FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1")
@@ -97,6 +106,21 @@ export async function GET(request: Request) {
           db.prepare("SELECT l.id,l.leave_date,l.reason,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all(),
         ])
       : [null, null, null];
+    // Points count toward the day the activity happened, not the day an admin
+    // approved it — approvals often land a day or more later. Manual
+    // adjustments have no activity, so they use their own Bangkok date.
+    const boards = view === "score"
+      ? Object.fromEntries(
+          await Promise.all(
+            (Object.entries(periodStarts(date)) as [string, string][]).map(async ([period, start]) => [
+              period,
+              (await db.prepare(
+                "SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(x.points),0) AS score FROM members m LEFT JOIN (SELECT pl.member_id,pl.points,CASE pl.source WHEN 'airdrop' THEN a.activity_date WHEN 'party' THEN pa.activity_date ELSE to_char(pl.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok','YYYY-MM-DD') END AS day FROM point_ledger pl LEFT JOIN airdrop_submissions a ON pl.source='airdrop' AND a.id=pl.source_id LEFT JOIN party_activities pa ON pl.source='party' AND pa.id=pl.source_id) x ON x.member_id=m.id AND x.day>=? WHERE m.active=1 GROUP BY m.id HAVING COUNT(x.points)>0 ORDER BY score DESC,m.display_name LIMIT 100"
+              ).bind(since, start).all()).results,
+            ]),
+          ),
+        )
+      : null;
     // View-scoped keys are omitted (not sent as []) when they weren't asked
     // for, so the client can merge a response over what it already has
     // without a poll for one view wiping another view's loaded data.
@@ -121,6 +145,7 @@ export async function GET(request: Request) {
         ledger: ledger!.results,
         adminLeaves: adminLeaves!.results,
       }),
+      ...(boards && { boards }),
       ...(wants.leave && { leaveRequests: leaveRequests.results }),
       ...(wants.log && { submissionLog: submissionLog.results }),
     });
