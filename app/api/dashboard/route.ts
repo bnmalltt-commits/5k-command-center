@@ -13,14 +13,20 @@ const validType = (type: unknown) => {
   return type;
 };
 
-// First Bangkok date of today / this week (Monday) / this month, as
-// YYYY-MM-DD so it compares directly against activity_date text.
+// First Bangkok date of today / this week (Monday), as YYYY-MM-DD so it
+// compares directly against activity_date text.
 function periodStarts(today: string) {
   const [y, m, d] = today.split("-").map(Number);
   const weekday = (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
   const monday = new Date(Date.UTC(y, m - 1, d - weekday)).toISOString().slice(0, 10);
-  return { day: today, week: monday, month: `${today.slice(0, 7)}-01` };
+  return { day: today, week: monday };
 }
+
+// Points count toward the day the activity happened, not the day an admin
+// approved it — approvals often land a day or more later. Manual adjustments
+// have no activity, so they use their own Bangkok date.
+const POINTS_BY_DAY =
+  "SELECT pl.member_id,pl.points,CASE pl.source WHEN 'airdrop' THEN a.activity_date WHEN 'party' THEN pa.activity_date ELSE to_char(pl.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok','YYYY-MM-DD') END AS day FROM point_ledger pl LEFT JOIN airdrop_submissions a ON pl.source='airdrop' AND a.id=pl.source_id LEFT JOIN party_activities pa ON pl.source='party' AND pa.id=pl.source_id";
 
 async function activeParty(memberId: number) {
   return db
@@ -106,21 +112,27 @@ export async function GET(request: Request) {
           db.prepare("SELECT l.id,l.leave_date,l.reason,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all(),
         ])
       : [null, null, null];
-    // Points count toward the day the activity happened, not the day an admin
-    // approved it — approvals often land a day or more later. Manual
-    // adjustments have no activity, so they use their own Bangkok date.
-    const boards = view === "score"
-      ? Object.fromEntries(
-          await Promise.all(
-            (Object.entries(periodStarts(date)) as [string, string][]).map(async ([period, start]) => [
-              period,
-              (await db.prepare(
-                "SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(x.points),0) AS score FROM members m LEFT JOIN (SELECT pl.member_id,pl.points,CASE pl.source WHEN 'airdrop' THEN a.activity_date WHEN 'party' THEN pa.activity_date ELSE to_char(pl.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok','YYYY-MM-DD') END AS day FROM point_ledger pl LEFT JOIN airdrop_submissions a ON pl.source='airdrop' AND a.id=pl.source_id LEFT JOIN party_activities pa ON pl.source='party' AND pa.id=pl.source_id) x ON x.member_id=m.id AND x.day>=? WHERE m.active=1 GROUP BY m.id HAVING COUNT(x.points)>0 ORDER BY score DESC,m.display_name LIMIT 100"
-              ).bind(since, start).all()).results,
-            ]),
-          ),
-        )
-      : null;
+    let boards: Record<string, any[]> | null = null;
+    let monthBoards: Record<string, any[]> | null = null;
+    if (view === "score") {
+      boards = Object.fromEntries(
+        await Promise.all(
+          (Object.entries(periodStarts(date)) as [string, string][]).map(async ([period, start]) => [
+            period,
+            (await db.prepare(
+              `SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,SUM(x.points) AS score FROM (${POINTS_BY_DAY}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 AND x.day>=? GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100`
+            ).bind(since, start).all()).results,
+          ]),
+        ),
+      );
+      // Every month in one pass, so each month's ranking is kept once a new
+      // month starts and switching months needs no extra request.
+      const rows = (await db.prepare(
+        `SELECT substr(x.day,1,7) AS month,m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,SUM(x.points) AS score FROM (${POINTS_BY_DAY}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 GROUP BY 1,m.id ORDER BY 1 DESC,score DESC,m.display_name`
+      ).bind(since).all<any>()).results;
+      monthBoards = { [date.slice(0, 7)]: [] };
+      for (const { month, ...row } of rows) (monthBoards[month] ||= []).push(row);
+    }
     // View-scoped keys are omitted (not sent as []) when they weren't asked
     // for, so the client can merge a response over what it already has
     // without a poll for one view wiping another view's loaded data.
@@ -145,7 +157,7 @@ export async function GET(request: Request) {
         ledger: ledger!.results,
         adminLeaves: adminLeaves!.results,
       }),
-      ...(boards && { boards }),
+      ...(boards && { boards, monthBoards }),
       ...(wants.leave && { leaveRequests: leaveRequests.results }),
       ...(wants.log && { submissionLog: submissionLog.results }),
     });

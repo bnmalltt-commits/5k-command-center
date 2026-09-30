@@ -54,6 +54,7 @@ type Data = {
   ledger: any[];
   adminLeaves: any[];
   boards?: Record<string, any[]>;
+  monthBoards?: Record<string, any[]>;
 };
 // Baseline so every key is always defined even before its view has been
 // loaded — lets consumers keep doing `data.submissionLog.map(...)` unguarded.
@@ -208,23 +209,38 @@ function MissionCard({
 const PERIODS = [
   { id: "day", label: "วันนี้", title: "ตารางคะแนนวันนี้" },
   { id: "week", label: "สัปดาห์นี้", title: "ตารางคะแนนสัปดาห์นี้" },
-  { id: "month", label: "เดือนนี้", title: "ตารางคะแนนเดือนนี้" },
+  { id: "month", label: "รายเดือน", title: "ตารางคะแนนรายเดือน" },
   { id: "all", label: "ทั้งหมด", title: "ตารางคะแนนทั้งหมด" },
 ];
+const monthLabel = (month: string) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleDateString("th-TH", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 function SquadRanking({
   leaderboard: allTime,
   boards,
+  monthBoards,
   compact = false,
   highlightId,
 }: {
   leaderboard: any[];
   boards?: Record<string, any[]>;
+  monthBoards?: Record<string, any[]>;
   compact?: boolean;
   highlightId?: number;
 }) {
   const [period, setPeriod] = useState("all");
+  const months = Object.keys(monthBoards || {}).sort().reverse();
+  const [month, setMonth] = useState("");
+  const shownMonth = months.includes(month) ? month : months[0];
   const leaderboard =
-    period === "all" || !boards?.[period] ? allTime : boards[period];
+    period === "month" && shownMonth
+      ? monthBoards![shownMonth]
+      : period === "all" || !boards?.[period]
+        ? allTime
+        : boards[period];
   const rows = compact ? leaderboard.slice(0, 5) : leaderboard;
   const myIndex = highlightId
     ? leaderboard.findIndex((member: any) => member.id === highlightId)
@@ -238,7 +254,9 @@ function SquadRanking({
       title={
         compact
           ? "ตารางคะแนน"
-          : PERIODS.find((p) => p.id === period)!.title
+          : period === "month" && shownMonth
+            ? `ตารางคะแนน${monthLabel(shownMonth)}`
+            : PERIODS.find((p) => p.id === period)!.title
       }
       subtitle={compact ? undefined : `${leaderboard.length} คน`}
       trailing={<Trophy className="h-4 w-4 text-[var(--ui-red)]" />}
@@ -252,6 +270,21 @@ function SquadRanking({
             onChange={setPeriod}
             options={PERIODS.map(({ id, label }) => ({ id, label }))}
           />
+          {period === "month" && months.length > 0 && (
+            <select
+              value={shownMonth}
+              onChange={(event) => setMonth(event.target.value)}
+              className="ui-input mt-2"
+              aria-label="เลือกเดือน"
+            >
+              {months.map((value, index) => (
+                <option key={value} value={value}>
+                  {monthLabel(value)}
+                  {index === 0 ? " (เดือนนี้)" : ""}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       )}
       {!compact && me && (
@@ -296,7 +329,9 @@ function SquadRanking({
           title={
             period === "all"
               ? "ยังไม่มีคะแนนในตาราง"
-              : `ยังไม่มีใครได้แต้ม${PERIODS.find((p) => p.id === period)!.label}`
+              : period === "month" && shownMonth
+                ? `ยังไม่มีใครได้แต้มในเดือน${monthLabel(shownMonth)}`
+                : `ยังไม่มีใครได้แต้ม${PERIODS.find((p) => p.id === period)!.label}`
           }
           hint="เมื่อหลักฐานตรวจผ่าน คะแนนจะขึ้นที่นี่"
         />
@@ -1605,6 +1640,7 @@ export default function Home() {
             <SquadRanking
               leaderboard={data.leaderboard}
               boards={data.boards}
+              monthBoards={data.monthBoards}
               highlightId={data.me.id}
             />
           )}
