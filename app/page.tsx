@@ -55,6 +55,7 @@ type Data = {
   adminLeaves: any[];
   boards?: Record<string, any[]>;
   monthBoards?: Record<string, any[]>;
+  monthTop: any[];
 };
 // Baseline so every key is always defined even before its view has been
 // loaded — lets consumers keep doing `data.submissionLog.map(...)` unguarded.
@@ -73,6 +74,7 @@ const EMPTY_DATA: Omit<Data, "me" | "date" | "myParty"> = {
   adminParties: [],
   ledger: [],
   adminLeaves: [],
+  monthTop: [],
 };
 const labels: Record<string, string> = {
   pending: "รอตรวจ",
@@ -253,7 +255,7 @@ function SquadRanking({
       label="SQUAD RANKING"
       title={
         compact
-          ? "ตารางคะแนน"
+          ? "ตารางคะแนนเดือนนี้"
           : period === "month" && shownMonth
             ? `ตารางคะแนน${monthLabel(shownMonth)}`
             : PERIODS.find((p) => p.id === period)!.title
@@ -327,7 +329,9 @@ function SquadRanking({
       ) : (
         <EmptyState
           title={
-            period === "all"
+            compact
+              ? "ยังไม่มีใครได้แต้มเดือนนี้"
+              : period === "all"
               ? "ยังไม่มีคะแนนในตาราง"
               : period === "month" && shownMonth
                 ? `ยังไม่มีใครได้แต้มในเดือน${monthLabel(shownMonth)}`
@@ -1690,7 +1694,7 @@ export default function Home() {
               ))}
             </div>
           </Panel>
-          <SquadRanking leaderboard={data.leaderboard} compact />
+          <SquadRanking leaderboard={data.monthTop} compact />
         </aside>
       </div>
       <nav className="bottom-nav lg:hidden" aria-label="เมนูหลัก">

@@ -112,6 +112,10 @@ export async function GET(request: Request) {
           db.prepare("SELECT l.id,l.leave_date,l.reason,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all(),
         ])
       : [null, null, null];
+    // Top 5 of the current month for the side rail, shown on every view.
+    const monthTop = (await db.prepare(
+      `SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,SUM(x.points) AS score FROM (${POINTS_BY_DAY}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 AND x.day>=? GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 5`
+    ).bind(since, `${date.slice(0, 7)}-01`).all()).results;
     let boards: Record<string, any[]> | null = null;
     let monthBoards: Record<string, any[]> | null = null;
     if (view === "score") {
@@ -144,6 +148,7 @@ export async function GET(request: Request) {
       airdrops: airdrops.results,
       favorites: favorites.results.map((x: any) => x.favorite_member_id),
       leaderboard: leaderboard.results,
+      monthTop,
       myParty: party,
       ...(wants.party && {
         parties: parties.results,
