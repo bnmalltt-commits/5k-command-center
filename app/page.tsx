@@ -9,8 +9,10 @@ import {
 import {
   CalendarOff,
   Check,
+  ChevronRight,
   Crosshair,
   History,
+  LayoutGrid,
   LogOut,
   RefreshCw,
   ShieldCheck,
@@ -36,7 +38,14 @@ import {
 type Round = "17:00" | "20:00" | "23:00" | "01:00";
 const ROUNDS: Round[] = ["17:00", "20:00", "23:00", "01:00"];
 type Data = {
-  me: { id: number; name: string; role: string; score: number };
+  me: {
+    id: number;
+    name: string;
+    role: string;
+    score: number;
+    monthScore: number;
+    monthRank: number | null;
+  };
   date: string;
   members: any[];
   managedMembers: any[];
@@ -198,10 +207,10 @@ function MissionCard({
           <Picker onChange={setImage} resetToken={`${round}-${pickerReset}`} />
           <button
             disabled={busy || !image}
-            className="ui-btn ui-btn--primary ui-btn--block"
+            className="ui-btn ui-btn--primary ui-btn--block ui-btn--lg"
           >
-            <Upload className="h-4 w-4" />
-            {selected ? "ส่งหลักฐานใหม่" : `ส่งรอบ ${round}`}
+            <Upload className="h-5 w-5" />
+            {selected ? `ส่งหลักฐานรอบ ${round} ใหม่` : `ส่งหลักฐานรอบ ${round}`}
           </button>
         </form>
       )}
@@ -233,7 +242,7 @@ function SquadRanking({
   compact?: boolean;
   highlightId?: number;
 }) {
-  const [period, setPeriod] = useState("all");
+  const [period, setPeriod] = useState("month");
   const months = Object.keys(monthBoards || {}).sort().reverse();
   const [month, setMonth] = useState("");
   const shownMonth = months.includes(month) ? month : months[0];
@@ -1273,6 +1282,18 @@ export default function Home() {
       ),
     [data],
   );
+  // Open on the round the member still owes, so the send button on the home
+  // screen is the next thing to do. Once per day only — the 60s refresh must
+  // not yank away a round the member picked by hand.
+  const autoRoundDate = useRef("");
+  useEffect(() => {
+    if (!data || autoRoundDate.current === data.date) return;
+    autoRoundDate.current = data.date;
+    const next =
+      ROUNDS.find((r) => !mine.get(r)) ||
+      ROUNDS.find((r) => mine.get(r)?.status !== "approved");
+    if (next) setRound(next);
+  }, [data, mine]);
   const confirmationMessage = (body: any) => {
     const action = body.action;
     const messages: Record<string, string> = {
@@ -1469,19 +1490,23 @@ export default function Home() {
   );
   const checkInComplete = completedRounds.length === todayRounds.length;
   const selectedAirdrop = mine.get(round);
-  const nav: [string, string, any][] = [
-    ["airdrop", "แอร์ดรอป", Crosshair],
-    ["party", "ปาร์ตี้", Users],
-    ["score", "คะแนน", Trophy],
-    ["admin", "จัดการแก๊ง", ShieldCheck],
-    ["leave", "ห้องลา", CalendarOff],
-    ["log", "ประวัติการส่ง", History],
+  // Three daily destinations stay one tap away; everything occasional lives
+  // under "เพิ่มเติม" so the phone bar never grows past four slots.
+  const mainNav: [string, string, any][] = [
+    ["airdrop", "ภารกิจ", Crosshair],
+    ["party", "ทีม", Users],
+    ["score", "อันดับ", Trophy],
   ];
-  // จัดการแก๊ง is admin-only, so it shouldn't occupy a slot in either nav for
-  // everyone else — the view itself already refuses non-admins.
-  const visibleNav = nav.filter(
-    ([id]) => id !== "admin" || data.me.role === "admin",
-  );
+  // จัดการแก๊ง is admin-only, so it shouldn't appear for everyone else — the
+  // view itself already refuses non-admins.
+  const moreNav: [string, string, any, string][] = (
+    [
+      ["leave", "ห้องลา", CalendarOff, "แจ้งลาและดูประวัติการลา"],
+      ["log", "ประวัติการส่ง", History, "หลักฐานที่ส่งทั้งหมดและผลตรวจ"],
+      ["admin", "จัดการแก๊ง", ShieldCheck, "ตรวจหลักฐาน สมาชิก ปาร์ตี้ แต้ม"],
+    ] as [string, string, any, string][]
+  ).filter(([id]) => id !== "admin" || data.me.role === "admin");
+  const inMore = view === "more" || moreNav.some(([id]) => id === view);
   return (
     <main className="ui-v2 command-shell min-h-screen bg-[#0d0d0d] text-white">
       <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
@@ -1502,7 +1527,7 @@ export default function Home() {
             </div>
           </div>
           <nav className="mt-7 space-y-2">
-            {visibleNav.map(([id, label, Icon]: any) => (
+            {mainNav.map(([id, label, Icon]: any) => (
               <button
                 key={id}
                 onClick={() => setView(id)}
@@ -1513,6 +1538,22 @@ export default function Home() {
                 {label}
               </button>
             ))}
+            <p className="side-nav__group">อื่นๆ</p>
+            {moreNav.map(([id, label, Icon]: any) => (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                aria-current={view === id ? "page" : undefined}
+                className="hud-clip-sm side-nav__item"
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            ))}
+            <button onClick={logout} className="hud-clip-sm side-nav__item">
+              <LogOut className="h-4 w-4" />
+              ออกจากระบบ
+            </button>
           </nav>
         </aside>
         <section className="min-w-0 flex-1">
@@ -1523,27 +1564,19 @@ export default function Home() {
               className="topbar__logo lg:hidden"
             />
             <div className="min-w-0 flex-1">
+              <div className="topbar__meta">5K // COMMAND</div>
               <div className="topbar__name">{data.me.name}</div>
-              <div className="topbar__meta">
-                {data.date} · {data.me.role === "admin" ? "แอดมิน" : "สมาชิก"}
-              </div>
             </div>
-            <span className="topbar__score">
-              <b>{data.me.score}</b> PTS
-            </span>
+            <div className="topbar__score">
+              <b>{data.me.monthScore}</b>
+              <span>แต้มเดือนนี้</span>
+            </div>
             <button
               onClick={load}
               aria-label="รีเฟรชข้อมูล"
               className="topbar__icon"
             >
               <RefreshCw className="h-4 w-4" />
-            </button>
-            <button
-              onClick={logout}
-              aria-label="ออกจากระบบ"
-              className="topbar__icon"
-            >
-              <LogOut className="h-4 w-4" />
             </button>
           </header>
           {view === "airdrop" && (
@@ -1558,6 +1591,70 @@ export default function Home() {
               pickerReset={pickerReset}
               onSubmit={(e) => send("airdrop", e)}
             />
+          )}
+          {view === "airdrop" && (
+            <div className="home-stats">
+              <button
+                type="button"
+                onClick={() => setView("score")}
+                className="hud-tile"
+              >
+                <span className="ui-eyebrow">อันดับเดือนนี้</span>
+                <b className="hud-tile__value">
+                  {data.me.monthRank ? `#${data.me.monthRank}` : "—"}
+                </b>
+                <span className="hud-tile__sub">
+                  {data.me.monthRank
+                    ? `${data.me.monthScore} แต้ม`
+                    : "ยังไม่มีแต้มเดือนนี้"}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setView("party")}
+                className="hud-tile"
+              >
+                <span className="ui-eyebrow">ทีมของคุณ</span>
+                <b className="hud-tile__value hud-tile__value--text">
+                  {data.myParty?.name || "ยังไม่มีทีม"}
+                </b>
+                <span className="hud-tile__sub">
+                  {data.myParty
+                    ? `${data.myParty.members?.length || 0}/5 คน`
+                    : "สร้างหรือเข้าร่วมทีม"}
+                </span>
+              </button>
+            </div>
+          )}
+          {view === "more" && (
+            <Panel label="MENU" title="เพิ่มเติม" flush>
+              {moreNav.map(([id, label, Icon, hint]) => (
+                <Row
+                  key={id}
+                  inset={false}
+                  onClick={() => setView(id)}
+                  leading={
+                    <span className="more-icon">
+                      <Icon className="h-5 w-5" />
+                    </span>
+                  }
+                  title={label}
+                  subtitle={hint}
+                  trailing={<ChevronRight className="h-4 w-4 text-[var(--ui-text-3)]" />}
+                />
+              ))}
+              <Row
+                inset={false}
+                onClick={logout}
+                leading={
+                  <span className="more-icon">
+                    <LogOut className="h-5 w-5" />
+                  </span>
+                }
+                title="ออกจากระบบ"
+                subtitle={`เข้าสู่ระบบในชื่อ ${data.me.name}`}
+              />
+            </Panel>
           )}
           {notice && (
             <div className="mb-5 flex items-center justify-between rounded-lg border border-red-400/30 bg-red-950/30 px-4 py-3 text-sm">
@@ -1698,18 +1795,22 @@ export default function Home() {
         </aside>
       </div>
       <nav className="bottom-nav lg:hidden" aria-label="เมนูหลัก">
-        {visibleNav
-          .map(([id, label, Icon]: any) => (
-            <button
-              key={id}
-              onClick={() => setView(id)}
-              aria-current={view === id ? "page" : undefined}
-              className={`bottom-nav__item ${view === id ? "is-active" : ""}`}
-            >
-              <Icon className="h-5 w-5" />
-              <span>{label}</span>
-            </button>
-          ))}
+        {[...mainNav, ["more", "เพิ่มเติม", LayoutGrid] as [string, string, any]].map(
+          ([id, label, Icon]: any) => {
+            const active = id === "more" ? inMore : view === id;
+            return (
+              <button
+                key={id}
+                onClick={() => setView(id)}
+                aria-current={active ? "page" : undefined}
+                className={`bottom-nav__item ${active ? "is-active" : ""}`}
+              >
+                <Icon className="h-5 w-5" />
+                <span>{label}</span>
+              </button>
+            );
+          },
+        )}
       </nav>
       {confirmState && (
         <ConfirmDialog

@@ -951,7 +951,7 @@ button:disabled {
 }
 .ui-segmented__item {
   flex: 1 1 0;
-  min-width: 84px;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1361,4 +1361,144 @@ button:disabled {
   .bottom-nav {
     display: none !important;
   }
+}
+
+/* ---- Esports HUD layer (2026-10 redesign) ----------------------------------
+   Sharper corners, red corner brackets on every card, a "//" tick on section
+   labels, and Orbitron for the numbers people actually read (points, ranks,
+   round times). Latin-only faces: Thai text falls back to the sans stack. */
+:root {
+  --ui-radius: 6px;
+  --ui-radius-sm: 4px;
+}
+.ui-panel,
+.mission { position: relative; }
+.ui-panel::before,
+.ui-panel::after,
+.mission::before,
+.mission::after,
+.hud-tile::before,
+.hud-tile::after {
+  content: "";
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 0 solid var(--ui-red);
+  pointer-events: none;
+  z-index: 1;
+}
+.ui-panel::before,
+.mission::before,
+.hud-tile::before { top: 0; left: 0; border-top-width: 2px; border-left-width: 2px; }
+.ui-panel::after,
+.mission::after,
+.hud-tile::after { right: 0; bottom: 0; border-right-width: 2px; border-bottom-width: 2px; }
+
+/* Wide tracking splits Thai vowel/tone marks away from their consonants, and
+   most labels here are Thai — keep it tight. */
+.ui-eyebrow { letter-spacing: 0.04em; }
+.ui-eyebrow::before { content: "// "; color: var(--ui-red); }
+
+/* Up to four options sit on one row; five or more (the admin tabs) become an
+   even three-column grid on phones instead of a ragged wrap. */
+@media (max-width: 639px) {
+  .ui-segmented:has(> :nth-child(5)) {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+.ui-panel__title { font-size: 16px; font-weight: 700; }
+
+.rank-score,
+.rank-me__pos,
+.rank-me__score,
+.mission__count b,
+.mission__tile-time,
+.topbar__score b,
+.hud-tile__value,
+.rank-num {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+.rank-score { font-size: 15px; }
+.rank-num { width: 26px; font-size: 13px; }
+.rank-me__pos { font-size: 24px; color: #ff8f8f; }
+.rank-me__score { font-size: 18px; }
+.mission__count b { font-size: 24px; }
+
+.ui-btn--lg { min-height: 52px; font-size: 16px; letter-spacing: 0.02em; }
+
+.topbar__meta {
+  color: var(--ui-text-3);
+  font-family: var(--font-hud);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+}
+.topbar__name { font-size: 16px; font-weight: 700; margin-top: 1px; }
+.topbar__score {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 11px;
+  color: var(--ui-text-3);
+}
+.topbar__score b { font-size: 22px; line-height: 1; color: #ff8f8f; }
+
+.home-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.hud-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  padding: 12px 14px;
+  background: var(--ui-card);
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hud-tile:hover { border-color: var(--ui-line-strong); }
+.hud-tile .ui-eyebrow { margin: 0; }
+.hud-tile__value { color: var(--ui-text); font-size: 26px; font-weight: 700; line-height: 1.15; }
+.hud-tile__value--text {
+  max-width: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hud-tile__sub { color: var(--ui-text-3); font-size: 12px; }
+
+.more-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: var(--ui-radius-sm);
+  color: var(--ui-red-light);
+}
+
+.side-nav__group {
+  margin: 0.9rem 0 0.2rem;
+  color: var(--ui-text-3);
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-align: center;
 }

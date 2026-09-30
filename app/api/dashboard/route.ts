@@ -116,6 +116,11 @@ export async function GET(request: Request) {
     const monthTop = (await db.prepare(
       `SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,SUM(x.points) AS score FROM (${POINTS_BY_DAY}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 AND x.day>=? GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 5`
     ).bind(since, `${date.slice(0, 7)}-01`).all()).results;
+    // The home screen headlines the user's own month: score and rank among
+    // everyone who has scored this month (null rank until they score).
+    const monthMe = await db.prepare(
+      `WITH s AS (SELECT x.member_id,SUM(x.points) AS score FROM (${POINTS_BY_DAY}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 AND x.day>=? GROUP BY x.member_id) SELECT (SELECT score FROM s WHERE member_id=?) AS score,(SELECT COUNT(*)+1 FROM s WHERE score>(SELECT score FROM s WHERE member_id=?)) AS rank`
+    ).bind(`${date.slice(0, 7)}-01`, me.id, me.id).first<any>();
     let boards: Record<string, any[]> | null = null;
     let monthBoards: Record<string, any[]> | null = null;
     if (view === "score") {
@@ -142,7 +147,14 @@ export async function GET(request: Request) {
     // without a poll for one view wiping another view's loaded data.
     return json({
       view,
-      me: { id: me.id, name: me.display_name, role: me.role, score: (score as any)?.total || 0 },
+      me: {
+        id: me.id,
+        name: me.display_name,
+        role: me.role,
+        score: (score as any)?.total || 0,
+        monthScore: Number(monthMe?.score || 0),
+        monthRank: monthMe?.score == null ? null : Number(monthMe.rank),
+      },
       date,
       members: members.results,
       airdrops: airdrops.results,
