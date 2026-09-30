@@ -18,7 +18,7 @@ type Props = {
   members: any[];
   call: (body: any) => Promise<boolean>;
   busy: boolean;
-  onSubmit?: (ids: number[], file: File) => Promise<boolean>;
+  onSubmit?: (ids: number[], file: File, shopName: string) => Promise<boolean>;
 };
 
 export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Props) {
@@ -28,6 +28,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
   const [confirmDissolve, setConfirmDissolve] = useState(false);
   const [inviteeIds, setInviteeIds] = useState<number[]>([]);
   const [activityFile, setActivityFile] = useState<File | null>(null);
+  const [shopName, setShopName] = useState("");
   const [activityPickerReset, setActivityPickerReset] = useState(0);
   const [createSearch, setCreateSearch] = useState("");
   const [addSearch, setAddSearch] = useState("");
@@ -141,8 +142,8 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
         <>
           <Panel
             label="PARTY ACTIVITY"
-            title="ส่งหลักฐานกิจกรรมปาร์ตี้"
-            subtitle={`ส่งรูปเดียวเพื่อบันทึกกิจกรรมให้สมาชิก ${party.members.length} คน`}
+            title="ส่งหลักฐานงัดร้าน"
+            subtitle={`1 รูป = 1 ร้าน ให้สมาชิกทั้ง ${party.members.length} คน · ขั้นต่ำวันละ ${data.shop?.perDay ?? 3} ร้าน`}
           >
             <form
               className="space-y-3"
@@ -154,12 +155,22 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 const sent = await onSubmit?.(
                   party.members.map((member: any) => member.id),
                   activityFile,
+                  shopName.trim(),
                 );
                 if (!sent) return;
                 setActivityFile(null);
+                setShopName("");
                 setActivityPickerReset((n) => n + 1);
               }}
             >
+              <input
+                value={shopName}
+                maxLength={60}
+                onChange={(event) => setShopName(event.target.value)}
+                placeholder="ชื่อร้านที่งัด (ไม่บังคับ)"
+                aria-label="ชื่อร้านที่งัด"
+                className="ui-input"
+              />
               <Picker onChange={setActivityFile} resetToken={activityPickerReset} />
               <button
                 disabled={busy || !activityFile}

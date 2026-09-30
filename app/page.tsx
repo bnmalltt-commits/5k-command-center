@@ -79,6 +79,14 @@ type Data = {
   monthTop: any[];
   attendance: any[];
   attendanceLeaves: any[];
+  shopStatus: any[];
+  shopDays: any[];
+  shop?: {
+    start: string;
+    perDay: number;
+    penalty: number;
+    mine: { today: number; debt: number; bank: number; neededToday: number } | null;
+  };
   pendingCount?: number;
 };
 // Baseline so every key is always defined even before its view has been
@@ -101,6 +109,8 @@ const EMPTY_DATA: Omit<Data, "me" | "date" | "myParty"> = {
   monthTop: [],
   attendance: [],
   attendanceLeaves: [],
+  shopStatus: [],
+  shopDays: [],
 };
 const labels: Record<string, string> = {
   pending: "รอตรวจ",
@@ -733,6 +743,10 @@ function AdminCommandCenter({
       .filter((row: any) => row.leave_date === shownAttDate)
       .map((row: any) => String(row.member_id)),
   );
+  const shopsOn = new Map<string, number>();
+  for (const row of data.shopDays)
+    if (row.activity_date === shownAttDate)
+      shopsOn.set(String(row.member_id), Number(row.n));
   const sentStatus = (status?: string) => status === "approved" || status === "pending";
   const attRows = activeMembers
     .map((member: any) => {
@@ -742,6 +756,10 @@ function AdminCommandCenter({
         rounds,
         sent: rounds.filter(sentStatus).length,
         leave: onLeave.has(String(member.id)),
+        shops: shopsOn.get(String(member.id)) || 0,
+        shopDebt: Number(
+          data.shopStatus.find((row: any) => String(row.member_id) === String(member.id))?.debt || 0,
+        ),
       };
     })
     .sort(
@@ -751,6 +769,7 @@ function AdminCommandCenter({
         a.member.display_name.localeCompare(b.member.display_name),
     );
   const attCounts = {
+    shopDebt: attRows.filter((r: any) => r.shopDebt > 0).length,
     missing: attRows.filter((r: any) => !r.leave && r.sent < ROUNDS.length).length,
     done: attRows.filter((r: any) => r.sent === ROUNDS.length).length,
     leave: attRows.filter((r: any) => r.leave).length,
@@ -758,7 +777,9 @@ function AdminCommandCenter({
   const visibleAttendance = attRows.filter(
     (r: any) =>
       matches(r.member.display_name) &&
-      (attFilter === "leave"
+      (attFilter === "shop"
+        ? r.shopDebt > 0
+        : attFilter === "leave"
         ? r.leave
         : attFilter === "done"
           ? r.sent === ROUNDS.length
@@ -841,6 +862,7 @@ function AdminCommandCenter({
                   { id: "missing", label: `ยังไม่ครบ ${attCounts.missing}` },
                   { id: "done", label: `ครบแล้ว ${attCounts.done}` },
                   { id: "leave", label: `ลา ${attCounts.leave}` },
+                  { id: "shop", label: `ค้างงัดร้าน ${attCounts.shopDebt}` },
                 ]}
               />
             </>
@@ -1243,7 +1265,7 @@ function AdminCommandCenter({
                 key={r.member.id}
                 inset={false}
                 title={r.member.display_name}
-                subtitle={r.leave ? "ลา" : `ส่งแล้ว ${r.sent}/${ROUNDS.length} รอบ`}
+                subtitle={`${r.leave ? "ลา" : `ส่งแล้ว ${r.sent}/${ROUNDS.length} รอบ`} · งัด ${r.shops} ร้าน${r.shopDebt > 0 ? ` · ค้าง ${r.shopDebt} ร้าน` : ""}`}
                 trailing={
                   <span className="att-rounds" aria-label="สถานะแต่ละรอบ">
                     {ROUNDS.map((round, index) => (
@@ -1814,6 +1836,43 @@ export default function Home() {
             <div className="home-stats">
               <button
                 type="button"
+                onClick={() => setView("party")}
+                className="hud-tile hud-tile--wide"
+              >
+                <span className="ui-eyebrow">งัดร้านวันนี้</span>
+                {data.shop?.mine ? (
+                  <>
+                    <b className="hud-tile__value">
+                      {data.shop.mine.today}/{data.shop.perDay}
+                    </b>
+                    <span className="hud-tile__sub">
+                      {data.shop.mine.neededToday > 0
+                        ? `ต้องงัดอีก ${data.shop.mine.neededToday} ร้านก่อนจบวัน`
+                        : data.shop.mine.bank > 0
+                          ? `ครบแล้ว · เกินเก็บไว้ ${data.shop.mine.bank} ร้าน`
+                          : "ครบแล้ววันนี้"}
+                    </span>
+                    {data.shop.mine.debt > 0 && (
+                      <span className="hud-tile__warn">
+                        ค้าง {data.shop.mine.debt} ร้าน · ถูกหัก {data.shop.mine.debt * data.shop.penalty} แต้ม (งัดชดแล้วได้คืน)
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <b className="hud-tile__value hud-tile__value--text">
+                      ขั้นต่ำวันละ {data.shop?.perDay ?? 3} ร้าน
+                    </b>
+                    <span className="hud-tile__sub">
+                      {data.shop && data.date < data.shop.start
+                        ? `เริ่มนับ ${Number(data.shop.start.slice(8))}/${Number(data.shop.start.slice(5, 7))} · ขาดร้านละ ${data.shop.penalty} แต้ม`
+                        : "ส่งหลักฐานกิจกรรมปาร์ตี้ 1 ครั้ง = 1 ร้าน"}
+                    </span>
+                  </>
+                )}
+              </button>
+              <button
+                type="button"
                 onClick={() => setView("score")}
                 className="hud-tile"
               >
@@ -1944,7 +2003,7 @@ export default function Home() {
               members={members}
               call={call}
               busy={busy}
-              onSubmit={async (ids, file) => {
+              onSubmit={async (ids, file, shopName) => {
                 if (
                   !(await confirmAsync(
                     `ยืนยันส่งหลักฐานกิจกรรมให้สมาชิก ${ids.length} คนเข้าคิวตรวจใช่หรือไม่?`,
@@ -1957,6 +2016,7 @@ export default function Home() {
                   form.append("type", "party");
                   form.append("image", await shrinkImage(file));
                   form.append("memberIds", JSON.stringify(ids));
+                  if (shopName) form.append("shopName", shopName);
                   const r = await fetch("/api/upload", {
                       method: "POST",
                       body: form,

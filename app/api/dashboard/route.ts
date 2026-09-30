@@ -1,6 +1,7 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
 import { notifyApproval } from "@/lib/notify";
+import { pointsByDaySql, shopStatusSql, SHOP_RULE_START, SHOP_PER_DAY, SHOP_PENALTY } from "@/lib/points";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin } from "@/lib/auth";
 
@@ -30,11 +31,15 @@ function periodStarts(today: string) {
   return { day: today, week: monday };
 }
 
-// Points count toward the day the activity happened, not the day an admin
-// approved it — approvals often land a day or more later. Manual adjustments
-// have no activity, so they use their own Bangkok date.
-const POINTS_BY_DAY =
-  "SELECT pl.member_id,pl.points,CASE pl.source WHEN 'airdrop' THEN a.activity_date WHEN 'party' THEN pa.activity_date ELSE to_char(pl.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok','YYYY-MM-DD') END AS day FROM point_ledger pl LEFT JOIN airdrop_submissions a ON pl.source='airdrop' AND a.id=pl.source_id LEFT JOIN party_activities pa ON pl.source='party' AND pa.id=pl.source_id";
+// Every score read goes through pointsByDaySql (lib/points.ts): ledger points
+// dated by the activity they reward, plus the derived shop-quota penalty.
+// Totals for a set of members, as {member_id, name, total}.
+async function totalsFor(memberIds: unknown[], today: string) {
+  if (!memberIds.length) return [] as any[];
+  return (await db.prepare(
+    `SELECT m.id AS member_id,m.display_name AS name,COALESCE(SUM(x.points),0) AS total FROM members m LEFT JOIN (${pointsByDaySql(today)}) x ON x.member_id=m.id WHERE m.id = ANY(?::bigint[]) GROUP BY m.id`
+  ).bind(memberIds.map(Number)).all<any>()).results;
+}
 
 async function activeParty(memberId: number) {
   return db
@@ -66,6 +71,7 @@ type View = (typeof VIEWS)[number];
 export async function GET(request: Request) {
   try {
     const me = await requireMember(request), date = thaiDate();
+    const POINTS_BY_DAY = pointsByDaySql(date);
     const requested = new URL(request.url).searchParams.get("view");
     const view: View = (VIEWS as readonly string[]).includes(requested || "")
       ? (requested as View)
@@ -86,7 +92,7 @@ export async function GET(request: Request) {
         ? db.prepare("SELECT pa.id,pa.status,pa.image_key,pa.activity_date,pa.created_at,STRING_AGG(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all()
         : empty,
       db.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
-      db.prepare("SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN point_ledger pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100").bind(since).all(),
+      db.prepare(`SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN (${POINTS_BY_DAY}) pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100`).bind(since).all(),
       wants.admin ? db.prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash IS NOT NULL AS has_pin FROM members ORDER BY active DESC,display_name").bind().all() : empty,
       db.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
       wants.party
@@ -103,9 +109,9 @@ export async function GET(request: Request) {
       wants.log
         ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.round_time AS detail,a.activity_date,a.status,a.created_at,a.image_key,m.display_name AS submitted_by,approver.display_name AS approved_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id LEFT JOIN members approver ON approver.id=a.approved_by UNION ALL SELECT 'party' AS type,pa.id,'ปาร์ตี้' AS detail,pa.activity_date,pa.status,pa.created_at,pa.image_key,submitter.display_name AS submitted_by,approver.display_name AS approved_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id LEFT JOIN members approver ON approver.id=pa.approved_by) x ORDER BY created_at DESC LIMIT 300").bind().all()
         : empty,
-      db.prepare("SELECT COALESCE(SUM(points),0) AS total FROM point_ledger WHERE member_id=?").bind(me.id).first<any>(),
+      db.prepare(`SELECT COALESCE(SUM(points),0) AS total FROM (${POINTS_BY_DAY}) x WHERE member_id=?`).bind(me.id).first<any>(),
       wants.admin
-        ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.image_key,a.round_time AS detail,a.created_at,m.display_name AS submitted_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.status='pending' UNION ALL SELECT 'party' AS type,pa.id,pa.image_key,'ปาร์ตี้' AS detail,pa.created_at,submitter.display_name AS submitted_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id WHERE pa.status='pending') x ORDER BY created_at DESC LIMIT 200").bind().all()
+        ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.image_key,a.round_time AS detail,a.created_at,m.display_name AS submitted_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.status='pending' UNION ALL SELECT 'party' AS type,pa.id,pa.image_key,COALESCE('ร้าน '||sp.shop_name,'ปาร์ตี้') AS detail,pa.created_at,submitter.display_name AS submitted_by FROM party_activities pa LEFT JOIN parties sp ON sp.id=pa.party_id LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id WHERE pa.status='pending') x ORDER BY created_at DESC LIMIT 200").bind().all()
         : empty,
     ]);
     // Dependent on partyBase.id, so it can't join the batch above. It stays on
@@ -119,12 +125,17 @@ export async function GET(request: Request) {
     // day needs no extra request.
     const [ay, am, ad] = date.split("-").map(Number);
     const attendanceFrom = new Date(Date.UTC(ay, am - 1, ad - 6)).toISOString().slice(0, 10);
-    const [attendance, attendanceLeaves] = wants.admin
+    const [attendance, attendanceLeaves, shopStatus, shopDays] = wants.admin
       ? await Promise.all([
           db.prepare("SELECT member_id,activity_date,round_time,status FROM airdrop_submissions WHERE activity_date>=?").bind(attendanceFrom).all(),
           db.prepare("SELECT member_id,leave_date FROM leave_requests WHERE leave_date>=? AND leave_date<=?").bind(attendanceFrom, date).all(),
+          db.prepare(shopStatusSql(date)).bind().all(),
+          db.prepare("SELECT pam.member_id,pa.activity_date,COUNT(*) AS n FROM party_activities pa JOIN party_activity_members pam ON pam.party_activity_id=pa.id WHERE pa.status='approved' AND pa.activity_date>=? GROUP BY 1,2").bind(attendanceFrom).all(),
         ])
-      : [null, null];
+      : [null, null, null, null];
+    // The member's own shop-quota standing, for the home screen (null before
+    // the rule starts or for a member it doesn't cover yet).
+    const myShop = await db.prepare(`SELECT * FROM (${shopStatusSql(date)}) s WHERE member_id=?`).bind(me.id).first<any>();
     const [adminParties, ledger, adminLeaves] = wants.admin
       ? await Promise.all([
           db.prepare("SELECT p.id,p.name,p.status,owner.display_name AS owner_name,COALESCE(json_agg(json_build_object('id',m.id,'name',m.display_name) ORDER BY pm.id) FILTER (WHERE m.id IS NOT NULL),'[]') AS members FROM parties p LEFT JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id LEFT JOIN members m ON m.id=pm.member_id WHERE p.status IN ('open','locked') GROUP BY p.id,owner.display_name ORDER BY p.id DESC").bind().all(),
@@ -183,6 +194,17 @@ export async function GET(request: Request) {
       favorites: favorites.results.map((x: any) => x.favorite_member_id),
       leaderboard: leaderboard.results,
       monthTop,
+      shop: {
+        start: SHOP_RULE_START,
+        perDay: SHOP_PER_DAY,
+        penalty: SHOP_PENALTY,
+        mine: myShop && {
+          today: Number(myShop.today),
+          debt: Number(myShop.debt),
+          bank: Number(myShop.bank),
+          neededToday: Number(myShop.needed_today),
+        },
+      },
       ...(pendingCount !== undefined && { pendingCount }),
       myParty: party,
       ...(wants.party && {
@@ -198,6 +220,8 @@ export async function GET(request: Request) {
         adminLeaves: adminLeaves!.results,
         attendance: attendance!.results,
         attendanceLeaves: attendanceLeaves!.results,
+        shopStatus: shopStatus!.results,
+        shopDays: shopDays!.results,
       }),
       ...(boards && { boards, monthBoards }),
       ...(wants.leave && { leaveRequests: leaveRequests.results }),
@@ -225,12 +249,18 @@ export async function POST(request: Request) {
     if (body.action === "approve") {
       const admin = await requireAdmin(request), type = validType(body.type), id = Number(body.id);
       const table = type === "party" ? "party_activities" : "airdrop_submissions", points = type === "party" ? 1 : 3;
-      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key,activity_date${type === "party" ? "" : ",round_time"}`).bind(admin.id, id).first<any>();
-      if (!updated) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
       const recipients = type === "party"
         ? await db.prepare("SELECT member_id FROM party_activity_members WHERE party_activity_id=?").bind(id).all<any>()
         : { results: [await db.prepare("SELECT member_id FROM airdrop_submissions WHERE id=?").bind(id).first<any>()] };
       const credited = recipients.results.filter(Boolean);
+      // Measured, not assumed: a party approval can also refund a shop-quota
+      // penalty, so "after - before" may exceed the points credited here. Read
+      // before the status flips — an approved activity already counts as a
+      // shop, which would fold the refund into "before".
+      const today = thaiDate();
+      const before = await totalsFor(credited.map((r: any) => r.member_id), today);
+      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key,activity_date${type === "party" ? "" : ",round_time"}`).bind(admin.id, id).first<any>();
+      if (!updated) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
       const inserted = await db.batch(
         credited.map((r: any) =>
           db.prepare("INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING")
@@ -242,9 +272,18 @@ export async function POST(request: Request) {
           ? `กิจกรรมปาร์ตี้ · ${updated.activity_date}`
           : `แอร์ดรอปรอบ ${updated.round_time} · ${updated.activity_date}`,
         approvedBy: admin.display_name,
-        points,
-        // Only people this approval actually credited, so "before" is right.
-        memberIds: credited.filter((_: any, i: number) => inserted[i]?.meta.changes).map((r: any) => r.member_id),
+        // Only people this approval actually credited.
+        people: await (async () => {
+          const ids = credited.filter((_: any, i: number) => inserted[i]?.meta.changes).map((r: any) => String(r.member_id));
+          const after = await totalsFor(ids, today);
+          return after
+            .map((row: any) => ({
+              name: row.name,
+              before: Number(before.find((b: any) => String(b.member_id) === String(row.member_id))?.total || 0),
+              after: Number(row.total),
+            }))
+            .sort((a: any, b: any) => a.name.localeCompare(b.name));
+        })(),
         // Read before the delete below — this is the last moment the photo exists.
         loadImage: async () => {
           if (!updated.image_key) return null;

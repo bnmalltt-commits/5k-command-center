@@ -73,7 +73,8 @@ export async function POST(r: Request) {
       if (!ids.every((id: number) => rosterIds.has(id))) throw Error("เลือกได้เฉพาะสมาชิกในปาร์ตี้ของคุณ");
       key = `party/${member.id}/${Date.now()}.${ext}`;
       await storage.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
-      const party = await db.prepare("INSERT INTO parties (name,active) VALUES (?,0) RETURNING id").bind(`กิจกรรม ${today} ${Date.now()}`).first<any>();
+      const shopName = String(form.get("shopName") || "").trim().slice(0, 60) || null;
+      const party = await db.prepare("INSERT INTO parties (name,shop_name,active) VALUES (?,?,0) RETURNING id").bind(`กิจกรรม ${today} ${Date.now()}`, shopName).first<any>();
       const activity = await db.prepare("INSERT INTO party_activities (party_id,activity_date,image_key,status,submitted_by_member_id,created_at) VALUES (?,?,?,'pending',?,?) RETURNING id").bind(party.id, today, key, member.id, now()).first<any>();
       await db.batch(ids.map((id: number) => db.prepare("INSERT INTO party_activity_members (party_activity_id,member_id) VALUES (?,?)").bind(activity.id, id)));
       const names = await db.prepare("SELECT display_name FROM members WHERE id = ANY(?::bigint[]) ORDER BY display_name").bind(ids).all<any>();
@@ -82,6 +83,7 @@ export async function POST(r: Request) {
         lines: [
           ["ประเภท", "กิจกรรมปาร์ตี้"],
           ["ทีม", myParty.name],
+          ["ร้าน", shopName || "ไม่ได้ระบุ"],
           ["จำนวน", `${ids.length} คน`],
           // One box per member so every name shows in full.
           ...names.results.map((r: any, i: number): [string, unknown] => [`สมาชิก ${i + 1}`, r.display_name]),

@@ -87,47 +87,40 @@ export async function notifyEvidence({
 export async function notifyApproval({
   kind,
   approvedBy,
-  points,
-  memberIds,
+  people,
   loadImage,
 }: {
   kind: string;
   approvedBy: string;
-  points: number;
-  memberIds: unknown[];
+  people: { name: string; before: number; after: number }[];
   // Called only when the points channel is configured, so an approval never
   // downloads the evidence just to throw it away.
   loadImage: () => Promise<{ blob: Blob; ext: string } | null>;
 }) {
   const url = process.env.DISCORD_POINTS_WEBHOOK_URL;
-  if (!url || !memberIds.length) return;
+  if (!url || !people.length) return;
   try {
-    const totals = await db
-      .prepare("SELECT m.display_name,COALESCE(SUM(pl.points),0) AS total FROM members m LEFT JOIN point_ledger pl ON pl.member_id=m.id WHERE m.id = ANY(?::bigint[]) GROUP BY m.id ORDER BY m.display_name")
-      .bind(memberIds.map(Number))
-      .all<any>();
-    const people = totals.results;
+    const gain = (p: { before: number; after: number }) => {
+      const d = p.after - p.before;
+      return `${d >= 0 ? "+" : ""}${d} แต้ม`;
+    };
     const lines: Line[] =
       people.length === 1
         ? [
             ["รายการ", kind],
             ["ตรวจโดย", approvedBy],
-            ["คะแนนเดิม", `${Number(people[0].total) - points} แต้ม`],
-            ["เพิ่มขึ้น", `+${points} แต้ม`],
-            ["คะแนนรวม", `${Number(people[0].total)} แต้ม`],
+            ["คะแนนเดิม", `${people[0].before} แต้ม`],
+            ["เพิ่มขึ้น", gain(people[0])],
+            ["คะแนนรวม", `${people[0].after} แต้ม`],
           ]
         : [
             ["รายการ", kind],
             ["ตรวจโดย", approvedBy],
-            ["เพิ่มขึ้น", `+${points} แต้ม ต่อคน`],
-            ...people.map((p: any): Line => [
-              p.display_name,
-              `${Number(p.total) - points} → ${Number(p.total)} แต้ม`,
-            ]),
+            ...people.map((p): Line => [p.name, `${p.before} → ${p.after} แต้ม (${gain(p)})`]),
           ];
     const image = await loadImage().catch(() => null);
     await postCard(url, {
-      title: people.length === 1 ? `${people[0].display_name} ทำคะแนนเพิ่ม` : `ทีม ${people.length} คน ทำคะแนนเพิ่ม`,
+      title: people.length === 1 ? `${people[0].name} ทำคะแนนเพิ่ม` : `ทีม ${people.length} คน ทำคะแนนเพิ่ม`,
       lines,
       color: 0x4ade80,
       ...(image && { image }),
