@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, currentMember } from "@/lib/auth";
-import { notifyAdmins } from "@/lib/notify";
+import { notifyEvidence } from "@/lib/notify";
 
 export const maxDuration = 30;
 
@@ -45,7 +45,17 @@ export async function POST(r: Request) {
         await db.prepare("INSERT INTO airdrop_submissions (member_id,activity_date,round_time,image_key,status,created_at) VALUES (?,?,?,?, 'pending',?)").bind(member.id, today, round, key, now()).run();
       }
       if (old?.image_key) await storage.delete(old.image_key);
-      await notifyAdmins(`${member.display_name} ${old ? "ส่งหลักฐานใหม่" : "ส่งหลักฐาน"}แอร์ดรอปรอบ ${round}`);
+      await notifyEvidence({
+        title: `${member.display_name} ${old ? "ส่งหลักฐานแอร์ดรอปใหม่" : "ส่งหลักฐานแอร์ดรอป"}`,
+        lines: [
+          ["ประเภท", "แอร์ดรอป"],
+          ["รอบ", round],
+          ["วันที่", today],
+          ["สถานะ", old?.status === "rejected" ? "ส่งใหม่หลังไม่ผ่าน" : old ? "แก้ไขหลักฐาน" : "รอตรวจ"],
+        ],
+        image: file,
+        ext,
+      });
     } else if (type === "party") {
       const ids = JSON.parse(String(form.get("memberIds") || "[]")).map(Number);
       // Postgres bigint columns come back as strings from this driver, so
@@ -56,7 +66,7 @@ export async function POST(r: Request) {
       // The submitter can only claim points for people who are actually their
       // current teammates — otherwise anyone could name arbitrary members and
       // farm points for them once an admin approves the photo.
-      const myParty = await db.prepare("SELECT p.id FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1").bind(myId).first<any>();
+      const myParty = await db.prepare("SELECT p.id,p.name FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1").bind(myId).first<any>();
       if (!myParty) throw Error("คุณยังไม่ได้อยู่ในปาร์ตี้");
       const roster = await db.prepare("SELECT member_id FROM party_members WHERE party_id=?").bind(myParty.id).all<any>();
       const rosterIds = new Set(roster.results.map((r: any) => Number(r.member_id)));
@@ -66,7 +76,19 @@ export async function POST(r: Request) {
       const party = await db.prepare("INSERT INTO parties (name,active) VALUES (?,0) RETURNING id").bind(`กิจกรรม ${today} ${Date.now()}`).first<any>();
       const activity = await db.prepare("INSERT INTO party_activities (party_id,activity_date,image_key,status,submitted_by_member_id,created_at) VALUES (?,?,?,'pending',?,?) RETURNING id").bind(party.id, today, key, member.id, now()).first<any>();
       await db.batch(ids.map((id: number) => db.prepare("INSERT INTO party_activity_members (party_activity_id,member_id) VALUES (?,?)").bind(activity.id, id)));
-      await notifyAdmins(`${member.display_name} ส่งหลักฐานกิจกรรมปาร์ตี้ (${ids.length} คน)`);
+      const names = await db.prepare("SELECT display_name FROM members WHERE id = ANY(?::bigint[]) ORDER BY display_name").bind(ids).all<any>();
+      await notifyEvidence({
+        title: `${member.display_name} ส่งหลักฐานกิจกรรมปาร์ตี้`,
+        lines: [
+          ["ประเภท", "กิจกรรมปาร์ตี้"],
+          ["ทีม", myParty.name],
+          ["สมาชิก", `${names.results.map((r: any) => r.display_name).join(", ")} (${ids.length} คน)`],
+          ["วันที่", today],
+          ["สถานะ", "รอตรวจ"],
+        ],
+        image: file,
+        ext,
+      });
     } else throw Error("ประเภทไม่ถูกต้อง");
 
     return Response.json({ ok: true });
