@@ -110,6 +110,20 @@ export async function GET(request: Request) {
     // Dependent on partyBase.id, so it can't join the batch above. It stays on
     // every request because myParty is core chrome (MissionControl reads it).
     const party = await partyDetails(partyBase);
+    // Core, not admin-view-only: the nav badge is read from every view.
+    const pendingCount = me.role === "admin"
+      ? Number((await db.prepare("SELECT (SELECT COUNT(*) FROM airdrop_submissions WHERE status='pending')+(SELECT COUNT(*) FROM party_activities WHERE status='pending') AS n").bind().first<any>())?.n || 0)
+      : undefined;
+    // Last 7 Bangkok dates for the attendance tab, returned whole so picking a
+    // day needs no extra request.
+    const [ay, am, ad] = date.split("-").map(Number);
+    const attendanceFrom = new Date(Date.UTC(ay, am - 1, ad - 6)).toISOString().slice(0, 10);
+    const [attendance, attendanceLeaves] = wants.admin
+      ? await Promise.all([
+          db.prepare("SELECT member_id,activity_date,round_time,status FROM airdrop_submissions WHERE activity_date>=?").bind(attendanceFrom).all(),
+          db.prepare("SELECT member_id,leave_date FROM leave_requests WHERE leave_date>=? AND leave_date<=?").bind(attendanceFrom, date).all(),
+        ])
+      : [null, null];
     const [adminParties, ledger, adminLeaves] = wants.admin
       ? await Promise.all([
           db.prepare("SELECT p.id,p.name,p.status,owner.display_name AS owner_name,COALESCE(json_agg(json_build_object('id',m.id,'name',m.display_name) ORDER BY pm.id) FILTER (WHERE m.id IS NOT NULL),'[]') AS members FROM parties p LEFT JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id LEFT JOIN members m ON m.id=pm.member_id WHERE p.status IN ('open','locked') GROUP BY p.id,owner.display_name ORDER BY p.id DESC").bind().all(),
@@ -168,6 +182,7 @@ export async function GET(request: Request) {
       favorites: favorites.results.map((x: any) => x.favorite_member_id),
       leaderboard: leaderboard.results,
       monthTop,
+      ...(pendingCount !== undefined && { pendingCount }),
       myParty: party,
       ...(wants.party && {
         parties: parties.results,
@@ -180,6 +195,8 @@ export async function GET(request: Request) {
         adminParties: adminParties!.results,
         ledger: ledger!.results,
         adminLeaves: adminLeaves!.results,
+        attendance: attendance!.results,
+        attendanceLeaves: attendanceLeaves!.results,
       }),
       ...(boards && { boards, monthBoards }),
       ...(wants.leave && { leaveRequests: leaveRequests.results }),

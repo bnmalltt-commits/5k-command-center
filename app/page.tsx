@@ -12,6 +12,7 @@ import {
   ChevronRight,
   Crosshair,
   History,
+  KeyRound,
   LayoutGrid,
   LogOut,
   RefreshCw,
@@ -28,6 +29,7 @@ import {
   Dot,
   EmptyState,
   Panel,
+  PinChangeDialog,
   PinDialog,
   PromptDialog,
   Row,
@@ -75,6 +77,9 @@ type Data = {
   boards?: Record<string, any[]>;
   monthBoards?: Record<string, any[]>;
   monthTop: any[];
+  attendance: any[];
+  attendanceLeaves: any[];
+  pendingCount?: number;
 };
 // Baseline so every key is always defined even before its view has been
 // loaded — lets consumers keep doing `data.submissionLog.map(...)` unguarded.
@@ -94,6 +99,8 @@ const EMPTY_DATA: Omit<Data, "me" | "date" | "myParty"> = {
   ledger: [],
   adminLeaves: [],
   monthTop: [],
+  attendance: [],
+  attendanceLeaves: [],
 };
 const labels: Record<string, string> = {
   pending: "รอตรวจ",
@@ -630,8 +637,10 @@ function AdminCommandCenter({
   busy: boolean;
 }) {
   const [tab, setTab] = useState<
-    "verify" | "members" | "parties" | "points" | "leave" | "admins"
+    "verify" | "attendance" | "members" | "parties" | "points" | "leave" | "admins"
   >("verify");
+  const [attDate, setAttDate] = useState(data.date);
+  const [attFilter, setAttFilter] = useState("missing");
   const [query, setQuery] = useState("");
   const [memberFilter, setMemberFilter] = useState("active");
   const [memberName, setMemberName] = useState("");
@@ -702,6 +711,61 @@ function AdminCommandCenter({
       : date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
   };
   const noMatch = <EmptyState title="ไม่พบรายการที่ค้นหา" hint="ลองเปลี่ยนคำค้น" />;
+  // Attendance: the last 7 Bangkok dates, today first. A round counts as sent
+  // once it's pending or approved; a rejected one still needs a resend.
+  const [ty, tm, td] = data.date.split("-").map(Number);
+  const attDates = Array.from({ length: 7 }, (_, i) =>
+    new Date(Date.UTC(ty, tm - 1, td - i)).toISOString().slice(0, 10),
+  );
+  const attLabel = (value: string, index: number) =>
+    index === 0
+      ? "วันนี้"
+      : index === 1
+        ? "เมื่อวาน"
+        : `${Number(value.slice(8))}/${Number(value.slice(5, 7))}`;
+  const shownAttDate = attDates.includes(attDate) ? attDate : attDates[0];
+  const statusByRound = new Map<string, string>();
+  for (const row of data.attendance)
+    if (row.activity_date === shownAttDate)
+      statusByRound.set(`${row.member_id}|${row.round_time}`, row.status);
+  const onLeave = new Set(
+    data.attendanceLeaves
+      .filter((row: any) => row.leave_date === shownAttDate)
+      .map((row: any) => String(row.member_id)),
+  );
+  const sentStatus = (status?: string) => status === "approved" || status === "pending";
+  const attRows = activeMembers
+    .map((member: any) => {
+      const rounds = ROUNDS.map((round) => statusByRound.get(`${member.id}|${round}`));
+      return {
+        member,
+        rounds,
+        sent: rounds.filter(sentStatus).length,
+        leave: onLeave.has(String(member.id)),
+      };
+    })
+    .sort(
+      (a: any, b: any) =>
+        Number(a.leave) - Number(b.leave) ||
+        a.sent - b.sent ||
+        a.member.display_name.localeCompare(b.member.display_name),
+    );
+  const attCounts = {
+    missing: attRows.filter((r: any) => !r.leave && r.sent < ROUNDS.length).length,
+    done: attRows.filter((r: any) => r.sent === ROUNDS.length).length,
+    leave: attRows.filter((r: any) => r.leave).length,
+  };
+  const visibleAttendance = attRows.filter(
+    (r: any) =>
+      matches(r.member.display_name) &&
+      (attFilter === "leave"
+        ? r.leave
+        : attFilter === "done"
+          ? r.sent === ROUNDS.length
+          : !r.leave && r.sent < ROUNDS.length),
+  );
+  const roundTone = (status?: string) =>
+    status === "approved" ? "green" : status === "pending" ? "amber" : status === "rejected" ? "red" : "idle";
 
   return (
     <>
@@ -721,6 +785,7 @@ function AdminCommandCenter({
             }}
             options={[
               { id: "verify", label: "รอตรวจ", count: data.pending.length },
+              { id: "attendance", label: "เช็กชื่อ", count: attCounts.missing },
               { id: "members", label: "สมาชิก", count: activeMembers.length },
               { id: "parties", label: "ปาร์ตี้", count: data.adminParties.length },
               { id: "points", label: "แต้ม" },
@@ -747,6 +812,39 @@ function AdminCommandCenter({
                       : "ค้นหาชื่อสมาชิก"
             }
           />
+
+          {tab === "attendance" && (
+            <>
+              <Chips
+                value={shownAttDate}
+                onChange={setAttDate}
+                options={attDates.map((value, index) => ({
+                  id: value,
+                  label: attLabel(value, index),
+                }))}
+              />
+              <div className="att-summary">
+                {ROUNDS.map((round, index) => (
+                  <div key={round} className="att-summary__cell">
+                    <span className="att-summary__round">{round}</span>
+                    <b>
+                      {attRows.filter((r: any) => sentStatus(r.rounds[index])).length}
+                    </b>
+                    <span className="att-summary__of">/{activeMembers.length}</span>
+                  </div>
+                ))}
+              </div>
+              <Chips
+                value={attFilter}
+                onChange={setAttFilter}
+                options={[
+                  { id: "missing", label: `ยังไม่ครบ ${attCounts.missing}` },
+                  { id: "done", label: `ครบแล้ว ${attCounts.done}` },
+                  { id: "leave", label: `ลา ${attCounts.leave}` },
+                ]}
+              />
+            </>
+          )}
 
           {tab === "members" && (
             <>
@@ -1138,6 +1236,40 @@ function AdminCommandCenter({
             <EmptyState title="ยังไม่มีรายการลา" hint="สมาชิกแจ้งลาได้จากหน้าห้องลา" />
           ))}
 
+        {tab === "attendance" &&
+          (visibleAttendance.length ? (
+            visibleAttendance.map((r: any) => (
+              <Row
+                key={r.member.id}
+                inset={false}
+                title={r.member.display_name}
+                subtitle={r.leave ? "ลา" : `ส่งแล้ว ${r.sent}/${ROUNDS.length} รอบ`}
+                trailing={
+                  <span className="att-rounds" aria-label="สถานะแต่ละรอบ">
+                    {ROUNDS.map((round, index) => (
+                      <span key={round} className="att-rounds__item">
+                        <Dot tone={roundTone(r.rounds[index]) as any} />
+                        <span>{round.slice(0, 2)}</span>
+                      </span>
+                    ))}
+                  </span>
+                }
+              />
+            ))
+          ) : attRows.length && normalizedQuery ? (
+            noMatch
+          ) : (
+            <EmptyState
+              title={
+                attFilter === "missing"
+                  ? "ทุกคนส่งครบหรือแจ้งลาแล้ว"
+                  : attFilter === "done"
+                    ? "ยังไม่มีใครส่งครบ 4 รอบ"
+                    : "ไม่มีใครลาวันนี้"
+              }
+            />
+          ))}
+
         {tab === "admins" &&
           (!sam ? (
             <EmptyState
@@ -1223,6 +1355,7 @@ export default function Home() {
     [loadedViews, setLoadedViews] = useState<string[]>([]),
     [pickerReset, setPickerReset] = useState(0),
     [pinResult, setPinResult] = useState<{ name: string; pin: string }[] | null>(null),
+    [changingPin, setChangingPin] = useState(false),
     [confirmState, setConfirmState] = useState<{
       message: string;
       resolve: (ok: boolean) => void;
@@ -1317,6 +1450,14 @@ export default function Home() {
   // button is the next thing to do (at 00:50 that's 01:00, not 17:00). Only on
   // the first load: a later refresh — including the one that crosses midnight
   // — must never switch the round, which would also clear a chosen image.
+  // Admins see the review queue in the browser tab title even when the app is
+  // in a background tab; the 60s poll keeps it current.
+  useEffect(() => {
+    const n = data?.me.role === "admin" ? data.pendingCount || 0 : 0;
+    document.title = n > 0
+      ? `(${n}) 5K Fivethousand Command Center`
+      : "5K Fivethousand Command Center";
+  }, [data?.pendingCount, data?.me.role]);
   const autoRoundDone = useRef(false);
   useEffect(() => {
     if (!data || autoRoundDone.current) return;
@@ -1445,6 +1586,24 @@ export default function Home() {
       setBusy(false);
     }
   };
+  const changePin = async (currentPin: string, newPin: string) => {
+    setBusy(true);
+    try {
+      const r = await fetch("/api/auth", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ action: "change_pin", currentPin, newPin }),
+        }),
+        x: any = await r.json();
+      if (x.error) return setNotice(x.error);
+      setChangingPin(false);
+      setNotice("เปลี่ยน PIN แล้ว ใช้ PIN ใหม่ตอนเข้าสู่ระบบครั้งหน้า");
+    } catch {
+      setNotice("เปลี่ยน PIN ไม่สำเร็จ ลองใหม่อีกครั้ง");
+    } finally {
+      setBusy(false);
+    }
+  };
   const logout = async () => {
     await fetch("/api/auth", {
       method: "POST",
@@ -1555,6 +1714,12 @@ export default function Home() {
     ] as [string, string, any, string][]
   ).filter(([id]) => id !== "admin" || data.me.role === "admin");
   const inMore = view === "more" || moreNav.some(([id]) => id === view);
+  const pendingCount = data.me.role === "admin" ? data.pendingCount || 0 : 0;
+  const pendingBadge = pendingCount > 0 && (
+    <span className="nav-badge" aria-label={`รอตรวจ ${pendingCount} รายการ`}>
+      {pendingCount > 99 ? "99+" : pendingCount}
+    </span>
+  );
   return (
     <main className="ui-v2 command-shell min-h-screen bg-[#0d0d0d] text-white">
       <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
@@ -1596,8 +1761,13 @@ export default function Home() {
               >
                 <Icon className="h-4 w-4" />
                 {label}
+                {id === "admin" && pendingBadge}
               </button>
             ))}
+            <button onClick={() => setChangingPin(true)} className="hud-clip-sm side-nav__item">
+              <KeyRound className="h-4 w-4" />
+              เปลี่ยน PIN
+            </button>
             <button onClick={logout} className="hud-clip-sm side-nav__item">
               <LogOut className="h-4 w-4" />
               ออกจากระบบ
@@ -1688,9 +1858,26 @@ export default function Home() {
                   }
                   title={label}
                   subtitle={hint}
-                  trailing={<ChevronRight className="h-4 w-4 text-[var(--ui-text-3)]" />}
+                  trailing={
+                    <>
+                      {id === "admin" && pendingBadge}
+                      <ChevronRight className="h-4 w-4 text-[var(--ui-text-3)]" />
+                    </>
+                  }
                 />
               ))}
+              <Row
+                inset={false}
+                onClick={() => setChangingPin(true)}
+                leading={
+                  <span className="more-icon">
+                    <KeyRound className="h-5 w-5" />
+                  </span>
+                }
+                title="เปลี่ยน PIN"
+                subtitle="ตั้ง PIN 6 หลักใหม่ของคุณเอง"
+                trailing={<ChevronRight className="h-4 w-4 text-[var(--ui-text-3)]" />}
+              />
               <Row
                 inset={false}
                 onClick={logout}
@@ -1863,6 +2050,7 @@ export default function Home() {
               >
                 <Icon className="h-5 w-5" />
                 <span>{label}</span>
+                {id === "more" && pendingBadge}
               </button>
             );
           },
@@ -1876,6 +2064,13 @@ export default function Home() {
             confirmState.resolve(ok);
             setConfirmState(null);
           }}
+        />
+      )}
+      {changingPin && (
+        <PinChangeDialog
+          busy={busy}
+          onCancel={() => setChangingPin(false)}
+          onSave={changePin}
         />
       )}
       {pinResult && (

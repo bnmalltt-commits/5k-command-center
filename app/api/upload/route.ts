@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, currentMember } from "@/lib/auth";
+import { notifyAdmins } from "@/lib/notify";
 
 export const maxDuration = 30;
 
@@ -44,6 +45,7 @@ export async function POST(r: Request) {
         await db.prepare("INSERT INTO airdrop_submissions (member_id,activity_date,round_time,image_key,status,created_at) VALUES (?,?,?,?, 'pending',?)").bind(member.id, today, round, key, now()).run();
       }
       if (old?.image_key) await storage.delete(old.image_key);
+      await notifyAdmins(`${member.display_name} ${old ? "ส่งหลักฐานใหม่" : "ส่งหลักฐาน"}แอร์ดรอปรอบ ${round}`);
     } else if (type === "party") {
       const ids = JSON.parse(String(form.get("memberIds") || "[]")).map(Number);
       // Postgres bigint columns come back as strings from this driver, so
@@ -64,6 +66,7 @@ export async function POST(r: Request) {
       const party = await db.prepare("INSERT INTO parties (name,active) VALUES (?,0) RETURNING id").bind(`กิจกรรม ${today} ${Date.now()}`).first<any>();
       const activity = await db.prepare("INSERT INTO party_activities (party_id,activity_date,image_key,status,submitted_by_member_id,created_at) VALUES (?,?,?,'pending',?,?) RETURNING id").bind(party.id, today, key, member.id, now()).first<any>();
       await db.batch(ids.map((id: number) => db.prepare("INSERT INTO party_activity_members (party_activity_id,member_id) VALUES (?,?)").bind(activity.id, id)));
+      await notifyAdmins(`${member.display_name} ส่งหลักฐานกิจกรรมปาร์ตี้ (${ids.length} คน)`);
     } else throw Error("ประเภทไม่ถูกต้อง");
 
     return Response.json({ ok: true });

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { now, makeToken, pinDigest, setSessionCookie, clearSessionCookie } from "@/lib/auth";
+import { now, makeToken, pinDigest, setSessionCookie, clearSessionCookie, currentMember } from "@/lib/auth";
 
 export const maxDuration = 30;
 
@@ -23,6 +23,23 @@ export async function POST(request: Request) {
     if (body.action === "logout") {
       if (cookieToken) await db.prepare("DELETE FROM sessions WHERE token=?").bind(cookieToken).run();
       return new Response(null, { status: 204, headers: { "set-cookie": clearSessionCookie() } });
+    }
+    if (body.action === "change_pin") {
+      const me = await currentMember(request);
+      if (!me || !cookieToken) throw Error("กรุณาเข้าสู่ระบบก่อนเปลี่ยน PIN");
+      const currentPin = String(body.currentPin || "").trim();
+      const newPin = String(body.newPin || "").trim();
+      if (!/^\d{6}$/.test(newPin)) throw Error("PIN ใหม่ต้องเป็นตัวเลข 6 หลัก");
+      if (newPin === currentPin) throw Error("PIN ใหม่ต้องไม่ซ้ำกับ PIN เดิม");
+      // A member with no PIN yet is already signed in as themselves, so there
+      // is nothing to prove; everyone else must know the current one.
+      if (me.pin_hash && me.pin_hash !== (await pinDigest(currentPin))) throw Error("PIN เดิมไม่ถูกต้อง");
+      await db.batch([
+        db.prepare("UPDATE members SET pin_hash=? WHERE id=?").bind(await pinDigest(newPin), me.id),
+        // Sign out every other device on this account; keep this one.
+        db.prepare("DELETE FROM sessions WHERE member_id=? AND token<>?").bind(me.id, cookieToken),
+      ]);
+      return Response.json({ ok: true });
     }
     const identifier = String(body.name || "").trim();
     const pin = String(body.pin || "").trim();
