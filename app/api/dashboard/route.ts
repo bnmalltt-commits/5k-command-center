@@ -64,7 +64,7 @@ export async function GET(request: Request) {
         : empty,
       db.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
       db.prepare("SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN point_ledger pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100").bind(since).all(),
-      wants.admin ? db.prepare("SELECT id,username,display_name,role,active,is_primary_admin FROM members ORDER BY active DESC,display_name").bind().all() : empty,
+      wants.admin ? db.prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash IS NOT NULL AS has_pin FROM members ORDER BY active DESC,display_name").bind().all() : empty,
       db.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
       wants.party
         ? db.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all()
@@ -88,6 +88,15 @@ export async function GET(request: Request) {
     // Dependent on partyBase.id, so it can't join the batch above. It stays on
     // every request because myParty is core chrome (MissionControl reads it).
     const party = await partyDetails(partyBase);
+    const [adminParties, ledger, adminLeaves] = wants.admin
+      ? await Promise.all([
+          db.prepare("SELECT p.id,p.name,p.status,owner.display_name AS owner_name,COALESCE(json_agg(json_build_object('id',m.id,'name',m.display_name) ORDER BY pm.id) FILTER (WHERE m.id IS NOT NULL),'[]') AS members FROM parties p LEFT JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id LEFT JOIN members m ON m.id=pm.member_id WHERE p.status IN ('open','locked') GROUP BY p.id,owner.display_name ORDER BY p.id DESC").bind().all(),
+          // One row per award: a party approval credits up to 5 people under the
+          // same source_id, and undoing it has to take back all of them at once.
+          db.prepare("SELECT pl.source,pl.source_id,MAX(pl.id) AS id,MAX(pl.points) AS points,MAX(pl.note) AS note,MAX(pl.created_at) AS created_at,STRING_AGG(m.display_name,' · ' ORDER BY m.display_name) AS names FROM point_ledger pl JOIN members m ON m.id=pl.member_id GROUP BY pl.source,pl.source_id ORDER BY MAX(pl.id) DESC LIMIT 60").bind().all(),
+          db.prepare("SELECT l.id,l.leave_date,l.reason,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all(),
+        ])
+      : [null, null, null];
     // View-scoped keys are omitted (not sent as []) when they weren't asked
     // for, so the client can merge a response over what it already has
     // without a poll for one view wiping another view's loaded data.
@@ -108,6 +117,9 @@ export async function GET(request: Request) {
       ...(wants.admin && {
         managedMembers: managed.results,
         pending: pending.results,
+        adminParties: adminParties!.results,
+        ledger: ledger!.results,
+        adminLeaves: adminLeaves!.results,
       }),
       ...(wants.leave && { leaveRequests: leaveRequests.results }),
       ...(wants.log && { submissionLog: submissionLog.results }),
@@ -254,6 +266,95 @@ export async function POST(request: Request) {
       }
       await db.batch(statements);
       return json({ ok: true, pins });
+    }
+    // Protective, so any admin may run it: issues PINs only to accounts that
+    // have none, which are otherwise claimable by whoever types the name first.
+    // Sessions are kept — the people signed in there are the real owners.
+    if (body.action === "member_pin_issue_missing") {
+      const admin = await requireAdmin(request);
+      const targets = await db.prepare("SELECT id,display_name FROM members WHERE active=1 AND pin_hash IS NULL AND (is_primary_admin=0 OR id=?) ORDER BY display_name").bind(admin.id).all<any>();
+      if (!targets.results.length) throw Error("ทุกบัญชีมี PIN แล้ว");
+      const pins: { name: string; pin: string }[] = [];
+      const statements = [];
+      for (const target of targets.results) {
+        const pin = randomPin();
+        pins.push({ name: target.display_name, pin });
+        statements.push(db.prepare("UPDATE members SET pin_hash=? WHERE id=? AND pin_hash IS NULL").bind(await pinDigest(pin), target.id));
+      }
+      await db.batch(statements);
+      return json({ ok: true, pins });
+    }
+    if (body.action === "member_reactivate") {
+      await requireAdmin(request);
+      const r = await db.prepare("UPDATE members SET active=1 WHERE id=? AND active=0").bind(Number(body.id)).run();
+      if (!r.meta.changes) throw Error("ไม่พบสมาชิกที่ถูกเอาออก");
+      return json({ ok: true });
+    }
+    if (body.action === "admin_party_dissolve") {
+      await requireAdmin(request);
+      const partyId = Number(body.partyId);
+      const party = await db.prepare("SELECT id FROM parties WHERE id=? AND status IN ('open','locked')").bind(partyId).first<any>();
+      if (!party) throw Error("ไม่พบปาร์ตี้ที่กำลังใช้งาน");
+      await db.batch([
+        db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(partyId),
+        db.prepare("DELETE FROM party_members WHERE party_id=?").bind(partyId),
+      ]);
+      return json({ ok: true });
+    }
+    if (body.action === "admin_party_remove_member") {
+      await requireAdmin(request);
+      const partyId = Number(body.partyId), memberId = Number(body.memberId);
+      const party = await db.prepare("SELECT id,owner_member_id FROM parties WHERE id=? AND status IN ('open','locked')").bind(partyId).first<any>();
+      if (!party) throw Error("ไม่พบปาร์ตี้ที่กำลังใช้งาน");
+      const statements = [db.prepare("DELETE FROM party_members WHERE party_id=? AND member_id=?").bind(partyId, memberId)];
+      // Removing the leader hands the party to the longest-standing member, or
+      // closes it when nobody is left, so it never ends up without a leader.
+      if (sameId(party.owner_member_id, memberId)) {
+        const next = await db.prepare("SELECT member_id FROM party_members WHERE party_id=? AND member_id<>? ORDER BY id LIMIT 1").bind(partyId, memberId).first<any>();
+        statements.push(
+          next
+            ? db.prepare("UPDATE parties SET owner_member_id=? WHERE id=?").bind(next.member_id, partyId)
+            : db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(partyId)
+        );
+      }
+      await db.batch(statements);
+      return json({ ok: true });
+    }
+    if (body.action === "points_adjust") {
+      const admin = await requireAdmin(request);
+      const memberId = Number(body.memberId), points = Number(body.points), reason = String(body.reason || "").trim();
+      if (!Number.isInteger(points) || points === 0 || Math.abs(points) > 100) throw Error("ใส่แต้มเป็นจำนวนเต็ม -100 ถึง 100 และไม่เป็น 0");
+      if (reason.length < 2 || reason.length > 100) throw Error("กรอกเหตุผล 2–100 ตัวอักษร");
+      const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(memberId).first();
+      if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
+      await db.prepare(
+        "INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,'adjustment',(SELECT COALESCE(MAX(source_id),0)+1 FROM point_ledger WHERE source='adjustment'),?,?,?)"
+      ).bind(memberId, points, `${reason} · โดย ${admin.display_name}`, now()).run();
+      return json({ ok: true });
+    }
+    if (body.action === "points_undo") {
+      await requireAdmin(request);
+      const source = String(body.source), sourceId = Number(body.sourceId);
+      if (source === "adjustment") {
+        const r = await db.prepare("DELETE FROM point_ledger WHERE source='adjustment' AND source_id=?").bind(sourceId).run();
+        if (!r.meta.changes) throw Error("ไม่พบรายการแต้มนี้");
+        return json({ ok: true });
+      }
+      const table = validType(source) === "party" ? "party_activities" : "airdrop_submissions";
+      // The evidence image was deleted when this was approved, so it can't go
+      // back to the review queue — it becomes rejected instead.
+      const [revoked] = await db.batch([
+        db.prepare(`UPDATE ${table} SET status='rejected' WHERE id=? AND status='approved'`).bind(sourceId),
+        db.prepare("DELETE FROM point_ledger WHERE source=? AND source_id=?").bind(source, sourceId),
+      ]);
+      if (!revoked.meta.changes) throw Error("รายการนี้ถูกยกเลิกไปแล้วหรือไม่พบข้อมูล");
+      return json({ ok: true });
+    }
+    if (body.action === "leave_delete") {
+      await requireAdmin(request);
+      const r = await db.prepare("DELETE FROM leave_requests WHERE id=?").bind(Number(body.id)).run();
+      if (!r.meta.changes) throw Error("ไม่พบรายการลานี้");
+      return json({ ok: true });
     }
     throw Error("คำสั่งไม่ถูกต้อง");
   } catch (error) {

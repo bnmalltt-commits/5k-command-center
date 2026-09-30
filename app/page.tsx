@@ -50,6 +50,9 @@ type Data = {
   openParties: any[];
   leaveRequests: any[];
   submissionLog: any[];
+  adminParties: any[];
+  ledger: any[];
+  adminLeaves: any[];
 };
 // Baseline so every key is always defined even before its view has been
 // loaded — lets consumers keep doing `data.submissionLog.map(...)` unguarded.
@@ -65,6 +68,9 @@ const EMPTY_DATA: Omit<Data, "me" | "date" | "myParty"> = {
   openParties: [],
   leaveRequests: [],
   submissionLog: [],
+  adminParties: [],
+  ledger: [],
+  adminLeaves: [],
 };
 const labels: Record<string, string> = {
   pending: "รอตรวจ",
@@ -520,10 +526,16 @@ function AdminCommandCenter({
   call: (body: any) => Promise<boolean>;
   busy: boolean;
 }) {
-  const [tab, setTab] = useState<"verify" | "members" | "admins">("verify");
+  const [tab, setTab] = useState<
+    "verify" | "members" | "parties" | "points" | "leave" | "admins"
+  >("verify");
   const [query, setQuery] = useState("");
+  const [memberFilter, setMemberFilter] = useState("active");
   const [memberName, setMemberName] = useState("");
   const [renaming, setRenaming] = useState<any>(null);
+  const [pointMember, setPointMember] = useState("");
+  const [pointValue, setPointValue] = useState("");
+  const [pointReason, setPointReason] = useState("");
   const sam = data.me.name === "Sam";
   // A non-owner admin can only sign in with their member code, and this list
   // is the only place it is ever shown — without it, promoting someone locks
@@ -535,17 +547,20 @@ function AdminCommandCenter({
         ? "แอดมิน (เจ้าของแก๊ง)"
         : "สมาชิก";
   const normalizedQuery = query.trim().toLowerCase();
-  const activeMembers = data.managedMembers.filter(
-    (member: any) => member.active,
-  );
   // Substring, not prefix-per-token: a prefix match can't find a name by the
   // middle of it, which is how people actually search a roster.
   const matches = (text: string) =>
     !normalizedQuery || String(text || "").toLowerCase().includes(normalizedQuery);
-  // Removed members drop out of the roster entirely instead of lingering as
-  // a disabled row — the action reads "เอาออก" (remove), so the list should
-  // behave like they're actually gone.
-  const visibleMembers = activeMembers.filter((member: any) =>
+  const activeMembers = data.managedMembers.filter((member: any) => member.active);
+  const removedMembers = data.managedMembers.filter((member: any) => !member.active);
+  const noPinMembers = activeMembers.filter((member: any) => !member.has_pin);
+  const memberPool =
+    memberFilter === "removed"
+      ? removedMembers
+      : memberFilter === "nopin"
+        ? noPinMembers
+        : activeMembers;
+  const visibleMembers = memberPool.filter((member: any) =>
     matches(member.display_name),
   );
   const visiblePending = data.pending.filter((item: any) =>
@@ -554,6 +569,30 @@ function AdminCommandCenter({
   const visibleAdmins = activeMembers.filter(
     (member: any) => member.id !== data.me.id && matches(member.display_name),
   );
+  const visibleParties = data.adminParties.filter((party: any) =>
+    matches(`${party.name} ${party.owner_name} ${party.members.map((m: any) => m.name).join(" ")}`),
+  );
+  const visibleLedger = data.ledger.filter((entry: any) =>
+    matches(`${entry.names} ${entry.note}`),
+  );
+  const visibleLeaves = data.adminLeaves.filter((leave: any) =>
+    matches(`${leave.display_name} ${leave.reason} ${leave.leave_date}`),
+  );
+  const sourceLabel = (entry: any) =>
+    entry.source === "adjustment"
+      ? "ปรับแต้มโดยแอดมิน"
+      : entry.source === "party"
+        ? "ปาร์ตี้ตรวจผ่าน"
+        : "แอร์ดรอปตรวจผ่าน";
+  // created_at is stored as UTC; without this, anything done between midnight
+  // and 7am in Thailand would be labelled with the previous day.
+  const bangkokDate = (value: string) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? String(value).slice(0, 10)
+      : date.toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+  };
+  const noMatch = <EmptyState title="ไม่พบรายการที่ค้นหา" hint="ลองเปลี่ยนคำค้น" />;
 
   return (
     <>
@@ -574,6 +613,9 @@ function AdminCommandCenter({
             options={[
               { id: "verify", label: "รอตรวจ", count: data.pending.length },
               { id: "members", label: "สมาชิก", count: activeMembers.length },
+              { id: "parties", label: "ปาร์ตี้", count: data.adminParties.length },
+              { id: "points", label: "แต้ม" },
+              { id: "leave", label: "การลา", count: data.adminLeaves.length },
               {
                 id: "admins",
                 label: "แอดมิน",
@@ -585,45 +627,149 @@ function AdminCommandCenter({
             value={query}
             onChange={setQuery}
             placeholder={
-              tab === "verify" ? "ค้นหาผู้ส่งหรือรอบ" : "ค้นหาชื่อสมาชิก"
+              tab === "verify"
+                ? "ค้นหาผู้ส่งหรือรอบ"
+                : tab === "parties"
+                  ? "ค้นหาชื่อปาร์ตี้หรือสมาชิก"
+                  : tab === "points"
+                    ? "ค้นหาชื่อหรือเหตุผล"
+                    : tab === "leave"
+                      ? "ค้นหาชื่อ เหตุผล หรือวันที่"
+                      : "ค้นหาชื่อสมาชิก"
             }
           />
+
           {tab === "members" && (
+            <>
+              <Chips
+                value={memberFilter}
+                onChange={setMemberFilter}
+                options={[
+                  { id: "active", label: `ใช้งาน ${activeMembers.length}` },
+                  { id: "nopin", label: `ยังไม่มี PIN ${noPinMembers.length}` },
+                  { id: "removed", label: `ถูกเอาออก ${removedMembers.length}` },
+                ]}
+              />
+              {noPinMembers.length > 0 && (
+                <div className="admin-warning">
+                  <p>
+                    {noPinMembers.length} บัญชียังไม่มี PIN — ใครพิมพ์ชื่อถูกก็เข้าบัญชีนั้นได้ทันที
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      call({ action: "member_pin_issue_missing", count: noPinMembers.length })
+                    }
+                    className="ui-btn ui-btn--primary ui-btn--sm"
+                  >
+                    สุ่ม PIN ให้ {noPinMembers.length} คนนี้
+                  </button>
+                </div>
+              )}
+              {memberFilter === "active" && (
+                <form
+                  className="flex gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    if (memberName.trim())
+                      void call({ action: "member", name: memberName.trim() }).then(
+                        (saved) => {
+                          if (saved) setMemberName("");
+                        },
+                      );
+                  }}
+                >
+                  <input
+                    required
+                    minLength={2}
+                    maxLength={60}
+                    value={memberName}
+                    onChange={(event) => setMemberName(event.target.value)}
+                    placeholder="ชื่อสมาชิกใหม่"
+                    className="ui-input min-w-0 flex-1"
+                  />
+                  <button disabled={busy} className="ui-btn ui-btn--primary">
+                    เพิ่ม
+                  </button>
+                </form>
+              )}
+              {memberFilter === "active" && sam && (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => call({ action: "member_pin_reset_all" })}
+                  className="ui-btn ui-btn--ghost ui-btn--sm"
+                >
+                  รีเซ็ต PIN ทั้งหมด
+                </button>
+              )}
+            </>
+          )}
+
+          {tab === "points" && (
             <form
-              className="flex gap-2"
+              className="admin-points-form"
               onSubmit={(event) => {
                 event.preventDefault();
-                if (memberName.trim())
-                  void call({ action: "member", name: memberName.trim() }).then(
-                    (saved) => {
-                      if (saved) setMemberName("");
-                    },
-                  );
+                const member = activeMembers.find(
+                  (m: any) => String(m.id) === pointMember,
+                );
+                void call({
+                  action: "points_adjust",
+                  memberId: Number(pointMember),
+                  points: Number(pointValue),
+                  reason: pointReason.trim(),
+                  name: member?.display_name,
+                }).then((saved) => {
+                  if (saved) {
+                    setPointValue("");
+                    setPointReason("");
+                  }
+                });
               }}
             >
+              <select
+                required
+                value={pointMember}
+                onChange={(event) => setPointMember(event.target.value)}
+                className="ui-input"
+                aria-label="สมาชิก"
+              >
+                <option value="">เลือกสมาชิก</option>
+                {activeMembers.map((member: any) => (
+                  <option key={member.id} value={String(member.id)}>
+                    {member.display_name}
+                  </option>
+                ))}
+              </select>
+              <input
+                required
+                type="number"
+                inputMode="numeric"
+                min={-100}
+                max={100}
+                step={1}
+                value={pointValue}
+                onChange={(event) => setPointValue(event.target.value)}
+                placeholder="แต้ม เช่น 3 หรือ -3"
+                className="ui-input"
+                aria-label="จำนวนแต้ม"
+              />
               <input
                 required
                 minLength={2}
-                maxLength={60}
-                value={memberName}
-                onChange={(event) => setMemberName(event.target.value)}
-                placeholder="ชื่อสมาชิกใหม่"
-                className="ui-input min-w-0 flex-1"
+                maxLength={100}
+                value={pointReason}
+                onChange={(event) => setPointReason(event.target.value)}
+                placeholder="เหตุผล"
+                className="ui-input"
+                aria-label="เหตุผล"
               />
               <button disabled={busy} className="ui-btn ui-btn--primary">
-                เพิ่ม
+                บันทึกแต้ม
               </button>
             </form>
-          )}
-          {tab === "members" && sam && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => call({ action: "member_pin_reset_all" })}
-              className="ui-btn ui-btn--ghost ui-btn--sm"
-            >
-              รีเซ็ต PIN ทั้งหมด
-            </button>
           )}
         </div>
 
@@ -671,15 +817,10 @@ function AdminCommandCenter({
                 }
               />
             ))
+          ) : data.pending.length ? (
+            noMatch
           ) : (
-            <EmptyState
-              title={
-                data.pending.length
-                  ? "ไม่พบรายการที่ค้นหา"
-                  : "ไม่มีรายการรอตรวจในตอนนี้"
-              }
-              hint={data.pending.length ? "ลองเปลี่ยนคำค้น" : "คิวตรวจว่างแล้ว"}
-            />
+            <EmptyState title="ไม่มีรายการรอตรวจในตอนนี้" hint="คิวตรวจว่างแล้ว" />
           ))}
 
         {tab === "members" &&
@@ -689,49 +830,203 @@ function AdminCommandCenter({
                 key={member.id}
                 inset={false}
                 title={member.display_name}
-                subtitle={adminSubtitle(member)}
+                subtitle={
+                  member.active && !member.has_pin
+                    ? `${adminSubtitle(member)} · ยังไม่มี PIN`
+                    : adminSubtitle(member)
+                }
                 trailing={
-                  <>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setRenaming(member)}
-                      className="ui-btn ui-btn--ghost ui-btn--sm"
-                    >
-                      แก้ชื่อ
-                    </button>
+                  !member.active ? (
                     <button
                       type="button"
                       disabled={busy}
                       onClick={() =>
                         call({
-                          action: "member_pin_reset",
+                          action: "member_reactivate",
                           id: member.id,
                           name: member.display_name,
                         })
                       }
                       className="ui-btn ui-btn--ghost ui-btn--sm"
                     >
-                      รีเซ็ต PIN
+                      เอากลับเข้าแก๊ง
                     </button>
-                    {member.id !== data.me.id && (
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setRenaming(member)}
+                        className="ui-btn ui-btn--ghost ui-btn--sm"
+                      >
+                        แก้ชื่อ
+                      </button>
                       <button
                         type="button"
                         disabled={busy}
                         onClick={() =>
-                          call({ action: "member_delete", id: member.id })
+                          call({
+                            action: "member_pin_reset",
+                            id: member.id,
+                            name: member.display_name,
+                          })
                         }
                         className="ui-btn ui-btn--ghost ui-btn--sm"
                       >
-                        เอาออก
+                        รีเซ็ต PIN
                       </button>
-                    )}
-                  </>
+                      {member.id !== data.me.id && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            call({ action: "member_delete", id: member.id })
+                          }
+                          className="ui-btn ui-btn--ghost ui-btn--sm"
+                        >
+                          เอาออก
+                        </button>
+                      )}
+                    </>
+                  )
                 }
               />
             ))
+          ) : memberPool.length ? (
+            noMatch
           ) : (
-            <EmptyState title="ไม่พบสมาชิกที่ค้นหา" hint="ลองเปลี่ยนคำค้น" />
+            <EmptyState
+              title={
+                memberFilter === "removed"
+                  ? "ไม่มีสมาชิกที่ถูกเอาออก"
+                  : memberFilter === "nopin"
+                    ? "ทุกบัญชีมี PIN แล้ว"
+                    : "ยังไม่มีสมาชิก"
+              }
+            />
+          ))}
+
+        {tab === "parties" &&
+          (visibleParties.length ? (
+            visibleParties.map((party: any) => (
+              <div key={party.id} className="admin-party">
+                <Row
+                  inset={false}
+                  title={party.name}
+                  subtitle={`หัวหน้า ${party.owner_name || "-"} · ${party.members.length}/5 คน · ${party.status === "locked" ? "ล็อกแล้ว" : "เปิดรับ"}`}
+                  trailing={
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        call({
+                          action: "admin_party_dissolve",
+                          partyId: party.id,
+                          name: party.name,
+                        })
+                      }
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
+                    >
+                      ยุบปาร์ตี้
+                    </button>
+                  }
+                />
+                {party.members.length > 0 && (
+                  <div className="admin-party__members">
+                    {party.members.map((member: any) => (
+                      <button
+                        key={member.id}
+                        type="button"
+                        disabled={busy}
+                        onClick={() =>
+                          call({
+                            action: "admin_party_remove_member",
+                            partyId: party.id,
+                            memberId: member.id,
+                            name: member.name,
+                            partyName: party.name,
+                          })
+                        }
+                        className="admin-party__member"
+                        aria-label={`นำ ${member.name} ออกจากปาร์ตี้`}
+                      >
+                        {member.name} <span aria-hidden="true">×</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          ) : data.adminParties.length ? (
+            noMatch
+          ) : (
+            <EmptyState title="ไม่มีปาร์ตี้ที่กำลังใช้งาน" />
+          ))}
+
+        {tab === "points" &&
+          (visibleLedger.length ? (
+            visibleLedger.map((entry: any) => (
+              <Row
+                key={entry.source + entry.source_id}
+                inset={false}
+                title={`${entry.points > 0 ? "+" : ""}${entry.points} · ${entry.names}`}
+                subtitle={`${entry.source === "adjustment" ? entry.note : sourceLabel(entry)} · ${bangkokDate(entry.created_at)}`}
+                trailing={
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      call({
+                        action: "points_undo",
+                        source: entry.source,
+                        sourceId: entry.source_id,
+                        names: entry.names,
+                      })
+                    }
+                    className="ui-btn ui-btn--ghost ui-btn--sm"
+                  >
+                    ยกเลิก
+                  </button>
+                }
+              />
+            ))
+          ) : data.ledger.length ? (
+            noMatch
+          ) : (
+            <EmptyState title="ยังไม่มีประวัติแต้ม" />
+          ))}
+
+        {tab === "leave" &&
+          (visibleLeaves.length ? (
+            visibleLeaves.map((leave: any) => (
+              <Row
+                key={leave.id}
+                inset={false}
+                title={`${leave.display_name} · ${leave.leave_date}`}
+                subtitle={`${leave.reason} · บันทึกโดย ${leave.created_by_name}`}
+                trailing={
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      call({
+                        action: "leave_delete",
+                        id: leave.id,
+                        name: leave.display_name,
+                        date: leave.leave_date,
+                      })
+                    }
+                    className="ui-btn ui-btn--ghost ui-btn--sm"
+                  >
+                    ลบ
+                  </button>
+                }
+              />
+            ))
+          ) : data.adminLeaves.length ? (
+            noMatch
+          ) : (
+            <EmptyState title="ยังไม่มีรายการลา" hint="สมาชิกแจ้งลาได้จากหน้าห้องลา" />
           ))}
 
         {tab === "admins" &&
@@ -781,7 +1076,7 @@ function AdminCommandCenter({
               />
             ))
           ) : (
-            <EmptyState title="ไม่พบสมาชิกที่ค้นหา" hint="ลองเปลี่ยนคำค้น" />
+            noMatch
           ))}
       </Panel>
       {renaming && (
@@ -921,7 +1216,17 @@ export default function Home() {
       member_update: `ตรวจสอบชื่อก่อนบันทึก\n\nยืนยันเปลี่ยนชื่อเป็น “${body.name}” ใช่หรือไม่?`,
       member_delete: "ยืนยันเอาสมาชิกนี้ออกจากแก๊งใช่หรือไม่? สมาชิกจะออกจากระบบทันทีและจะไม่แสดงในรายชื่ออีก",
       member_pin_reset: `ยืนยันรีเซ็ต PIN ของ “${body.name}” ใช่หรือไม่?\n\nระบบจะสุ่ม PIN ใหม่มาแสดงให้คุณส่งต่อ และสมาชิกคนนี้จะถูกออกจากระบบทันที`,
-      member_pin_reset_all: "ยืนยันรีเซ็ต PIN ของสมาชิกทุกคน (ยกเว้นเจ้าของแก๊ง) ใช่หรือไม่?\n\nระบบจะสุ่ม PIN ใหม่ให้ทุกคนมาแสดงให้คุณส่งต่อ และทุกคนจะถูกออกจากระบบทันที",
+      member_pin_issue_missing: `ยืนยันสุ่ม PIN ให้ ${body.count} บัญชีที่ยังไม่มี PIN ใช่หรือไม่?\n\nระบบจะแสดง PIN ให้คุณส่งต่อ สมาชิกที่ล็อกอินค้างอยู่จะยังใช้งานต่อได้ แต่ครั้งหน้าต้องใช้ PIN นี้`,
+      member_reactivate: `ยืนยันเอา “${body.name}” กลับเข้าแก๊งใช่หรือไม่? แต้มและประวัติเดิมจะกลับมาด้วย`,
+      admin_party_dissolve: `ยืนยันยุบปาร์ตี้ “${body.name}” ใช่หรือไม่? สมาชิกทุกคนจะออกจากทีมทันที`,
+      admin_party_remove_member: `ยืนยันนำ “${body.name}” ออกจากปาร์ตี้ “${body.partyName}” ใช่หรือไม่? ถ้าเป็นหัวหน้า ตำแหน่งจะส่งต่อให้สมาชิกคนถัดไป`,
+      points_adjust: `ยืนยัน${Number(body.points) > 0 ? "เพิ่ม" : "หัก"} ${Math.abs(Number(body.points))} แต้ม ${Number(body.points) > 0 ? "ให้" : "จาก"} “${body.name}” ใช่หรือไม่?\n\nเหตุผล: ${body.reason}`,
+      points_undo:
+        body.source === "adjustment"
+          ? `ยืนยันยกเลิกการปรับแต้มของ “${body.names}” ใช่หรือไม่?`
+          : `ยืนยันยกเลิกการอนุมัตินี้ใช่หรือไม่?\n\nแต้มของ ${body.names} จะถูกดึงคืน และรายการจะเปลี่ยนเป็น “ไม่ผ่าน” (ย้อนกลับไปรอตรวจไม่ได้ เพราะรูปหลักฐานถูกลบไปแล้ว)`,
+      leave_delete: `ยืนยันลบรายการลาของ “${body.name}” วันที่ ${body.date} ใช่หรือไม่?`,
+      member_pin_reset_all:"ยืนยันรีเซ็ต PIN ของสมาชิกทุกคน (ยกเว้นเจ้าของแก๊ง) ใช่หรือไม่?\n\nระบบจะสุ่ม PIN ใหม่ให้ทุกคนมาแสดงให้คุณส่งต่อ และทุกคนจะถูกออกจากระบบทันที",
       admin_access: body.enabled
         ? "ยืนยันเพิ่มสิทธิ์แอดมินให้สมาชิกนี้ใช่หรือไม่?"
         : "ยืนยันถอนสิทธิ์แอดมินของสมาชิกนี้ใช่หรือไม่?",

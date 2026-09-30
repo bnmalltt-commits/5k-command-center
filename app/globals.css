@@ -943,13 +943,15 @@ button:disabled {
 
 .ui-segmented {
   display: flex;
+  flex-wrap: wrap;
   gap: 3px;
   padding: 3px;
   background: rgba(0, 0, 0, 0.28);
   border-radius: var(--ui-radius-sm);
 }
 .ui-segmented__item {
-  flex: 1;
+  flex: 1 1 0;
+  min-width: 84px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1041,6 +1043,57 @@ button:disabled {
   margin-top: 16px;
 }
 .ui-dialog .ui-input { margin-top: 14px; }
+
+.admin-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: var(--ui-radius-sm);
+  background: rgba(251, 191, 36, 0.08);
+}
+.admin-warning p {
+  margin: 0;
+  flex: 1 1 200px;
+  color: var(--ui-amber);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.admin-points-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.admin-party {
+  border-bottom: 1px solid var(--ui-line);
+}
+.admin-party:last-child { border-bottom: 0; }
+.admin-party__members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 16px 12px;
+}
+.admin-party__member {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 999px;
+  background: var(--ui-raised);
+  color: var(--ui-text-2);
+  font-size: 12px;
+  cursor: pointer;
+}
+.admin-party__member:hover:not(:disabled) {
+  border-color: var(--ui-red);
+  color: var(--ui-text);
+}
+.admin-party__member span { color: var(--ui-red-light); }
 
 .pin-list {
   max-height: 46vh;
