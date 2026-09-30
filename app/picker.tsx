@@ -3,6 +3,28 @@
 import { useEffect, useState } from "react";
 import { Camera, Clipboard, X } from "lucide-react";
 
+// Vercel rejects request bodies over 4.5 MB before the upload route runs, and
+// phone photos are often 5–8 MB. Anything over the budget is re-encoded as a
+// JPEG, capped on its long side — plenty to read a screenshot or group photo.
+const UPLOAD_BUDGET = 3.5 * 1024 * 1024;
+export async function shrinkImage(file: File): Promise<File> {
+  if (file.size <= UPLOAD_BUDGET) return file;
+  const bitmap = await createImageBitmap(file);
+  let result: Blob | null = null;
+  for (const [side, quality] of [[2400, 0.85], [1800, 0.8], [1400, 0.72]] as const) {
+    const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    result = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (result && result.size <= UPLOAD_BUDGET) break;
+  }
+  bitmap.close();
+  if (!result) return file;
+  return new File([result], "evidence.jpg", { type: "image/jpeg" });
+}
+
 export function Picker({ onChange, resetToken }: { onChange: (file: File | null) => void; resetToken?: string | number }) {
   const [filename, setFilename] = useState("เลือกรูปหลักฐาน"),
     [preview, setPreview] = useState("");

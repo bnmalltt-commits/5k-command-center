@@ -79,6 +79,14 @@ function prepare(client: Client, text: string) {
   return { bind: (...params: unknown[]) => bound(client, text, params) };
 }
 
+// Put first in a db.batch() that changes party membership. The 5-person cap
+// and "one active party per member" checks are INSERT … WHERE guards, which
+// under READ COMMITTED two concurrent requests can both pass (6-person party,
+// or one member in two parties). Holding this transaction-scoped lock makes
+// those writes take turns; each later statement then sees the other's commit.
+export const partyLock = () =>
+  db.prepare("SELECT pg_advisory_xact_lock(5000)").bind();
+
 export const db = {
   prepare: (text: string) => prepare(getSql(), text),
   // Accepts statements built with db.prepare(sql).bind(...params), same as

@@ -21,7 +21,7 @@ import {
   Users,
 } from "lucide-react";
 import { PartyCommandCenter } from "./party-command-center";
-import { Picker } from "./picker";
+import { Picker, shrinkImage } from "./picker";
 import {
   Chips,
   ConfirmDialog,
@@ -34,6 +34,16 @@ import {
   SearchInput,
   Segmented,
 } from "./ui";
+
+// A 413 from Vercel (body over 4.5 MB) is plain text, not JSON, so a bare
+// r.json() threw and the member only saw a generic failure.
+const uploadResult = async (r: Response) =>
+  r.json().catch(() => ({
+    error:
+      r.status === 413
+        ? "รูปใหญ่เกินไป ลองใช้รูปที่เล็กลงหรือแคปหน้าจอใหม่"
+        : "ส่งรูปไม่สำเร็จ ลองใหม่อีกครั้ง",
+  }));
 
 type Round = "17:00" | "20:00" | "23:00" | "01:00";
 const ROUNDS: Round[] = ["17:00", "20:00", "23:00", "01:00"];
@@ -253,12 +263,27 @@ function SquadRanking({
         ? allTime
         : boards[period];
   const rows = compact ? leaderboard.slice(0, 5) : leaderboard;
+  // Standard competition ranking (10, 10, 7 → 1, 1, 3), matching the rank the
+  // server computes for the home tile, so tied members see the same number.
+  const ranks: number[] = [];
+  leaderboard.forEach((member: any, i: number) => {
+    ranks.push(
+      i > 0 && Number(member.score || 0) === Number(leaderboard[i - 1].score || 0)
+        ? ranks[i - 1]
+        : i + 1,
+    );
+  });
   const myIndex = highlightId
     ? leaderboard.findIndex((member: any) => member.id === highlightId)
     : -1;
   const me = myIndex >= 0 ? leaderboard[myIndex] : null;
-  const ahead = myIndex > 0 ? leaderboard[myIndex - 1] : null;
-  const gap = ahead ? Number(ahead.score || 0) - Number(me.score || 0) : 0;
+  const myRank = myIndex >= 0 ? ranks[myIndex] : 0;
+  // The nearest member strictly ahead; beating them takes one point more than
+  // the difference, since matching their score only ties.
+  const ahead = myRank > 1 ? leaderboard[myRank - 2] : null;
+  const toPass = ahead
+    ? Number(ahead.score || 0) - Number(me.score || 0) + 1
+    : 0;
   return (
     <Panel
       label="SQUAD RANKING"
@@ -300,12 +325,12 @@ function SquadRanking({
       )}
       {!compact && me && (
         <div className="rank-me">
-          <span className="rank-me__pos">#{myIndex + 1}</span>
+          <span className="rank-me__pos">#{myRank}</span>
           <div className="min-w-0 flex-1">
             <div className="rank-me__label">อันดับของคุณ</div>
             <div className="rank-me__hint">
               {ahead
-                ? `อีก ${gap === 0 ? 1 : gap} แต้มจะแซง ${ahead.display_name}`
+                ? `อีก ${toPass} แต้มจะแซง ${ahead.display_name}`
                 : "คุณอยู่อันดับหนึ่งของแก๊ง"}
             </div>
           </div>
@@ -318,8 +343,8 @@ function SquadRanking({
             key={member.id}
             inset={false}
             leading={
-              <span className={`rank-num rank-num--${index + 1}`}>
-                {index + 1}
+              <span className={`rank-num rank-num--${ranks[index]}`}>
+                {ranks[index]}
               </span>
             }
             title={
@@ -631,7 +656,13 @@ function AdminCommandCenter({
     !normalizedQuery || String(text || "").toLowerCase().includes(normalizedQuery);
   const activeMembers = data.managedMembers.filter((member: any) => member.active);
   const removedMembers = data.managedMembers.filter((member: any) => !member.active);
-  const noPinMembers = activeMembers.filter((member: any) => !member.has_pin);
+  // The server never issues a PIN to the owner on another admin's behalf, so
+  // counting the owner here left a warning (and a button) nobody could clear.
+  const noPinMembers = activeMembers.filter(
+    (member: any) =>
+      !member.has_pin &&
+      (!member.is_primary_admin || member.id === data.me.id),
+  );
   const memberPool =
     memberFilter === "removed"
       ? removedMembers
@@ -1282,16 +1313,33 @@ export default function Home() {
       ),
     [data],
   );
-  // Open on the round the member still owes, so the send button on the home
-  // screen is the next thing to do. Once per day only — the 60s refresh must
-  // not yank away a round the member picked by hand.
-  const autoRoundDate = useRef("");
+  // Open on the unsent round closest to the current Bangkok time, so the send
+  // button is the next thing to do (at 00:50 that's 01:00, not 17:00). Only on
+  // the first load: a later refresh — including the one that crosses midnight
+  // — must never switch the round, which would also clear a chosen image.
+  const autoRoundDone = useRef(false);
   useEffect(() => {
-    if (!data || autoRoundDate.current === data.date) return;
-    autoRoundDate.current = data.date;
+    if (!data || autoRoundDone.current) return;
+    autoRoundDone.current = true;
+    const [h, m] = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Bangkok",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .format(new Date())
+      .split(":")
+      .map(Number);
+    const now = h * 60 + m;
+    const distance = (r: Round) => {
+      const [rh, rm] = r.split(":").map(Number);
+      const d = Math.abs(rh * 60 + rm - now);
+      return Math.min(d, 1440 - d);
+    };
+    const byTime = [...ROUNDS].sort((a, b) => distance(a) - distance(b));
     const next =
-      ROUNDS.find((r) => !mine.get(r)) ||
-      ROUNDS.find((r) => mine.get(r)?.status !== "approved");
+      byTime.find((r) => !mine.get(r)) ||
+      byTime.find((r) => mine.get(r)?.status !== "approved");
     if (next) setRound(next);
   }, [data, mine]);
   const confirmationMessage = (body: any) => {
@@ -1350,7 +1398,7 @@ export default function Home() {
           },
         ),
         x: any = await r.json();
-      setNotice(x.error || "บันทึกแล้ว");
+      setNotice(x.error || x.notice || "บันทึกแล้ว");
       if (!x.error) {
         if (x.pins?.length) setPinResult(x.pins);
         await load();
@@ -1379,11 +1427,11 @@ export default function Home() {
     try {
       const form = new FormData();
       form.append("type", type);
-      form.append("image", image);
+      form.append("image", await shrinkImage(image));
       if (type === "airdrop") form.append("round", round);
       else form.append("memberIds", JSON.stringify(crew));
       const r = await fetch("/api/upload", { method: "POST", body: form }),
-        x: any = await r.json();
+        x: any = await uploadResult(r);
       setNotice(x.error || "ส่งเข้าคิวตรวจแล้ว");
       if (!x.error) {
         setImage(null);
@@ -1672,7 +1720,7 @@ export default function Home() {
                     // Approved evidence is deleted from storage to save
                     // space, so there's nothing left to link to.
                     href={
-                      x.status !== "approved"
+                      x.status !== "approved" && x.image_key
                         ? `/api/image/${x.image_key}`
                         : undefined
                     }
@@ -1715,36 +1763,44 @@ export default function Home() {
                     `ยืนยันส่งหลักฐานกิจกรรมให้สมาชิก ${ids.length} คนเข้าคิวตรวจใช่หรือไม่?`,
                   ))
                 )
-                  return;
+                  return false;
                 setBusy(true);
                 try {
                   const form = new FormData();
                   form.append("type", "party");
-                  form.append("image", file);
+                  form.append("image", await shrinkImage(file));
                   form.append("memberIds", JSON.stringify(ids));
                   const r = await fetch("/api/upload", {
                       method: "POST",
                       body: form,
                     }),
-                    x: any = await r.json();
+                    x: any = await uploadResult(r);
                   setNotice(x.error || "ส่งเข้าคิวตรวจแล้ว");
-                  if (!x.error) await load();
+                  if (x.error) return false;
+                  await load();
+                  return true;
                 } catch {
                   setNotice("ส่งหลักฐานกิจกรรมไม่สำเร็จ ลองใหม่อีกครั้ง");
+                  return false;
                 } finally {
                   setBusy(false);
                 }
               }}
             />
             ))}
-          {view === "score" && (
-            <SquadRanking
-              leaderboard={data.leaderboard}
-              boards={data.boards}
-              monthBoards={data.monthBoards}
-              highlightId={data.me.id}
-            />
-          )}
+          {view === "score" &&
+            // Without this the monthly tab briefly (or, if the request fails,
+            // permanently) showed all-time scores under a monthly title.
+            (!loadedViews.includes("score") ? (
+              <ViewLoading />
+            ) : (
+              <SquadRanking
+                leaderboard={data.leaderboard}
+                boards={data.boards}
+                monthBoards={data.monthBoards}
+                highlightId={data.me.id}
+              />
+            ))}
           {view === "admin" &&
             (data.me.role !== "admin" ? (
               <Panel>

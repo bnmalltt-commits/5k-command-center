@@ -12,7 +12,9 @@ const rules: Record<string, [string, number[]]> = {
 
 async function image(file: File) {
   const rule = rules[file.type];
-  if (!rule || file.size > 8 * 1024 * 1024) throw Error("ใช้ไฟล์ JPG, PNG หรือ WebP ขนาดไม่เกิน 8 MB");
+  // Vercel caps the whole request at 4.5 MB, so a larger limit here was never
+  // reachable; the client shrinks big photos to fit before sending.
+  if (!rule || file.size > 4.4 * 1024 * 1024) throw Error("ใช้ไฟล์ JPG, PNG หรือ WebP ขนาดไม่เกิน 4 MB");
   const bytes = new Uint8Array(await file.slice(0, 12).arrayBuffer());
   if (!rule[1].every((n, i) => bytes[i] === n) || (file.type === "image/webp" && String.fromCharCode(...bytes.slice(8, 12)) !== "WEBP"))
     throw Error("ชนิดไฟล์รูปภาพไม่ถูกต้อง");

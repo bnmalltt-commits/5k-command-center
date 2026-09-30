@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       .first<any>();
     if (!known)
       known = await db
-        .prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash FROM members WHERE lower(display_name)=lower(?)")
+        .prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash FROM members WHERE lower(display_name)=lower(?) ORDER BY active DESC,id LIMIT 1")
         .bind(identifier)
         .first<any>();
     if (known && !known.active) throw Error("สมาชิกนี้ถูกปิดใช้งาน โปรดติดต่อแอดมิน");
@@ -46,11 +46,17 @@ export async function POST(request: Request) {
     let member = known;
     if (!member) {
       const username = `5K-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
-      const inserted = await db
-        .prepare("INSERT INTO members (username,display_name,role,active,pin_hash,created_at) VALUES (?,?,?,?,?,?) RETURNING id")
-        .bind(username, identifier, "member", 1, hashedPin, now())
-        .first<any>();
-      member = { id: inserted.id, username, display_name: identifier, role: "member" };
+      // Serialized and guarded so a double-tap on a brand-new name can't create
+      // two accounts with the same display name (one of which could then
+      // never log in, since the name lookup only ever finds one).
+      const [, inserted] = await db.batch([
+        db.prepare("SELECT pg_advisory_xact_lock(5001)").bind(),
+        db
+          .prepare("INSERT INTO members (username,display_name,role,active,pin_hash,created_at) SELECT ?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM members WHERE lower(display_name)=lower(?)) RETURNING id")
+          .bind(username, identifier, "member", 1, hashedPin, now(), identifier),
+      ]);
+      if (!inserted.meta.changes) throw Error("ชื่อนี้เพิ่งถูกใช้สมัคร กดเข้าสู่ระบบอีกครั้ง");
+      member = { id: inserted.meta.last_row_id, username, display_name: identifier, role: "member" };
     } else if (!member.pin_hash) {
       await db.prepare("UPDATE members SET pin_hash=? WHERE id=?").bind(hashedPin, member.id).run();
     }

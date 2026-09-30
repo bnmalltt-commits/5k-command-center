@@ -1,4 +1,5 @@
-import { db } from "@/lib/db";
+import { db, partyLock } from "@/lib/db";
+import { leaveStatements } from "@/lib/party";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin } from "@/lib/auth";
 
@@ -12,6 +13,12 @@ const validType = (type: unknown) => {
   if (type !== "airdrop" && type !== "party") throw Error("ประเภทไม่ถูกต้อง");
   return type;
 };
+
+// Unique, never-reused id for a manual adjustment. MAX(source_id)+1 let two
+// admins saving at once share an id (so one undo removed both) and reused an
+// undone id, so a stale undo could delete someone else's newer adjustment.
+// ms timestamp * 1000 + random stays under Number.MAX_SAFE_INTEGER.
+const adjustmentId = () => Date.now() * 1000 + Math.floor(Math.random() * 1000);
 
 // First Bangkok date of today / this week (Monday), as YYYY-MM-DD so it
 // compares directly against activity_date text.
@@ -272,22 +279,15 @@ export async function POST(request: Request) {
       if (!id || sameId(id, admin.id)) throw Error("ไม่สามารถเอาบัญชีแอดมินของตัวเองออกได้");
       const target = await db.prepare("SELECT is_primary_admin FROM members WHERE id=?").bind(id).first<any>();
       if (!target || target.is_primary_admin) throw Error("ไม่สามารถปิดใช้งานบัญชีเจ้าของแก๊งได้");
-      const owned = await db.prepare("SELECT id FROM parties WHERE owner_member_id=? AND status IN ('open','locked')").bind(id).all<any>();
-      const statements = [
+      const parties = await db.prepare("SELECT DISTINCT p.id FROM parties p LEFT JOIN party_members pm ON pm.party_id=p.id AND pm.member_id=? WHERE p.status IN ('open','locked') AND (pm.member_id IS NOT NULL OR p.owner_member_id=?)").bind(id, id).all<any>();
+      await db.batch([
+        partyLock(),
+        ...parties.results.flatMap((row: any) => leaveStatements(row.id, id)),
         db.prepare("DELETE FROM party_members WHERE member_id=?").bind(id),
         db.prepare("DELETE FROM party_invites WHERE invitee_member_id=? OR inviter_member_id=?").bind(id, id),
         db.prepare("UPDATE members SET active=0 WHERE id=?").bind(id),
         db.prepare("DELETE FROM sessions WHERE member_id=?").bind(id),
-      ];
-      for (const row of owned.results) {
-        const next = await db.prepare("SELECT member_id FROM party_members WHERE party_id=? AND member_id<>? ORDER BY id LIMIT 1").bind(row.id, id).first<any>();
-        statements.push(
-          next
-            ? db.prepare("UPDATE parties SET owner_member_id=? WHERE id=?").bind(next.member_id, row.id)
-            : db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(row.id)
-        );
-      }
-      await db.batch(statements);
+      ]);
       return json({ ok: true });
     }
     // A reset issues a new random PIN rather than clearing pin_hash: the login
@@ -340,7 +340,9 @@ export async function POST(request: Request) {
     }
     if (body.action === "member_reactivate") {
       await requireAdmin(request);
-      const r = await db.prepare("UPDATE members SET active=1 WHERE id=? AND active=0").bind(Number(body.id)).run();
+      // Always comes back as a plain member: removal keeps role='admin', and
+      // only Sam may grant admin, so any admin reactivating must not restore it.
+      const r = await db.prepare("UPDATE members SET active=1,role='member' WHERE id=? AND active=0").bind(Number(body.id)).run();
       if (!r.meta.changes) throw Error("ไม่พบสมาชิกที่ถูกเอาออก");
       return json({ ok: true });
     }
@@ -350,6 +352,7 @@ export async function POST(request: Request) {
       const party = await db.prepare("SELECT id FROM parties WHERE id=? AND status IN ('open','locked')").bind(partyId).first<any>();
       if (!party) throw Error("ไม่พบปาร์ตี้ที่กำลังใช้งาน");
       await db.batch([
+        partyLock(),
         db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(partyId),
         db.prepare("DELETE FROM party_members WHERE party_id=?").bind(partyId),
       ]);
@@ -358,20 +361,11 @@ export async function POST(request: Request) {
     if (body.action === "admin_party_remove_member") {
       await requireAdmin(request);
       const partyId = Number(body.partyId), memberId = Number(body.memberId);
-      const party = await db.prepare("SELECT id,owner_member_id FROM parties WHERE id=? AND status IN ('open','locked')").bind(partyId).first<any>();
+      const party = await db.prepare("SELECT id FROM parties WHERE id=? AND status IN ('open','locked')").bind(partyId).first<any>();
       if (!party) throw Error("ไม่พบปาร์ตี้ที่กำลังใช้งาน");
-      const statements = [db.prepare("DELETE FROM party_members WHERE party_id=? AND member_id=?").bind(partyId, memberId)];
       // Removing the leader hands the party to the longest-standing member, or
       // closes it when nobody is left, so it never ends up without a leader.
-      if (sameId(party.owner_member_id, memberId)) {
-        const next = await db.prepare("SELECT member_id FROM party_members WHERE party_id=? AND member_id<>? ORDER BY id LIMIT 1").bind(partyId, memberId).first<any>();
-        statements.push(
-          next
-            ? db.prepare("UPDATE parties SET owner_member_id=? WHERE id=?").bind(next.member_id, partyId)
-            : db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(partyId)
-        );
-      }
-      await db.batch(statements);
+      await db.batch([partyLock(), ...leaveStatements(partyId, memberId)]);
       return json({ ok: true });
     }
     if (body.action === "points_adjust") {
@@ -382,8 +376,8 @@ export async function POST(request: Request) {
       const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(memberId).first();
       if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
       await db.prepare(
-        "INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,'adjustment',(SELECT COALESCE(MAX(source_id),0)+1 FROM point_ledger WHERE source='adjustment'),?,?,?)"
-      ).bind(memberId, points, `${reason} · โดย ${admin.display_name}`, now()).run();
+        "INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,'adjustment',?,?,?,?)"
+      ).bind(memberId, adjustmentId(), points,`${reason} · โดย ${admin.display_name}`, now()).run();
       return json({ ok: true });
     }
     if (body.action === "points_undo") {
@@ -398,7 +392,7 @@ export async function POST(request: Request) {
       // The evidence image was deleted when this was approved, so it can't go
       // back to the review queue — it becomes rejected instead.
       const [revoked] = await db.batch([
-        db.prepare(`UPDATE ${table} SET status='rejected' WHERE id=? AND status='approved'`).bind(sourceId),
+        db.prepare(`UPDATE ${table} SET status='rejected',image_key='' WHERE id=? AND status='approved'`).bind(sourceId),
         db.prepare("DELETE FROM point_ledger WHERE source=? AND source_id=?").bind(source, sourceId),
       ]);
       if (!revoked.meta.changes) throw Error("รายการนี้ถูกยกเลิกไปแล้วหรือไม่พบข้อมูล");

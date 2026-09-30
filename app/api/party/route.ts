@@ -1,4 +1,5 @@
-import { db } from "@/lib/db";
+import { db, partyLock } from "@/lib/db";
+import { leaveStatements } from "@/lib/party";
 import { now, requireMember, json, sameId } from "@/lib/auth";
 
 export const maxDuration = 30;
@@ -30,15 +31,29 @@ export async function POST(request: Request) {
       // WHERE guards (5-person cap, not already in another active party)
       // re-check atomically at insert time, since the earlier loop's checks
       // can race with a concurrent request.
-      await db.batch([
-        db.prepare("INSERT INTO party_members (party_id,member_id,joined_at) VALUES (?,?,?)").bind(partyId, me.id, now()),
+      const [, creator, ...added] = await db.batch([
+        partyLock(),
+        db.prepare(
+          "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked') AND p.id<>?)"
+        ).bind(partyId, me.id, now(), me.id, partyId),
         ...memberIds.map((memberId) =>
           db.prepare(
-            "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
-          ).bind(partyId, memberId, now(), partyId, memberId),
+            "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM party_members WHERE party_id=? AND member_id=?) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
+          ).bind(partyId, memberId, now(), partyId, me.id, partyId, memberId),
         ),
       ]);
-      return json({ ok: true });
+      // A second tab created a party first: don't leave this one behind empty.
+      if (!creator.meta.changes) {
+        await db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(partyId).run();
+        throw Error("คุณอยู่ในปาร์ตี้ที่กำลังใช้งานอยู่แล้ว");
+      }
+      const joined = added.filter((r) => r.meta.changes).length;
+      return json({
+        ok: true,
+        ...(joined < memberIds.length && {
+          notice: `สร้างปาร์ตี้แล้ว เพิ่มได้ ${joined} จาก ${memberIds.length} คน — คนที่เหลือเพิ่งเข้าทีมอื่นไป`,
+        }),
+      });
     }
 
     if (body.action === "party_update") {
@@ -60,9 +75,12 @@ export async function POST(request: Request) {
       const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(memberId).first();
       if (!target || sameId(memberId, me.id)) throw Error("ไม่พบสมาชิกที่เลือก");
       if (await activeParty(memberId)) throw Error("สมาชิกคนนี้อยู่ในปาร์ตี้อื่นแล้ว");
-      const joined = await db.prepare(
-        "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM parties WHERE id=? AND status='open' AND active=1) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
-      ).bind(partyId, memberId, now(), partyId, partyId, memberId).run();
+      const [, joined] = await db.batch([
+        partyLock(),
+        db.prepare(
+          "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM parties WHERE id=? AND status='open' AND active=1) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
+        ).bind(partyId, memberId, now(), partyId, partyId, memberId),
+      ]);
       if (!joined.meta.changes) throw Error("ปาร์ตี้นี้เต็ม ปิดรับสมาชิกแล้ว หรือสมาชิกคนนี้อยู่ในทีมอื่นแล้ว");
       return json({ ok: true });
     }
@@ -72,9 +90,12 @@ export async function POST(request: Request) {
       const invite = await db.prepare("SELECT i.id,i.party_id,p.status FROM party_invites i JOIN parties p ON p.id=i.party_id WHERE i.id=? AND i.invitee_member_id=? AND i.status='pending'").bind(inviteId, me.id).first<any>();
       if (!invite) throw Error("ไม่พบคำเชิญหรือคำเชิญหมดอายุแล้ว");
       if (body.accept) {
-        const joined = await db.prepare(
-          "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM party_invites i JOIN parties p ON p.id=i.party_id WHERE i.id=? AND i.invitee_member_id=? AND i.status='pending' AND p.status='open' AND p.active=1) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
-        ).bind(invite.party_id, me.id, now(), inviteId, me.id, invite.party_id, me.id).run();
+        const [, joined] = await db.batch([
+          partyLock(),
+          db.prepare(
+            "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM party_invites i JOIN parties p ON p.id=i.party_id WHERE i.id=? AND i.invitee_member_id=? AND i.status='pending' AND p.status='open' AND p.active=1) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
+          ).bind(invite.party_id, me.id, now(), inviteId, me.id, invite.party_id, me.id),
+        ]);
         if (!joined.meta.changes) throw Error("ปาร์ตี้นี้เต็ม ปิดรับสมาชิกแล้ว หรือคุณอยู่ในทีมอื่น");
         await db.prepare("UPDATE party_invites SET status='accepted',responded_at=? WHERE id=? AND status='pending'").bind(now(), inviteId).run();
       } else {
@@ -86,9 +107,12 @@ export async function POST(request: Request) {
     if (body.action === "party_join") {
       const partyId = Number(body.partyId);
       if (await activeParty(me.id)) throw Error("คุณอยู่ในปาร์ตี้ที่กำลังใช้งานอยู่แล้ว");
-      const joined = await db.prepare(
-        "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM parties WHERE id=? AND status='open' AND active=1) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
-      ).bind(partyId, me.id, now(), partyId, partyId, me.id).run();
+      const [, joined] = await db.batch([
+        partyLock(),
+        db.prepare(
+          "INSERT INTO party_members (party_id,member_id,joined_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM parties WHERE id=? AND status='open' AND active=1) AND (SELECT COUNT(*) FROM party_members WHERE party_id=?)<5 AND NOT EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=? AND p.status IN ('open','locked'))"
+        ).bind(partyId, me.id, now(), partyId, partyId, me.id),
+      ]);
       if (!joined.meta.changes) throw Error("ปาร์ตี้นี้เต็ม ปิดรับสมาชิกแล้ว หรือคุณอยู่ในทีมอื่น");
       return json({ ok: true });
     }
@@ -105,6 +129,7 @@ export async function POST(request: Request) {
       const party = await db.prepare("SELECT id,owner_member_id,status,active FROM parties WHERE id=?").bind(Number(body.partyId)).first<any>();
       if (!party || !party.active || !["open", "locked"].includes(party.status) || party.owner_member_id !== me.id) throw Error("เฉพาะหัวหน้าปาร์ตี้ของทีมที่กำลังใช้งานเท่านั้น");
       await db.batch([
+        partyLock(),
         db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(party.id),
         db.prepare("DELETE FROM party_members WHERE party_id=?").bind(party.id),
       ]);
@@ -114,11 +139,7 @@ export async function POST(request: Request) {
     if (body.action === "party_leave") {
       const party = await db.prepare("SELECT p.id,p.owner_member_id FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1").bind(me.id).first<any>();
       if (!party) throw Error("คุณไม่ได้อยู่ในปาร์ตี้");
-      const next = party.owner_member_id === me.id ? await db.prepare("SELECT member_id FROM party_members WHERE party_id=? AND member_id<>? ORDER BY id LIMIT 1").bind(party.id, me.id).first<any>() : null;
-      const statements = [db.prepare("DELETE FROM party_members WHERE party_id=? AND member_id=?").bind(party.id, me.id)];
-      if (next) statements.push(db.prepare("UPDATE parties SET owner_member_id=? WHERE id=?").bind(next.member_id, party.id));
-      else if (party.owner_member_id === me.id) statements.push(db.prepare("UPDATE parties SET status='completed',active=0 WHERE id=?").bind(party.id));
-      await db.batch(statements);
+      await db.batch([partyLock(), ...leaveStatements(party.id, me.id)]);
       return json({ ok: true });
     }
 
@@ -127,7 +148,7 @@ export async function POST(request: Request) {
       if (!party || party.owner_member_id !== me.id) throw Error("เฉพาะหัวหน้าปาร์ตี้เท่านั้น");
       const memberId = Number(body.memberId);
       if (sameId(memberId, me.id)) throw Error("หัวหน้าต้องใช้ปุ่มออกจากปาร์ตี้");
-      await db.prepare("DELETE FROM party_members WHERE party_id=? AND member_id=?").bind(party.id, memberId).run();
+      await db.batch([partyLock(), db.prepare("DELETE FROM party_members WHERE party_id=? AND member_id=?").bind(party.id, memberId)]);
       return json({ ok: true });
     }
 

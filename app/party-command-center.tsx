@@ -16,9 +16,9 @@ import {
 type Props = {
   data: any;
   members: any[];
-  call: (body: any) => void;
+  call: (body: any) => Promise<boolean>;
   busy: boolean;
-  onSubmit?: (ids: number[], file: File) => void;
+  onSubmit?: (ids: number[], file: File) => Promise<boolean>;
 };
 
 export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Props) {
@@ -149,10 +149,13 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
               onSubmit={async (event) => {
                 event.preventDefault();
                 if (!activityFile) return;
-                await onSubmit?.(
+                // Keep the photo when the member cancels the confirm or the
+                // upload fails, so they can retry without picking it again.
+                const sent = await onSubmit?.(
                   party.members.map((member: any) => member.id),
                   activityFile,
                 );
+                if (!sent) return;
                 setActivityFile(null);
                 setActivityPickerReset((n) => n + 1);
               }}
@@ -181,7 +184,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                     // Approved evidence is deleted from storage to save space,
                     // so there's nothing left to link to.
                     href={
-                      activity.status !== "approved"
+                      activity.status !== "approved" && activity.image_key
                         ? `/api/image/${activity.image_key}`
                         : undefined
                     }
@@ -248,7 +251,13 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
               onSubmit={(event) => {
                 event.preventDefault();
                 if (name.trim())
-                  call({ action: "party_create", name, memberIds: inviteeIds });
+                  void call({ action: "party_create", name, memberIds: inviteeIds }).then(
+                    (created) => {
+                      // Otherwise the old picks stay selected after this party
+                      // is dissolved and silently ride into the next one.
+                      if (created) setInviteeIds([]);
+                    },
+                  );
               }}
             >
               <p className="label">CREATE SQUAD</p>
