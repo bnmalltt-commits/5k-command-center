@@ -1,5 +1,6 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
+import { notifyApproval } from "@/lib/notify";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin } from "@/lib/auth";
 
@@ -224,17 +225,27 @@ export async function POST(request: Request) {
     if (body.action === "approve") {
       const admin = await requireAdmin(request), type = validType(body.type), id = Number(body.id);
       const table = type === "party" ? "party_activities" : "airdrop_submissions", points = type === "party" ? 1 : 3;
-      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key`).bind(admin.id, id).first<any>();
+      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key,activity_date${type === "party" ? "" : ",round_time"}`).bind(admin.id, id).first<any>();
       if (!updated) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
       const recipients = type === "party"
         ? await db.prepare("SELECT member_id FROM party_activity_members WHERE party_activity_id=?").bind(id).all<any>()
         : { results: [await db.prepare("SELECT member_id FROM airdrop_submissions WHERE id=?").bind(id).first<any>()] };
-      await db.batch(
-        recipients.results.filter(Boolean).map((r: any) =>
+      const credited = recipients.results.filter(Boolean);
+      const inserted = await db.batch(
+        credited.map((r: any) =>
           db.prepare("INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING")
             .bind(r.member_id, type, id, points, type === "party" ? "ปาร์ตี้ตรวจผ่าน" : "แอร์ดรอปตรวจผ่าน", now())
         )
       );
+      await notifyApproval({
+        kind: type === "party"
+          ? `กิจกรรมปาร์ตี้ · ${updated.activity_date}`
+          : `แอร์ดรอปรอบ ${updated.round_time} · ${updated.activity_date}`,
+        approvedBy: admin.display_name,
+        points,
+        // Only people this approval actually credited, so "before" is right.
+        memberIds: credited.filter((_: any, i: number) => inserted[i]?.meta.changes).map((r: any) => r.member_id),
+      });
       // Evidence is only needed until it's verified — delete it once approved
       // so storage doesn't fill up. Best-effort: never fail the approval over it.
       if (updated.image_key) await storage.delete(updated.image_key).catch(() => {});

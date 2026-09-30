@@ -82,7 +82,9 @@ export async function POST(r: Request) {
         lines: [
           ["ประเภท", "กิจกรรมปาร์ตี้"],
           ["ทีม", myParty.name],
-          ["สมาชิก", `${names.results.map((r: any) => r.display_name).join(", ")} (${ids.length} คน)`],
+          ["จำนวน", `${ids.length} คน`],
+          // One box per member so every name shows in full.
+          ...names.results.map((r: any, i: number): [string, unknown] => [`สมาชิก ${i + 1}`, r.display_name]),
           ["วันที่", today],
           ["สถานะ", "รอตรวจ"],
         ],
