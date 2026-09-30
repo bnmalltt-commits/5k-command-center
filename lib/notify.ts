@@ -89,11 +89,15 @@ export async function notifyApproval({
   approvedBy,
   points,
   memberIds,
+  loadImage,
 }: {
   kind: string;
   approvedBy: string;
   points: number;
   memberIds: unknown[];
+  // Called only when the points channel is configured, so an approval never
+  // downloads the evidence just to throw it away.
+  loadImage: () => Promise<{ blob: Blob; ext: string } | null>;
 }) {
   const url = process.env.DISCORD_POINTS_WEBHOOK_URL;
   if (!url || !memberIds.length) return;
@@ -121,10 +125,12 @@ export async function notifyApproval({
               `${Number(p.total) - points} → ${Number(p.total)} แต้ม`,
             ]),
           ];
+    const image = await loadImage().catch(() => null);
     await postCard(url, {
       title: people.length === 1 ? `${people[0].display_name} ทำคะแนนเพิ่ม` : `ทีม ${people.length} คน ทำคะแนนเพิ่ม`,
       lines,
       color: 0x4ade80,
+      ...(image && { image }),
     });
   } catch {
     // Notification is optional; the approval already succeeded.

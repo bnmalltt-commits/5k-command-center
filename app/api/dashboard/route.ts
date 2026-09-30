@@ -245,6 +245,16 @@ export async function POST(request: Request) {
         points,
         // Only people this approval actually credited, so "before" is right.
         memberIds: credited.filter((_: any, i: number) => inserted[i]?.meta.changes).map((r: any) => r.member_id),
+        // Read before the delete below — this is the last moment the photo exists.
+        loadImage: async () => {
+          if (!updated.image_key) return null;
+          const object = await storage.get(updated.image_key);
+          if (!object) return null;
+          return {
+            blob: await new Response(object.body).blob(),
+            ext: String(updated.image_key).split(".").pop() || "png",
+          };
+        },
       });
       // Evidence is only needed until it's verified — delete it once approved
       // so storage doesn't fill up. Best-effort: never fail the approval over it.
