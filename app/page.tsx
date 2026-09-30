@@ -1456,7 +1456,7 @@ export default function Home() {
             <input required inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={loginPin} onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="รหัสสมาชิก 6 หลัก" className="hud-clip w-full border border-white/15 bg-black/30 px-4 py-3 text-center tracking-[0.35em]" />
             <button
               disabled={busy}
-              className="red-action hud-clip w-full disabled:opacity-40"
+              className="red-action hud-clip w-full"
             >
               เข้าสู่ระบบ
             </button>

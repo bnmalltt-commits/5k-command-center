@@ -282,7 +282,7 @@ body > main {
   justify-content: center;
   gap: 0.65rem;
   border-radius: 0.5rem;
-  background: linear-gradient(135deg, var(--ui-red), var(--ui-red-deep));
+  background: var(--ui-red-fill);
   padding: 0.9rem 1rem;
   color: #fff;
   font-size: 0.84rem;
@@ -988,8 +988,8 @@ button:disabled {
   cursor: pointer;
   border: 1px solid transparent;
 }
-.ui-btn:disabled { opacity: 0.45; cursor: default; }
-.ui-btn--primary { background: var(--ui-red); color: #fff; }
+.ui-btn:disabled { cursor: not-allowed; }
+.ui-btn--primary { background: var(--ui-red-fill); color: #fff; }
 .ui-btn--ghost {
   background: none;
   border-color: var(--ui-line-strong);
@@ -1221,7 +1221,7 @@ button:disabled {
 .mission__tile.is-pending .mission__tile-state { color: var(--ui-amber); }
 .mission__tile.is-rejected { border-color: rgba(242, 5, 5, 0.45); }
 .mission__tile.is-rejected .mission__tile-top,
-.mission__tile.is-rejected .mission__tile-state { color: var(--ui-red); }
+.mission__tile.is-rejected .mission__tile-state { color: var(--ui-red-light); }
 .mission__tile.is-active {
   border-color: var(--ui-red);
   background: rgba(140, 3, 3, 0.3);
@@ -1502,3 +1502,36 @@ button:disabled {
   letter-spacing: 0.14em;
   text-align: center;
 }
+
+/* Native controls (select popups, date pickers, number spinners, scrollbars)
+   follow color-scheme, not our CSS. Without this the browser draws a light
+   popup under our near-white option text, which is unreadable. */
+:root { color-scheme: dark; }
+select option,
+select optgroup {
+  background: #1b1b1b;
+  color: var(--ui-text);
+}
+select option:checked { background: var(--ui-red-deep); color: #fff; }
+
+/* ---- Readability pass (2026-10) -------------------------------------------
+   White on #f20505 is only 4.4:1, so filled red controls use a deeper red
+   (5.7:1). #f20505 stays for borders, bars and icons, and red *text* uses
+   --ui-red-light. Disabled buttons used to fade the whole button to ~45%,
+   which dropped the home screen's main button to 1.6:1 — they now stay
+   solid and legible, just visibly inert. */
+:root { --ui-red-fill: #d00404; }
+.ui-btn--primary:disabled,
+.red-action:disabled {
+  background: #3a1111;
+  border-color: rgba(242, 5, 5, 0.35);
+  color: #e3b8b8;
+  opacity: 1;
+  filter: none;
+}
+.ui-btn--ghost:disabled {
+  border-style: dashed;
+  color: var(--ui-text-3);
+  opacity: 1;
+}
+.ui-btn--ok:disabled { background: #173a24; color: #b8e6c7; opacity: 1; }
