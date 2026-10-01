@@ -1593,3 +1593,29 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
 
 .hud-tile--wide { grid-column: 1 / -1; }
 .hud-tile__warn { color: var(--ui-red-light); font-size: 12px; }
+
+.login-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 12px;
+  color: var(--ui-text-3);
+  font-size: 12px;
+}
+.login-or::before,
+.login-or::after { content: ""; flex: 1; height: 1px; background: var(--ui-line-strong); }
+.discord-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 46px;
+  border-radius: var(--ui-radius-sm);
+  background: #5865f2;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  text-decoration: none;
+}
+.discord-btn:hover { background: #4752c4; }

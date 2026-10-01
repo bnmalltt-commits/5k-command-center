@@ -47,6 +47,14 @@ const uploadResult = async (r: Response) =>
         : "ส่งรูปไม่สำเร็จ ลองใหม่อีกครั้ง",
   }));
 
+function DiscordMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
+      <path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.2.5a18 18 0 0 1 4.4 2.2 15.5 15.5 0 0 0-15.2 0A18 18 0 0 1 8.8 3.5L8.6 3a19.6 19.6 0 0 0-4.9 1.4C.6 9 -.2 13.5.2 18a19.7 19.7 0 0 0 6 3l.8-1.2-1.6-.8.4-.3a14 14 0 0 0 12.4 0l.4.3-1.6.8.8 1.2a19.7 19.7 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.6ZM8.3 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.4 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
+    </svg>
+  );
+}
+
 type Round = "17:00" | "20:00" | "23:00" | "01:00";
 const ROUNDS: Round[] = ["17:00", "20:00", "23:00", "01:00"];
 type Data = {
@@ -57,6 +65,7 @@ type Data = {
     score: number;
     monthScore: number;
     monthRank: number | null;
+    discordLinked?: boolean;
   };
   date: string;
   members: any[];
@@ -1480,6 +1489,12 @@ export default function Home() {
       ? `(${n}) 5K Fivethousand Command Center`
       : "5K Fivethousand Command Center";
   }, [data?.pendingCount, data?.me.role]);
+  useEffect(() => {
+    const message = new URLSearchParams(window.location.search).get("discord");
+    if (message === null) return;
+    setNotice(message === "unavailable" ? "ยังไม่ได้ตั้งค่าเข้าสู่ระบบด้วย Discord" : message || "เข้าสู่ระบบด้วย Discord แล้ว");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
   const autoRoundDone = useRef(false);
   useEffect(() => {
     if (!data || autoRoundDone.current) return;
@@ -1608,6 +1623,17 @@ export default function Home() {
       setBusy(false);
     }
   };
+  const unlinkDiscord = async () => {
+    if (!(await confirmAsync("เลิกเชื่อม Discord ใช่หรือไม่? ครั้งหน้าต้องเข้าสู่ระบบด้วยชื่อและ PIN"))) return;
+    const r = await fetch("/api/auth/discord", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "unlink" }),
+    });
+    const x: any = await r.json().catch(() => ({}));
+    setNotice(x.error || "เลิกเชื่อม Discord แล้ว");
+    if (!x.error) await load();
+  };
   const changePin = async (currentPin: string, newPin: string) => {
     setBusy(true);
     try {
@@ -1690,6 +1716,14 @@ export default function Home() {
               เข้าสู่ระบบ
             </button>
           </form>
+          <div className="login-or"><span>หรือ</span></div>
+          <a href="/api/auth/discord" className="discord-btn">
+            <DiscordMark />
+            เข้าสู่ระบบด้วย Discord
+          </a>
+          <p className="mt-2 text-xs text-[var(--ui-text-3)]">
+            ครั้งแรกต้องเข้าด้วยชื่อและ PIN แล้วกด เพิ่มเติม → เชื่อม Discord ก่อน
+          </p>
           {notice && <p className="mt-4 text-sm text-[var(--ui-text)]">{notice}</p>}
         </section>
       </main>
@@ -1925,6 +1959,24 @@ export default function Home() {
                   }
                 />
               ))}
+              <Row
+                inset={false}
+                {...(data.me.discordLinked
+                  ? { onClick: () => void unlinkDiscord() }
+                  : { href: "/api/auth/discord?mode=link" })}
+                leading={
+                  <span className="more-icon">
+                    <DiscordMark />
+                  </span>
+                }
+                title={data.me.discordLinked ? "เลิกเชื่อม Discord" : "เชื่อม Discord"}
+                subtitle={
+                  data.me.discordLinked
+                    ? "เชื่อมแล้ว · เข้าสู่ระบบด้วย Discord ได้"
+                    : "ครั้งหน้ากดเข้าสู่ระบบด้วย Discord ได้ ไม่ต้องจำ PIN"
+                }
+                trailing={<ChevronRight className="h-4 w-4 text-[var(--ui-text-3)]" />}
+              />
               <Row
                 inset={false}
                 onClick={() => setChangingPin(true)}

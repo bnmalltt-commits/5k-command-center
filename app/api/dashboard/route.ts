@@ -187,6 +187,7 @@ export async function GET(request: Request) {
         score: (score as any)?.total || 0,
         monthScore: Number(monthMe?.score || 0),
         monthRank: monthMe?.score == null ? null : Number(monthMe.rank),
+        discordLinked: String(me.external_user_id || "").startsWith("discord:"),
       },
       date,
       members: members.results,
