@@ -20,6 +20,14 @@ const validType = (type: unknown) => {
 // admins saving at once share an id (so one undo removed both) and reused an
 // undone id, so a stale undo could delete someone else's newer adjustment.
 // ms timestamp * 1000 + random stays under Number.MAX_SAFE_INTEGER.
+// "ส่ง 05:40": when the evidence was sent, Bangkok time, for Discord cards.
+const sentAt = (iso: unknown) => {
+  const time = new Date(String(iso));
+  return Number.isNaN(time.getTime())
+    ? ""
+    : `ส่ง ${time.toLocaleTimeString("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hour12: false })}`;
+};
+
 const adjustmentId = () => Date.now() * 1000 + Math.floor(Math.random() * 1000);
 
 // First Bangkok date of today / this week (Monday), as YYYY-MM-DD so it
@@ -283,7 +291,7 @@ export async function POST(request: Request) {
       const points = pointsFor(type, activity?.kind, String(activity?.activity_date || today));
       const kindLabel = type === "party" ? (activity?.kind === "loop" ? "ลูป" : "งัดร้าน") : "แอร์ดรอป";
       const before = await totalsFor(credited.map((r: any) => r.member_id), today, month);
-      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key,activity_date${type === "party" ? "" : ",round_time"}`).bind(admin.id, id).first<any>();
+      const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key,activity_date,created_at${type === "party" ? "" : ",round_time"}`).bind(admin.id, id).first<any>();
       if (!updated) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
       const inserted = await db.batch(
         credited.map((r: any) =>
@@ -295,8 +303,8 @@ export async function POST(request: Request) {
       try {
         await notifyApproval({
           kind: type === "party"
-            ? `${kindLabel} · ${updated.activity_date}`
-            : `แอร์ดรอปรอบ ${updated.round_time} · ${updated.activity_date}`,
+            ? `${kindLabel} · ${updated.activity_date} · ${sentAt(updated.created_at)}`
+            : `แอร์ดรอปรอบ ${updated.round_time} · ${updated.activity_date} · ${sentAt(updated.created_at)}`,
           approvedBy: admin.display_name,
           month: new Date(`${month}-01T00:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric", timeZone: "UTC" }),
           // Only people this approval actually credited.
@@ -332,7 +340,7 @@ export async function POST(request: Request) {
     if (body.action === "reject") {
       const admin = await requireAdmin(request), type = validType(body.type), table = type === "party" ? "party_activities" : "airdrop_submissions";
       const reason = String(body.reason || "").trim().replace(/\s+/g, " ").slice(0, 120) || null;
-      const rejected = await db.prepare(`UPDATE ${table} SET status='rejected',approved_by=?,reject_reason=? WHERE id=? AND status='pending' RETURNING activity_date${type === "party" ? ",kind" : ",round_time"}`).bind(admin.id, reason, Number(body.id)).first<any>();
+      const rejected = await db.prepare(`UPDATE ${table} SET status='rejected',approved_by=?,reject_reason=? WHERE id=? AND status='pending' RETURNING activity_date,created_at${type === "party" ? ",kind" : ",round_time"}`).bind(admin.id, reason, Number(body.id)).first<any>();
       if (!rejected) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
       const people = (type === "party"
         ? await db.prepare("SELECT m.display_name AS name,m.external_user_id FROM party_activity_members pam JOIN members m ON m.id=pam.member_id WHERE pam.party_activity_id=? ORDER BY m.display_name").bind(Number(body.id)).all<any>()
@@ -340,7 +348,7 @@ export async function POST(request: Request) {
       ).results;
       await notifyRejection({
         reason,
-        kind: type === "party" ? `${rejected.kind === "loop" ? "ลูป" : "งัดร้าน"} · ${rejected.activity_date}` : `แอร์ดรอปรอบ ${rejected.round_time} · ${rejected.activity_date}`,
+        kind: type === "party" ? `${rejected.kind === "loop" ? "ลูป" : "งัดร้าน"} · ${rejected.activity_date} · ${sentAt(rejected.created_at)}` : `แอร์ดรอปรอบ ${rejected.round_time} · ${rejected.activity_date} · ${sentAt(rejected.created_at)}`,
         rejectedBy: admin.display_name,
         people: people.map((p: any) => ({ name: p.name, discordId: discordUserId(p.external_user_id) })),
       });
