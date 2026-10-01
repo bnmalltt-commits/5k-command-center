@@ -1098,10 +1098,15 @@ function AdminCommandCenter({
   data,
   call,
   busy,
+  reviewTarget,
+  onReviewTargetUsed,
 }: {
   data: Data;
   call: (body: any) => Promise<boolean>;
   busy: boolean;
+  // "airdrop-184" from a Discord "ตรวจเลย" link: open that item right away.
+  reviewTarget?: string;
+  onReviewTargetUsed?: (found: boolean) => void;
 }) {
   const [tab, setTab] = useState<
     "verify" | "attendance" | "members" | "parties" | "points" | "leave" | "admins"
@@ -1116,6 +1121,15 @@ function AdminCommandCenter({
   const [pointValue, setPointValue] = useState("");
   const [pointReason, setPointReason] = useState("");
   const [review, setReview] = useState<{ items: any[]; start: number } | null>(null);
+  useEffect(() => {
+    if (!reviewTarget) return;
+    const index = data.pending.findIndex((item: any) => `${item.type}-${item.id}` === reviewTarget);
+    if (index >= 0) {
+      setTab("verify");
+      setReview({ items: data.pending, start: index });
+    }
+    onReviewTargetUsed?.(index >= 0);
+  }, [reviewTarget, data.pending]);
   // The owner flag, not the display name: names can be edited.
   const sam = Boolean(
     data.managedMembers.find((member: any) => String(member.id) === String(data.me.id))
@@ -1814,6 +1828,7 @@ export default function Home() {
     [discordLater, setDiscordLater] = useState(false),
     [showOffline, setShowOffline] = useState(false),
     [celebration, setCelebration] = useState(""),
+    [reviewTarget, setReviewTarget] = useState(""),
     [confirmState, setConfirmState] = useState<{
       message: string;
       resolve: (ok: boolean) => void;
@@ -1959,6 +1974,27 @@ export default function Home() {
       })
       .catch(() => setNotice("เชื่อมต่อไม่สำเร็จ ลองเข้าสู่ระบบด้วย Discord อีกครั้ง"));
   }, []);
+  // ?review=<type>-<id> from a Discord card: kept in sessionStorage so it
+  // survives signing in first, then opened on the admin page.
+  useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get("review");
+    let target = fromUrl && /^(airdrop|party)-[0-9]+$/.test(fromUrl) ? fromUrl : "";
+    try {
+      if (target) sessionStorage.setItem("fivek_review", target);
+      else target = sessionStorage.getItem("fivek_review") || "";
+    } catch {}
+    if (fromUrl) window.history.replaceState(null, "", window.location.pathname);
+    if (target) setReviewTarget(target);
+  }, []);
+  useEffect(() => {
+    if (!reviewTarget || !data) return;
+    if (data.me.role !== "admin") {
+      setReviewTarget("");
+      try { sessionStorage.removeItem("fivek_review"); } catch {}
+      return;
+    }
+    if (view !== "admin") setView("admin");
+  }, [reviewTarget, Boolean(data), data?.me.role]);
   // Celebrate milestones reached since the last refresh (never on first load,
   // so reopening the site doesn't replay them).
   const milestones = useRef<{ rounds: number; team: number; rank: number | null } | null>(null);
@@ -2626,7 +2662,17 @@ export default function Home() {
             ) : !loadedViews.includes("admin") ? (
               <ViewLoading />
             ) : (
-              <AdminCommandCenter data={data} call={call} busy={busy} />
+              <AdminCommandCenter
+                data={data}
+                call={call}
+                busy={busy}
+                reviewTarget={reviewTarget}
+                onReviewTargetUsed={(found) => {
+                  setReviewTarget("");
+                  try { sessionStorage.removeItem("fivek_review"); } catch {}
+                  if (!found) setNotice("รายการนี้ตรวจไปแล้ว");
+                }}
+              />
             ))}
           {view === "leave" &&
             (!loadedViews.includes("leave") ? (

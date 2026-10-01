@@ -40,6 +40,15 @@ export const reviewButtons = (type: "airdrop" | "party", id: unknown) => [
   },
 ];
 
+// "ตรวจเลย": opens the site straight into the review dialog for this item.
+// Plain webhooks can carry link buttons (not interactive ones).
+export const reviewLink = (type: "airdrop" | "party", id: unknown) => [
+  {
+    type: 1,
+    components: [{ type: 2, style: 5, label: "ตรวจเลย", emoji: { name: "🔍" }, url: `${SITE_URL}/?review=${type}-${id}` }],
+  },
+];
+
 // `url` is a webhook URL, or "bot:<channel id>" to post as the bot (needed
 // for buttons; uses DISCORD_BOT_TOKEN).
 export async function postCard(url: string, {
@@ -107,7 +116,12 @@ export async function postCard(url: string, {
     if (image) form.append("files[0]", image.blob, filename);
     const bot = url.startsWith("bot:");
     if (bot && !process.env.DISCORD_BOT_TOKEN) return false;
-    const res = await fetch(bot ? `https://discord.com/api/v10/channels/${url.slice(4)}/messages` : url, {
+    const target = bot
+      ? `https://discord.com/api/v10/channels/${url.slice(4)}/messages`
+      : components
+        ? `${url}${url.includes("?") ? "&" : "?"}with_components=true`
+        : url;
+    const res = await fetch(target, {
       method: "POST",
       body: form,
       headers: bot ? { authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` } : undefined,
@@ -155,8 +169,11 @@ export async function notifyEvidence({
   if (review && channel && process.env.DISCORD_BOT_TOKEN) {
     if (await postCard(`bot:${channel}`, { ...card, components: reviewButtons(review.type, review.id) })) return;
   }
+  // No bot: a link button that opens this item in the site's review dialog.
   const url = process.env.DISCORD_WEBHOOK_URL;
-  if (url) await postCard(url, card);
+  if (!url) return;
+  if (review && (await postCard(url, { ...card, components: reviewLink(review.type, review.id) }))) return;
+  await postCard(url, card);
 }
 
 // An approval that just credited points: each member's total before and after.
