@@ -10,7 +10,6 @@ export const maxDuration = 30;
 // reminder claims a unique key in notification_log before posting, so it is
 // sent at most once however often (or by whom) this URL is hit — which is why
 // it needs no secret.
-const ROUNDS = ["17:00", "20:00", "23:00", "01:00"];
 const BKK_OFFSET_MS = 7 * 3600_000;
 
 const bkkDateOf = (ms: number) => new Date(ms + BKK_OFFSET_MS).toISOString().slice(0, 10);
@@ -31,7 +30,7 @@ async function claim(key: string) {
 const release = (key: string) => db.prepare("DELETE FROM notification_log WHERE key=?").bind(key).run();
 
 async function send(key: string, card: Parameters<typeof postCard>[1]) {
-  const url = process.env.DISCORD_POINTS_WEBHOOK_URL;
+  const url = process.env.DISCORD_REMINDER_WEBHOOK_URL || process.env.DISCORD_POINTS_WEBHOOK_URL;
   if (!url || !(await claim(key))) return false;
   const ok = await postCard(url, card);
   if (!ok) await release(key); // let the next run retry
@@ -40,32 +39,31 @@ async function send(key: string, card: Parameters<typeof postCard>[1]) {
 
 const mentions = (rows: any[]) => rows.map((r) => discordUserId(r.external_user_id)).filter(Boolean) as string[];
 
-// 30–120 min after each airdrop round starts: tag who hasn't sent it (pending
-// and approved count as sent; a rejected one still needs a resend). Members
-// on leave that day are skipped.
+// 30 minutes before the 20:00 and 23:00 rounds: tag every active member who
+// has linked Discord (members on leave that day are skipped) to get ready.
+// The window is 35 minutes wide so a late scheduler run still lands before
+// the round starts.
+const REMINDED_ROUNDS = ["20:00", "23:00"];
 async function roundReminders(nowMs: number) {
   const done: string[] = [];
-  for (const date of [bkkDateOf(nowMs), bkkDateOf(nowMs - 86400_000)]) {
-    for (const round of ROUNDS) {
-      const start = bkkTime(date, round);
-      if (nowMs < start + 30 * 60_000 || nowMs >= start + 120 * 60_000) continue;
-      const missing = (await db.prepare(
-        "SELECT m.display_name,m.external_user_id FROM members m WHERE m.active=1 AND NOT EXISTS (SELECT 1 FROM airdrop_submissions a WHERE a.member_id=m.id AND a.activity_date=? AND a.round_time=? AND a.status IN ('pending','approved')) AND NOT EXISTS (SELECT 1 FROM leave_requests l WHERE l.member_id=m.id AND l.leave_date=?) ORDER BY m.display_name"
-      ).bind(date, round, date).all<any>()).results;
-      if (!missing.length) continue;
-      const sent = await send(`round:${date}:${round}`, {
-        title: `⏰ ยังไม่ส่งแอร์ดรอปรอบ ${round}`,
-        lines: [
-          ["วันที่", date],
-          ["ยังไม่ส่ง", `${missing.length} คน`],
-          ...missing.map((m: any, i: number): [string, unknown] => [`${i + 1}`, m.display_name]),
-          ["ส่งที่", "เว็บ → หน้าภารกิจ"],
-        ],
-        color: 0xf59e0b,
-        mention: mentions(missing),
-      });
-      if (sent) done.push(`round ${date} ${round}`);
-    }
+  const date = bkkDateOf(nowMs);
+  for (const round of REMINDED_ROUNDS) {
+    const start = bkkTime(date, round);
+    if (nowMs < start - 35 * 60_000 || nowMs >= start) continue;
+    const people = (await db.prepare(
+      "SELECT m.display_name,m.external_user_id FROM members m WHERE m.active=1 AND m.external_user_id LIKE 'discord:%' AND NOT EXISTS (SELECT 1 FROM leave_requests l WHERE l.member_id=m.id AND l.leave_date=?) ORDER BY m.display_name"
+    ).bind(date).all<any>()).results;
+    if (!people.length) continue;
+    const sent = await send(`round:${date}:${round}`, {
+      title: `⏰ อีก 30 นาทีเริ่มแอร์ดรอปรอบ ${round}`,
+      lines: [
+        ["วันที่", date],
+        ["รอบ", `${round} · เตรียมตัวแล้วส่งหลักฐานในเว็บ`],
+      ],
+      color: 0xf59e0b,
+      mention: mentions(people),
+    });
+    if (sent) done.push(`round ${date} ${round}`);
   }
   return done;
 }

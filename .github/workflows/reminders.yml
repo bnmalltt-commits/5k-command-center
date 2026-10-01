@@ -1,4 +1,4 @@
-# Pings the site every 30 minutes so it can post due Discord reminders
+# Pings the site every 10 minutes so it can post due Discord reminders
 # (airdrop rounds, shop-raid quota, monthly winners). The site decides what is
 # due from the Bangkok clock and sends each reminder at most once, so this
 # needs no secret and an extra or delayed run is harmless.
@@ -6,7 +6,7 @@ name: Discord reminders
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "*/10 * * * *"
   workflow_dispatch:
 
 permissions: {}
