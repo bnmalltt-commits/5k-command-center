@@ -1,7 +1,7 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
 import { notifyApproval, notifyRejection, discordUserId, discordAvatarUrl, postCard } from "@/lib/notify";
-import { pointsByDaySql, teamStatusSql, teamPointsByDaySql, pointsFor, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
+import { pointsByDaySql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 
@@ -203,6 +203,7 @@ export async function GET(request: Request) {
       avatars,
       team: {
         start: TEAM_RULE_START,
+        pointsStart: POINTS_START,
         perDay: TEAM_PER_DAY,
         penalty: TEAM_PENALTY,
         points: { ...KIND_POINTS, airdrop: AIRDROP_POINTS },

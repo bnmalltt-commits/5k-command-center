@@ -1,8 +1,10 @@
-// Scoring from TEAM_RULE_START: airdrop +5, shop raid (งัดร้าน) +3, loop (ลูป)
+// Scoring from POINTS_START: airdrop +5, shop raid (งัดร้าน) +3, loop (ลูป)
 // +1 to every member credited on the evidence. Before it, airdrop +3 and any
 // party activity +1. The value is written to the ledger at approval time, so
 // changing these never rewrites points already earned.
 export const TEAM_RULE_START = process.env.TEAM_RULE_START || process.env.SHOP_RULE_START || "2026-10-02";
+// The new point values start a day before the quota does.
+export const POINTS_START = process.env.POINTS_START || "2026-10-01";
 export const ACTIVITY_KINDS = ["shop", "loop"] as const;
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 export const KIND_POINTS: Record<ActivityKind, number> = { shop: 3, loop: 1 };
@@ -10,7 +12,7 @@ export const KIND_LABEL: Record<ActivityKind, string> = { shop: "งัดร้
 export const AIRDROP_POINTS = 5;
 
 export function pointsFor(type: "airdrop" | "party", kind: unknown, activityDate: string) {
-  if (activityDate < TEAM_RULE_START) return type === "party" ? 1 : 3;
+  if (activityDate < POINTS_START) return type === "party" ? 1 : 3;
   if (type === "airdrop") return AIRDROP_POINTS;
   return KIND_POINTS[kind === "loop" ? "loop" : "shop"];
 }

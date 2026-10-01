@@ -206,6 +206,7 @@ type Data = {
   // Team quota: points from shops (+3) and loops (+1) per day.
   team?: {
     start: string;
+    pointsStart: string;
     perDay: number;
     penalty: number;
     points: { shop: number; loop: number; airdrop: number };
@@ -295,7 +296,7 @@ function MissionCard({
   const stateOf = (r: Round) => {
     const status = mine.get(r)?.status;
     // Airdrop points by the rule in force on that day (+5 from the team rule start).
-    const pts = data.team && String(mine.get(r)?.activity_date) >= data.team.start ? data.team.points.airdrop : 3;
+    const pts = data.team && String(mine.get(r)?.activity_date) >= data.team.pointsStart ? data.team.points.airdrop : 3;
     return status === "approved"
       ? { label: `ผ่านแล้ว · +${pts}`, tone: "done" }
       : status === "pending"
