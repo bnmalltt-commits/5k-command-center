@@ -245,15 +245,62 @@ const labels: Record<string, string> = {
   approved: "ผ่านแล้ว",
   rejected: "ไม่ผ่าน",
 };
-// Shown the first time a view is opened, while its data is still in flight.
-// Without it the view would render its "ยังไม่มี..." empty state for a beat.
+// Shown the first time a view is opened, while its data is still in flight:
+// a grey outline of a list that fades in and out, instead of a bare message.
 function ViewLoading() {
   return (
-    <section className="ui-panel">
-      <p className="ui-panel__body text-center text-sm text-[var(--ui-text-3)]">
-        กำลังโหลดข้อมูล…
-      </p>
+    <section className="ui-panel" aria-busy="true" aria-label="กำลังโหลดข้อมูล">
+      <div className="ui-panel__body space-y-3">
+        <span className="skel skel--title" />
+        {[0, 1, 2, 3, 4].map((i) => (
+          <span key={i} className="skel skel--row" />
+        ))}
+      </div>
     </section>
+  );
+}
+
+// A small preview of an evidence photo; falls back to the status dot when the
+// photo is gone (approved evidence is deleted) or fails to load.
+function Thumb({ imageKey, tone }: { imageKey?: string | null; tone: "green" | "amber" | "red" | "idle" }) {
+  const [broken, setBroken] = useState(false);
+  if (!imageKey || broken) return <Dot tone={tone} />;
+  return (
+    <img
+      src={`/api/image/${imageKey}`}
+      alt=""
+      loading="lazy"
+      className={`thumb thumb--${tone}`}
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
+// A short burst of confetti with a message, for milestones the member just
+// reached (all four rounds, the daily team score, a better rank).
+function Celebration({ message, onDone }: { message: string; onDone: () => void }) {
+  useEffect(() => {
+    const timer = window.setTimeout(onDone, 3200);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+  const colors = ["#f5c542", "#4ade80", "#f87171", "#60a5fa", "#ffffff"];
+  return (
+    <div className="celebrate" role="status" aria-live="polite" onClick={onDone}>
+      <div className="celebrate__burst" aria-hidden="true">
+        {Array.from({ length: 28 }, (_, i) => (
+          <span
+            key={i}
+            style={{
+              background: colors[i % colors.length],
+              left: `${(i * 37) % 100}%`,
+              animationDelay: `${(i % 7) * 60}ms`,
+              transform: `rotate(${(i * 47) % 360}deg)`,
+            }}
+          />
+        ))}
+      </div>
+      <p className="celebrate__msg">{message}</p>
+    </div>
   );
 }
 function Status({ value }: { value: string }) {
@@ -849,7 +896,8 @@ function SubmissionLog({ data }: { data: Data }) {
                 inset={false}
                 href={viewable ? `/api/image/${item.image_key}` : undefined}
                 leading={
-                  <Dot
+                  <Thumb
+                    imageKey={viewable ? item.image_key : null}
                     tone={
                       item.status === "approved"
                         ? "green"
@@ -1404,6 +1452,7 @@ function AdminCommandCenter({
                 <Row
                   key={item.type + item.id}
                   inset={false}
+                  leading={<Thumb imageKey={item.image_key} tone="amber" />}
                   title={
                     item.type === "party"
                       ? `${item.detail} · ${item.activity_date}`
@@ -1764,6 +1813,7 @@ export default function Home() {
     [claim, setClaim] = useState<any>(null),
     [discordLater, setDiscordLater] = useState(false),
     [showOffline, setShowOffline] = useState(false),
+    [celebration, setCelebration] = useState(""),
     [confirmState, setConfirmState] = useState<{
       message: string;
       resolve: (ok: boolean) => void;
@@ -1909,6 +1959,27 @@ export default function Home() {
       })
       .catch(() => setNotice("เชื่อมต่อไม่สำเร็จ ลองเข้าสู่ระบบด้วย Discord อีกครั้ง"));
   }, []);
+  // Celebrate milestones reached since the last refresh (never on first load,
+  // so reopening the site doesn't replay them).
+  const milestones = useRef<{ rounds: number; team: number; rank: number | null } | null>(null);
+  useEffect(() => {
+    if (!data) return;
+    const now = {
+      rounds: ROUNDS.filter((r) => mine.get(r)?.status === "approved").length,
+      team: data.team?.mine?.today ?? 0,
+      rank: data.me.monthRank,
+    };
+    const before = milestones.current;
+    milestones.current = now;
+    if (!before) return;
+    const perDay = data.team?.perDay ?? 9;
+    if (now.rounds === ROUNDS.length && before.rounds < ROUNDS.length)
+      setCelebration("ส่งครบ 4 รอบวันนี้แล้ว!");
+    else if (data.team?.mine && now.team >= perDay && before.team < perDay)
+      setCelebration(`คะแนนทีมครบ ${perDay} แล้ววันนี้!`);
+    else if (now.rank && before.rank && now.rank < before.rank)
+      setCelebration(`ขึ้นเป็นอันดับ #${now.rank} ของเดือน!`);
+  }, [data, mine]);
   const autoRoundDone = useRef(false);
   useEffect(() => {
     if (!data || autoRoundDone.current) return;
@@ -2098,12 +2169,31 @@ export default function Home() {
         </section>
       </main>
     );
+  if (!data && (loading || !notice))
+    return (
+      // The layout's outline while the first load is in flight.
+      <main className="ui-v2 command-shell min-h-screen bg-[#0d0d0d] text-white" aria-busy="true" aria-label="กำลังเปิดศูนย์บัญชาการ">
+        <div className="skel-shell">
+          <span className="skel skel-shell__side" />
+          <div className="skel-shell__main">
+            <span className="skel skel-shell__top" />
+            <span className="skel skel-shell__hero" />
+            <div className="skel-shell__tiles">
+              <span className="skel" />
+              <span className="skel" />
+              <span className="skel" />
+            </div>
+          </div>
+        </div>
+      </main>
+    );
   if (!data)
     return (
       <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
         <section className="command-panel max-w-md p-6 text-center">
-          <p>{loading ? "กำลังเปิดศูนย์บัญชาการ…" : "ยังเปิดข้อมูลไม่ได้"}</p>
-          {!loading && <><p className="mt-2 text-sm text-[var(--ui-text-3)]">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p><button onClick={() => load()} className="red-action mt-5">ลองใหม่</button></>}
+          <p>ยังเปิดข้อมูลไม่ได้</p>
+          <p className="mt-2 text-sm text-[var(--ui-text-3)]">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p>
+          <button onClick={() => load()} className="red-action mt-5">ลองใหม่</button>
         </section>
       </main>
     );
@@ -2440,7 +2530,8 @@ export default function Home() {
                         : undefined
                     }
                     leading={
-                      <Dot
+                      <Thumb
+                        imageKey={x.status !== "approved" ? x.image_key : null}
                         tone={
                           x.status === "approved"
                             ? "green"
@@ -2618,6 +2709,7 @@ export default function Home() {
           },
         )}
       </nav>
+      {celebration && <Celebration message={celebration} onDone={() => setCelebration("")} />}
       {confirmState && (
         <ConfirmDialog
           message={confirmState.message}

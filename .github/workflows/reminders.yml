@@ -1,4 +1,5 @@
-# Pings the site every 10 minutes so it can post due Discord reminders
+# Backup ping (Supabase pg_cron is the main one, every 5 minutes; GitHub runs
+# scheduled workflows far less often than asked). Lets the site post due Discord reminders
 # (airdrop rounds, shop-raid quota, monthly winners). The site decides what is
 # due from the Bangkok clock and sends each reminder at most once, so this
 # needs no secret and an extra or delayed run is harmless.

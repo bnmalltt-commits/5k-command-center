@@ -5,8 +5,8 @@ import { pointsByDaySql, teamStatusSql, teamDayResultSql, TEAM_PER_DAY, TEAM_RUL
 
 export const maxDuration = 30;
 
-// Scheduled Discord reminders. Something outside calls this every few minutes
-// (a GitHub Actions workflow, which runs far less often than scheduled); this route decides what is due from the Bangkok clock. Each
+// Scheduled Discord reminders. Supabase pg_cron (job "5k-cron-ping") calls this
+// every 5 minutes, with the GitHub Actions workflow as a backup; this route decides what is due from the Bangkok clock. Each
 // reminder claims a unique key in notification_log before posting, so it is
 // sent at most once however often (or by whom) this URL is hit — which is why
 // it needs no secret.
