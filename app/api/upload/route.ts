@@ -32,6 +32,13 @@ export async function POST(r: Request) {
     const form = await r.formData(), file = form.get("image"), type = String(form.get("type"));
     if (!(file instanceof File) || !file.size) throw Error("กรุณาเลือกรูปหลักฐาน");
     const ext = await image(file), today = thaiDate();
+    // Exact-duplicate guard: the same file can't earn points twice. Hashes are
+    // kept after approved images are deleted, so old evidence stays covered.
+    const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+    const seen = await db.prepare("SELECT activity_date FROM airdrop_submissions WHERE image_hash=? UNION ALL SELECT activity_date FROM party_activities WHERE image_hash=? LIMIT 1").bind(hash, hash).first<any>();
+    if (seen) throw Error(`รูปนี้เคยส่งแล้ว (${seen.activity_date}) ใช้รูปใหม่ที่ถ่ายหรือแคปตอนนี้`);
 
     if (type === "airdrop") {
       const round = String(form.get("round"));
@@ -41,10 +48,10 @@ export async function POST(r: Request) {
       key = `airdrop/${member.id}/${Date.now()}.${ext}`;
       await storage.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
       if (old) {
-        const updated = await db.prepare("UPDATE airdrop_submissions SET image_key=?,status='pending',approved_by=NULL,created_at=? WHERE id=? AND status<>'approved'").bind(key, now(), old.id).run();
+        const updated = await db.prepare("UPDATE airdrop_submissions SET image_key=?,image_hash=?,reject_reason=NULL,status='pending',approved_by=NULL,created_at=? WHERE id=? AND status<>'approved'").bind(key, hash, now(), old.id).run();
         if (!updated.meta.changes) throw Error("หลักฐานรายการนี้เพิ่งผ่านการตรวจ จึงแก้ไขไม่ได้");
       } else {
-        await db.prepare("INSERT INTO airdrop_submissions (member_id,activity_date,round_time,image_key,status,created_at) VALUES (?,?,?,?, 'pending',?)").bind(member.id, today, round, key, now()).run();
+        await db.prepare("INSERT INTO airdrop_submissions (member_id,activity_date,round_time,image_key,image_hash,status,created_at) VALUES (?,?,?,?,?, 'pending',?)").bind(member.id, today, round, key, hash, now()).run();
       }
       if (old?.image_key) await storage.delete(old.image_key);
       await notifyEvidence({
@@ -79,7 +86,7 @@ export async function POST(r: Request) {
       await storage.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
       const shopName = kind === "shop" ? String(form.get("shopName") || "").trim().slice(0, 60) || null : null;
       const party = await db.prepare("INSERT INTO parties (name,shop_name,active) VALUES (?,?,0) RETURNING id").bind(`กิจกรรม ${today} ${Date.now()}`, shopName).first<any>();
-      const activity = await db.prepare("INSERT INTO party_activities (party_id,activity_date,image_key,status,submitted_by_member_id,created_at,kind) VALUES (?,?,?,'pending',?,?,?) RETURNING id").bind(party.id, today, key, member.id, now(), kind).first<any>();
+      const activity = await db.prepare("INSERT INTO party_activities (party_id,activity_date,image_key,image_hash,status,submitted_by_member_id,created_at,kind) VALUES (?,?,?,?,'pending',?,?,?) RETURNING id").bind(party.id, today, key, hash, member.id, now(), kind).first<any>();
       await db.batch(ids.map((id: number) => db.prepare("INSERT INTO party_activity_members (party_activity_id,member_id) VALUES (?,?)").bind(activity.id, id)));
       const names = await db.prepare("SELECT display_name FROM members WHERE id = ANY(?::bigint[]) ORDER BY display_name").bind(ids).all<any>();
       await notifyEvidence({

@@ -62,18 +62,36 @@ function teamDebtCte(today: string) {
     SELECT member_id, day, n, done, req, GREATEST(0, req-done) AS debt FROM team_cum)`;
 }
 
-// Every point movement as (member_id, points, day): ledger rows dated by the
-// activity they reward, plus team-quota penalty/refund rows dated by the day
-// the debt changed. Summing any date range gives that period's score.
-export function pointsByDaySql(today: string) {
-  return `SELECT pl.member_id,pl.points,CASE pl.source WHEN 'airdrop' THEN a.activity_date WHEN 'party' THEN pa.activity_date ELSE to_char(pl.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok','YYYY-MM-DD') END AS day
+// Every point movement with where it came from: ledger rows dated by the
+// activity they reward (airdrop / shop / loop / adjust), plus team-quota rows
+// dated by the day the debt changed (penalty when it grew, refund when it
+// shrank). Summing any date range gives that period's score.
+export function pointsDetailSql(today: string) {
+  return `SELECT pl.member_id,pl.points,CASE pl.source WHEN 'airdrop' THEN a.activity_date WHEN 'party' THEN pa.activity_date ELSE to_char(pl.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok','YYYY-MM-DD') END AS day,
+      CASE pl.source WHEN 'airdrop' THEN 'airdrop' WHEN 'party' THEN CASE pa.kind WHEN 'loop' THEN 'loop' ELSE 'shop' END ELSE 'adjust' END AS category
     FROM point_ledger pl
     LEFT JOIN airdrop_submissions a ON pl.source='airdrop' AND a.id=pl.source_id
     LEFT JOIN party_activities pa ON pl.source='party' AND pa.id=pl.source_id
   UNION ALL
   (WITH ${teamDebtCte(today)},
     team_delta AS (SELECT member_id, day, debt - COALESCE(LAG(debt) OVER (PARTITION BY member_id ORDER BY day),0) AS inc FROM team_debt)
-    SELECT member_id, -inc*${TEAM_PENALTY} AS points, to_char(day,'YYYY-MM-DD') AS day FROM team_delta WHERE inc<>0)`;
+    SELECT member_id, -inc*${TEAM_PENALTY} AS points, to_char(day,'YYYY-MM-DD') AS day, CASE WHEN inc>0 THEN 'penalty' ELSE 'refund' END AS category FROM team_delta WHERE inc<>0)`;
+}
+
+// Every point movement as (member_id, points, day). Built on pointsDetailSql
+// so totals and the per-source breakdown can never disagree.
+export function pointsByDaySql(today: string) {
+  return `SELECT member_id,points,day FROM (${pointsDetailSql(today)}) detail`;
+}
+
+// One finished day's team-quota outcome for members whose debt grew that day:
+// team points earned (n), debt at the end of the day, and points docked (inc).
+// `today` must be after `day` so that day's quota is already due.
+export function teamDayResultSql(today: string, day: string) {
+  if (!isDate(day)) throw Error("invalid date");
+  return `WITH ${teamDebtCte(today)},
+    team_delta AS (SELECT member_id, day, n, debt, debt - COALESCE(LAG(debt) OVER (PARTITION BY member_id ORDER BY day),0) AS inc FROM team_debt)
+    SELECT member_id, n, debt, inc FROM team_delta WHERE day='${day}'::date AND inc>0`;
 }
 
 // Where each member stands today: team points earned today, current debt,

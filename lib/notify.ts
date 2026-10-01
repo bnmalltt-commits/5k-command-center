@@ -184,10 +184,13 @@ export async function notifyApproval({
 export async function notifyRejection({
   kind,
   rejectedBy,
+  reason,
   people,
 }: {
   kind: string;
   rejectedBy: string;
+  // Why it failed, so the member knows what to fix (optional).
+  reason?: string | null;
   people: { name: string; discordId: string | null }[];
 }) {
   const url = process.env.DISCORD_POINTS_WEBHOOK_URL;
@@ -197,6 +200,7 @@ export async function notifyRejection({
     lines: [
       ["รายการ", kind],
       ["ตรวจโดย", rejectedBy],
+      ...(reason ? [["เหตุผล", reason] as Line] : []),
       ...(people.length > 1 ? people.map((p, i): Line => [`สมาชิก ${i + 1}`, p.name]) : []),
       ["ทำต่อ", "ส่งหลักฐานใหม่ได้ที่เว็บ"],
     ],

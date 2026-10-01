@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import {
+  BarChart3,
   CalendarOff,
   Check,
   ChevronRight,
@@ -203,6 +204,8 @@ type Data = {
   attendanceLeaves: any[];
   teamStatus: any[];
   teamDays: any[];
+  // "แต้มของฉัน": {day, category, points, n}, only after that view loads.
+  myPoints?: any[];
   // Team quota: points from shops (+3) and loops (+1) per day.
   team?: {
     start: string;
@@ -359,7 +362,7 @@ function MissionCard({
             {selected?.status === "pending"
               ? `หลักฐานรอบ ${round} กำลังรอตรวจ · เลือกรูปใหม่เพื่อส่งแก้ไข`
               : selected?.status === "rejected"
-                ? `หลักฐานรอบ ${round} ไม่ผ่าน · เลือกรูปใหม่แล้วส่งอีกครั้ง`
+                ? `หลักฐานรอบ ${round} ไม่ผ่าน${selected.reject_reason ? ` (${selected.reject_reason})` : ""} · เลือกรูปใหม่แล้วส่งอีกครั้ง`
                 : `ส่งหลักฐานรอบ ${round}`}
           </p>
           <Picker onChange={setImage} resetToken={`${round}-${pickerReset}`} />
@@ -674,6 +677,90 @@ function LeaveRoom({
     </>
   );
 }
+// Where points come from, in display order ("แต้มของฉัน").
+const POINT_CATEGORIES: [string, string][] = [
+  ["airdrop", "แอร์ดรอป"],
+  ["shop", "งัดร้าน"],
+  ["loop", "ลูป"],
+  ["adjust", "แอดมินปรับ"],
+  ["penalty", "โดนหัก (ทีมไม่ครบ)"],
+  ["refund", "ได้คืน (ทำชด)"],
+];
+const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
+
+// The member's own points per day, split by where they came from, so a
+// deduction is never a mystery. Same source as every score on the site.
+function MyPoints({ data }: { data: Data }) {
+  const rows = data.myPoints || [];
+  const thisMonth = data.date.slice(0, 7);
+  const months = [...new Set([thisMonth, ...rows.map((r: any) => String(r.day).slice(0, 7))])].sort().reverse();
+  const [month, setMonth] = useState(thisMonth);
+  const inMonth = rows.filter((r: any) => String(r.day).startsWith(month));
+  const byCategory = new Map<string, number>();
+  const byDay = new Map<string, Map<string, number>>();
+  for (const r of inMonth) {
+    byCategory.set(r.category, (byCategory.get(r.category) || 0) + r.points);
+    if (!byDay.has(r.day)) byDay.set(r.day, new Map());
+    const day = byDay.get(r.day)!;
+    day.set(r.category, (day.get(r.category) || 0) + r.points);
+  }
+  const total = inMonth.reduce((sum: number, r: any) => sum + r.points, 0);
+  const days = [...byDay.keys()].sort().reverse();
+  const mine = data.team?.mine;
+  return (
+    <Panel label="MY POINTS" title="แต้มของฉัน" subtitle={`${monthLabel(month)} · รวม ${signed(total)} แต้ม`} flush>
+      <div className="space-y-3 p-4">
+        {months.length > 1 && (
+          <select value={month} onChange={(event) => setMonth(event.target.value)} className="ui-input" aria-label="เลือกเดือน">
+            {months.map((value) => (
+              <option key={value} value={value}>
+                {monthLabel(value)}
+                {value === thisMonth ? " (เดือนนี้)" : ""}
+              </option>
+            ))}
+          </select>
+        )}
+        <div className="points-split">
+          {POINT_CATEGORIES.filter(([id]) => byCategory.has(id)).map(([id, label]) => (
+            <div key={id} className={`points-split__cell ${(byCategory.get(id) || 0) < 0 ? "is-minus" : ""}`}>
+              <span>{label}</span>
+              <b>{signed(byCategory.get(id) || 0)}</b>
+            </div>
+          ))}
+        </div>
+        {month === thisMonth && mine && (
+          <p className="text-sm text-[var(--ui-text-2)]">
+            คะแนนทีมวันนี้ {mine.today}/{data.team?.perDay ?? 9}
+            {mine.debt > 0 ? ` · ค้าง ${mine.debt} คะแนน (ทำชดแล้วได้แต้มคืน)` : ""}
+            {mine.bank > 0 && mine.neededToday === 0 ? ` · เกินเก็บไว้ ${mine.bank}` : ""}
+          </p>
+        )}
+      </div>
+      {days.length ? (
+        days.map((day) => {
+          const parts = byDay.get(day)!;
+          const dayTotal = [...parts.values()].reduce((a, b) => a + b, 0);
+          return (
+            <Row
+              key={day}
+              inset={false}
+              title={day}
+              subtitle={POINT_CATEGORIES.filter(([id]) => parts.has(id))
+                .map(([id, label]) => `${label} ${signed(parts.get(id)!)}`)
+                .join(" · ")}
+              trailing={
+                <b className={dayTotal < 0 ? "text-[var(--ui-red-light)]" : "text-[var(--ui-green)]"}>{signed(dayTotal)}</b>
+              }
+            />
+          );
+        })
+      ) : (
+        <EmptyState title="ยังไม่มีแต้มในเดือนนี้" hint="ส่งหลักฐานแอร์ดรอปหรือหลักฐานทีม แต้มจะขึ้นที่นี่หลังตรวจผ่าน" />
+      )}
+    </Panel>
+  );
+}
+
 const PAGE_SIZE = 50;
 function SubmissionLog({ data }: { data: Data }) {
   const [query, setQuery] = useState("");
@@ -740,10 +827,10 @@ function SubmissionLog({ data }: { data: Data }) {
                     }
                   />
                 }
-                title={`${item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} · ${item.detail}`}
+                title={item.type === "party" ? item.detail : `แอร์ดรอป · รอบ ${item.detail}`}
                 subtitle={`${item.activity_date} · ส่งโดย ${item.submitted_by}${
                   item.approved_by ? ` · ตรวจโดย ${item.approved_by}` : " · ยังไม่ตรวจ"
-                }`}
+                }${item.status === "rejected" && item.reject_reason ? ` · เหตุผล: ${item.reject_reason}` : ""}`}
                 trailing={<Status value={item.status} />}
               />
             );
@@ -777,6 +864,156 @@ function SubmissionLog({ data }: { data: Data }) {
     </Panel>
   );
 }
+// Preset reasons for a rejection; the admin can also type their own.
+const REJECT_REASONS = [
+  "รูปไม่ชัด มองไม่เห็นหลักฐาน",
+  "ไม่ใช่รอบนี้หรือไม่ใช่วันนี้",
+  "คนในรูปไม่ครบตามที่เลือก",
+  "รูปเก่าหรือรูปของคนอื่น",
+  "เลือกประเภทผิด (ร้าน/ลูป)",
+];
+
+// One evidence at a time: the photo large, who gets how many points, then
+// approve or reject (with a reason) and straight on to the next — no new tab
+// and no confirm per item. Works on a snapshot of the queue taken when opened.
+function ReviewDialog({
+  items,
+  start,
+  busy,
+  onAct,
+  onClose,
+}: {
+  items: any[];
+  start: number;
+  busy: boolean;
+  onAct: (item: any, action: "approve" | "reject", reason?: string) => Promise<boolean>;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(start);
+  const [handled, setHandled] = useState<string[]>([]);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const keyOf = (item: any) => `${item.type}-${item.id}`;
+  const left = items.filter((item) => !handled.includes(keyOf(item))).length;
+  // The nearest unhandled item from `from` in direction `dir`, wrapping; -1 if none.
+  const step = (from: number, dir: 1 | -1, done: string[]) => {
+    for (let n = 1; n <= items.length; n++) {
+      const i = (from + dir * n + items.length * n) % items.length;
+      if (!done.includes(keyOf(items[i]))) return i;
+    }
+    return -1;
+  };
+  const go = (i: number) => {
+    if (i < 0) return;
+    setIndex(i);
+    setRejecting(false);
+    setReason("");
+  };
+  const item = items[index];
+  const act = async (action: "approve" | "reject", why?: string) => {
+    if (!item || busy || handled.includes(keyOf(item))) return;
+    if (!(await onAct(item, action, why))) return;
+    const done = [...handled, keyOf(item)];
+    setHandled(done);
+    go(step(index, 1, done));
+  };
+  // Fetch the next photo while this one is being looked at.
+  useEffect(() => {
+    const next = items[step(index, 1, handled)];
+    if (next?.image_key && next !== item) new Image().src = `/api/image/${next.image_key}`;
+  }, [index, handled]);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.target as HTMLElement)?.tagName === "INPUT") return;
+      if (event.key === "Escape") onClose();
+      else if (event.key === "ArrowRight") go(step(index, 1, handled));
+      else if (event.key === "ArrowLeft") go(step(index, -1, handled));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, handled, onClose]);
+  const finished = !left || !item || handled.includes(keyOf(item));
+  return (
+    <div className="ui-dialog-backdrop" role="dialog" aria-modal="true" aria-label="ตรวจหลักฐาน">
+      <div className="ui-dialog review">
+        <div className="review__head">
+          <span className="ui-eyebrow">ตรวจหลักฐาน · เหลือ {left} รายการ</span>
+          <button type="button" onClick={onClose} className="ui-btn ui-btn--ghost ui-btn--sm">
+            ปิด
+          </button>
+        </div>
+        {finished ? (
+          <p className="ui-dialog__message">ตรวจครบทุกรายการแล้ว</p>
+        ) : (
+          <>
+            <a href={`/api/image/${item.image_key}`} target="_blank" rel="noreferrer" title="เปิดรูปเต็ม">
+              <img key={item.image_key} src={`/api/image/${item.image_key}`} alt="รูปหลักฐาน" className="review__img" />
+            </a>
+            <p className="review__title">
+              {item.type === "party"
+                ? `${item.detail} · ${item.activity_date}`
+                : `แอร์ดรอปรอบ ${item.round_time} · ${item.activity_date}`}
+            </p>
+            <p className="review__meta">
+              ได้คนละ +{item.points} แต้ม · {Number(item.member_count) || 1} คน: {item.members}
+            </p>
+            <p className="review__meta">
+              ส่งโดย {item.submitted_by} · {new Date(item.created_at).toLocaleString("th-TH")}
+            </p>
+            {rejecting ? (
+              <div className="review__reject">
+                <Chips
+                  value={reason}
+                  onChange={setReason}
+                  options={REJECT_REASONS.map((text) => ({ id: text, label: text }))}
+                />
+                <input
+                  id="review-reason"
+                  value={reason}
+                  maxLength={120}
+                  onChange={(event) => setReason(event.target.value)}
+                  placeholder="หรือพิมพ์เหตุผลเอง"
+                  className="ui-input"
+                />
+                <div className="ui-dialog__actions">
+                  <button type="button" onClick={() => setRejecting(false)} className="ui-btn ui-btn--ghost">
+                    กลับ
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => act("reject", reason.trim())}
+                    className="ui-btn ui-btn--primary"
+                  >
+                    ยืนยันไม่ผ่าน
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="review__actions">
+                <button
+                  type="button"
+                  disabled={left < 2}
+                  onClick={() => go(step(index, 1, handled))}
+                  className="ui-btn ui-btn--ghost"
+                >
+                  ข้าม
+                </button>
+                <button type="button" disabled={busy} onClick={() => setRejecting(true)} className="ui-btn ui-btn--ghost">
+                  ไม่ผ่าน
+                </button>
+                <button type="button" autoFocus disabled={busy} onClick={() => act("approve")} className="ui-btn ui-btn--ok">
+                  ผ่าน +{item.points}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdminCommandCenter({
   data,
   call,
@@ -798,6 +1035,7 @@ function AdminCommandCenter({
   const [pointMember, setPointMember] = useState("");
   const [pointValue, setPointValue] = useState("");
   const [pointReason, setPointReason] = useState("");
+  const [review, setReview] = useState<{ items: any[]; start: number } | null>(null);
   // The owner flag, not the display name: names can be edited.
   const sam = Boolean(
     data.managedMembers.find((member: any) => String(member.id) === String(data.me.id))
@@ -1120,48 +1358,38 @@ function AdminCommandCenter({
 
         {tab === "verify" &&
           (visiblePending.length ? (
-            visiblePending.map((item: any) => (
-              <Row
-                key={item.type + item.id}
-                inset={false}
-                title={`${item.type === "party" ? "ปาร์ตี้" : "แอร์ดรอป"} · ${item.detail}`}
-                subtitle={
-                  item.submitted_by ? `ส่งโดย ${item.submitted_by}` : undefined
-                }
-                trailing={
-                  <>
-                    {/* Opens the full asset on demand instead of every row
-                        eagerly fetching one to shrink into a thumbnail. */}
-                    <a
-                      href={`/api/image/${item.image_key}`}
-                      target="_blank"
-                      rel="noreferrer"
+            <>
+              <div className="p-3">
+                <button
+                  type="button"
+                  onClick={() => setReview({ items: visiblePending, start: 0 })}
+                  className="ui-btn ui-btn--primary ui-btn--block"
+                >
+                  ตรวจทีละรายการ ({visiblePending.length})
+                </button>
+              </div>
+              {visiblePending.map((item: any, index: number) => (
+                <Row
+                  key={item.type + item.id}
+                  inset={false}
+                  title={
+                    item.type === "party"
+                      ? `${item.detail} · ${item.activity_date}`
+                      : `แอร์ดรอปรอบ ${item.round_time} · ${item.activity_date}`
+                  }
+                  subtitle={`ส่งโดย ${item.submitted_by} · ได้แต้ม ${Number(item.member_count) || 1} คน คนละ +${item.points}`}
+                  trailing={
+                    <button
+                      type="button"
+                      onClick={() => setReview({ items: visiblePending, start: index })}
                       className="ui-btn ui-btn--ghost ui-btn--sm"
                     >
-                      ดูรูป
-                    </a>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        call({ action: "approve", type: item.type, id: item.id })
-                      }
-                      className="ui-btn ui-btn--ok ui-btn--sm"
-                    >
-                      ผ่าน
+                      ตรวจ
                     </button>
-                    <button
-                      disabled={busy}
-                      onClick={() =>
-                        call({ action: "reject", type: item.type, id: item.id })
-                      }
-                      className="ui-btn ui-btn--ghost ui-btn--sm"
-                    >
-                      ไม่ผ่าน
-                    </button>
-                  </>
-                }
-              />
-            ))
+                  }
+                />
+              ))}
+            </>
           ) : data.pending.length ? (
             noMatch
           ) : (
@@ -1458,6 +1686,17 @@ function AdminCommandCenter({
             noMatch
           ))}
       </Panel>
+      {review && (
+        <ReviewDialog
+          items={review.items}
+          start={review.start}
+          busy={busy}
+          onAct={(item, action, reason) =>
+            call({ action, type: item.type, id: item.id, reason, confirmed: true })
+          }
+          onClose={() => setReview(null)}
+        />
+      )}
       {renaming && (
         <PromptDialog
           title={`แก้ชื่อสมาชิก “${renaming.display_name}”`}
@@ -1854,6 +2093,7 @@ export default function Home() {
   const moreNav: [string, string, any, string][] = (
     [
       ["leave", "ห้องลา", CalendarOff, "แจ้งลาและดูประวัติการลา"],
+      ["mine", "แต้มของฉัน", BarChart3, "แต้มรายวัน แยกว่าได้จากอะไร โดนหักเท่าไหร่"],
       ["log", "ประวัติการส่ง", History, "หลักฐานที่ส่งทั้งหมดและผลตรวจ"],
       ["admin", "จัดการแก๊ง", ShieldCheck, "ตรวจหลักฐาน สมาชิก ปาร์ตี้ แต้ม"],
     ] as [string, string, any, string][]
@@ -2145,7 +2385,11 @@ export default function Home() {
                       />
                     }
                     title={`${x.activity_date} · รอบ ${x.round_time}`}
-                    subtitle={new Date(x.created_at).toLocaleString("th-TH")}
+                    subtitle={
+                      x.status === "rejected" && x.reject_reason
+                        ? `ไม่ผ่าน: ${x.reject_reason}`
+                        : new Date(x.created_at).toLocaleString("th-TH")
+                    }
                     trailing={<Status value={x.status} />}
                   />
                 ))
@@ -2232,6 +2476,12 @@ export default function Home() {
               <ViewLoading />
             ) : (
               <LeaveRoom data={data} call={call} busy={busy} />
+            ))}
+          {view === "mine" &&
+            (!loadedViews.includes("mine") ? (
+              <ViewLoading />
+            ) : (
+              <MyPoints data={data} />
             ))}
           {view === "log" &&
             (!loadedViews.includes("log") ? (

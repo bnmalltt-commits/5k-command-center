@@ -1,12 +1,12 @@
 import { db } from "@/lib/db";
 import { now, thaiDate } from "@/lib/auth";
 import { postCard, discordUserId } from "@/lib/notify";
-import { pointsByDaySql, teamStatusSql, TEAM_PER_DAY } from "@/lib/points";
+import { pointsByDaySql, teamStatusSql, teamDayResultSql, TEAM_PER_DAY, TEAM_RULE_START, KIND_POINTS } from "@/lib/points";
 
 export const maxDuration = 30;
 
-// Scheduled Discord reminders. A GitHub Actions workflow calls this every
-// 10 minutes; this route decides what is due from the Bangkok clock. Each
+// Scheduled Discord reminders. Something outside calls this every few minutes
+// (a GitHub Actions workflow, which runs far less often than scheduled); this route decides what is due from the Bangkok clock. Each
 // reminder claims a unique key in notification_log before posting, so it is
 // sent at most once however often (or by whom) this URL is hit — which is why
 // it needs no secret.
@@ -176,6 +176,50 @@ async function autoAbsence(nowMs: number) {
   return [`absent ${date}: ${absent.length}`];
 }
 
+// Shortly after midnight (00:00–04:00), for the day that just ended: who fell
+// short of the team quota and how many points that cost them, tagged so the
+// deduction is never silent. Nothing is written (the penalty is derived on
+// read), so a failed post simply retries on the next run.
+async function teamSummary(nowMs: number) {
+  const today = bkkDateOf(nowMs);
+  if (nowMs < bkkTime(today, "00:00") || nowMs >= bkkTime(today, "04:00")) return [];
+  const date = bkkDateOf(nowMs - 86400_000);
+  if (date < TEAM_RULE_START) return [];
+  const url = process.env.DISCORD_REMINDER_WEBHOOK_URL || process.env.DISCORD_POINTS_WEBHOOK_URL;
+  if (!url) return [];
+  const key = `team:${date}`;
+  if (!(await claim(key))) return [];
+  let docked: any[];
+  let total = 0;
+  try {
+    docked = (await db.prepare(
+      `SELECT m.display_name,m.external_user_id,r.n,r.debt,r.inc FROM (${teamDayResultSql(today, date)}) r JOIN members m ON m.id=r.member_id WHERE m.active=1 ORDER BY r.inc DESC,m.display_name`
+    ).bind().all<any>()).results;
+    total = Number((await db.prepare(
+      "SELECT COUNT(*) AS n FROM members WHERE active=1 AND (created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date <= ?::date"
+    ).bind(date).first<any>())?.n || 0);
+  } catch (error) {
+    await release(key);
+    throw error;
+  }
+  const ok = await postCard(url, {
+    title: `📉 สรุปคะแนนทีม ${date} (ขั้นต่ำ ${TEAM_PER_DAY} คะแนน)`,
+    lines: [
+      ["ไม่โดนหัก", `${Math.max(0, total - docked.length)} คน`],
+      ["โดนหัก", docked.length ? `${docked.length} คน · หักตามคะแนนที่ขาด` : "ไม่มี ทุกคนทำครบ 🎉"],
+      ...docked.map((m: any): [string, unknown] => [
+        m.display_name,
+        `ได้ ${Number(m.n)}/${TEAM_PER_DAY} · หัก ${Number(m.inc)} แต้ม · ค้างรวม ${Number(m.debt)}`,
+      ]),
+      ...(docked.length ? [["ทำชดได้คืน", `งัดร้าน +${KIND_POINTS.shop} · ลูป +${KIND_POINTS.loop} วันไหนก็ได้`] as [string, unknown]] : []),
+    ],
+    color: docked.length ? 0xef4444 : 0x4ade80,
+    mention: mentions(docked),
+  });
+  if (!ok) await release(key);
+  return ok ? [`team ${date}: ${docked.length} docked`] : [];
+}
+
 export async function GET(request: Request) {
   // ?at=<ISO time> simulates the clock for local testing; ignored in production.
   const at = new URL(request.url).searchParams.get("at");
@@ -186,6 +230,7 @@ export async function GET(request: Request) {
       ...(await shopReminder(nowMs)),
       ...(await monthlyWinners(nowMs)),
       ...(await autoAbsence(nowMs)),
+      ...(await teamSummary(nowMs)),
     ];
     return Response.json({ ok: true, at: new Date(nowMs).toISOString(), bkkDate: thaiDate(), ran });
   } catch (error) {

@@ -32,6 +32,8 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
   const [activityFile, setActivityFile] = useState<File | null>(null);
   const [shopName, setShopName] = useState("");
   const [kind, setKind] = useState<"shop" | "loop">("shop");
+  // Who actually took part; null = everyone in the team (the default).
+  const [present, setPresent] = useState<string[] | null>(null);
   const [activityPickerReset, setActivityPickerReset] = useState(0);
   const [createSearch, setCreateSearch] = useState("");
   const [addSearch, setAddSearch] = useState("");
@@ -151,7 +153,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           <Panel
             label="PARTY ACTIVITY"
             title="ส่งหลักฐานทีม"
-            subtitle={`ได้แต้มทุกคนในทีม ${party.members.length} คน · งัดร้าน +${data.team?.points?.shop ?? 3} · ลูป +${data.team?.points?.loop ?? 1} · ขั้นต่ำวันละ ${data.team?.perDay ?? 9} คะแนน`}
+            subtitle={`ติ๊กเฉพาะคนที่ไปจริง · งัดร้าน +${data.team?.points?.shop ?? 3} · ลูป +${data.team?.points?.loop ?? 1} · ขั้นต่ำวันละ ${data.team?.perDay ?? 9} คะแนน`}
           >
             {!data.me?.discordLinked && <DiscordGate what="ส่งหลักฐานทีม" />}
             <form
@@ -163,7 +165,10 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 // Keep the photo when the member cancels the confirm or the
                 // upload fails, so they can retry without picking it again.
                 const sent = await onSubmit?.(
-                  party.members.map((member: any) => member.id),
+                  party.members
+                    .map((member: any) => String(member.id))
+                    .filter((id: string) => !present || present.includes(id) || id === String(data.me.id))
+                    .map(Number),
                   activityFile,
                   kind === "shop" ? shopName.trim() : "",
                   kind,
@@ -171,6 +176,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 if (!sent) return;
                 setActivityFile(null);
                 setShopName("");
+                setPresent(null);
                 setActivityPickerReset((n) => n + 1);
               }}
             >
@@ -183,6 +189,35 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                   { id: "loop", label: `ลูป +${data.team?.points?.loop ?? 1}` },
                 ]}
               />
+              <div className="present-picks" role="group" aria-label="คนที่ไปจริง">
+                {party.members.map((member: any) => {
+                  const id = String(member.id);
+                  const isMe = id === String(data.me.id);
+                  const on = isMe || !present || present.includes(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      aria-pressed={on}
+                      disabled={isMe}
+                      title={isMe ? "ผู้ส่งต้องอยู่ในหลักฐานเสมอ" : undefined}
+                      onClick={() => {
+                        const all = party.members.map((m: any) => String(m.id));
+                        const current: string[] = present ?? all;
+                        setPresent(current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+                      }}
+                      className={`present-chip ${on ? "is-on" : ""}`}
+                    >
+                      <Avatar url={data.avatars?.[id]} name={member.display_name} size={20} />
+                      {member.display_name}
+                      {isMe ? " (คุณ)" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-[var(--ui-text-3)]">
+                ได้แต้ม {party.members.filter((m: any) => String(m.id) === String(data.me.id) || !present || present.includes(String(m.id))).length} คน
+              </p>
               <input
                 hidden={kind !== "shop"}
                 value={shopName}
@@ -232,7 +267,11 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                       />
                     }
                     title={`${activity.kind === "loop" ? "ลูป" : "งัดร้าน"} · ${activity.activity_date}`}
-                    subtitle={activity.members}
+                    subtitle={
+                      activity.status === "rejected" && activity.reject_reason
+                        ? `ไม่ผ่าน: ${activity.reject_reason} · ${activity.members}`
+                        : activity.members
+                    }
                     trailing={
                       <span className="text-xs text-[var(--ui-text-3)]">
                         {activity.status === "approved"

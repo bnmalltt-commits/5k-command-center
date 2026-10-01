@@ -1,7 +1,7 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
 import { notifyApproval, notifyRejection, discordUserId, discordAvatarUrl, postCard } from "@/lib/notify";
-import { pointsByDaySql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
+import { pointsByDaySql, pointsDetailSql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 
@@ -67,7 +67,7 @@ async function partyDetails(party: any) {
 // NOTE: if a nav entry ever grows a badge count (e.g. "คำเชิญ (2)"), the key
 // behind that count has to move into core, since it'd then be read from every
 // view rather than only inside its own.
-const VIEWS = ["airdrop", "party", "score", "admin", "leave", "log"] as const;
+const VIEWS = ["airdrop", "party", "score", "admin", "leave", "log", "mine"] as const;
 type View = (typeof VIEWS)[number];
 
 export async function GET(request: Request) {
@@ -83,15 +83,16 @@ export async function GET(request: Request) {
       admin: view === "admin" && me.role === "admin",
       leave: view === "leave",
       log: view === "log",
+      mine: view === "mine",
     };
     await db.prepare("UPDATE members SET last_seen_at=? WHERE id=?").bind(now(), me.id).run();
     const since = onlineSince();
     const empty = Promise.resolve({ results: [] as any[] });
     const [members, airdrops, parties, favorites, leaderboard, managed, partyBase, partyInvites, openParties, leaveRequests, submissionLog, score, pending] = await Promise.all([
       db.prepare("SELECT id,display_name,role,CASE WHEN last_seen_at IS NOT NULL AND last_seen_at>=? THEN 1 ELSE 0 END AS online FROM members WHERE active=1 ORDER BY online DESC,display_name").bind(since).all(),
-      db.prepare("SELECT id,activity_date,round_time,status,image_key,created_at FROM airdrop_submissions WHERE member_id=? ORDER BY activity_date DESC,round_time DESC LIMIT 30").bind(me.id).all(),
+      db.prepare("SELECT id,activity_date,round_time,status,image_key,created_at,reject_reason FROM airdrop_submissions WHERE member_id=? ORDER BY activity_date DESC,round_time DESC LIMIT 30").bind(me.id).all(),
       wants.party
-        ? db.prepare("SELECT pa.id,pa.kind,pa.status,pa.image_key,pa.activity_date,pa.created_at,STRING_AGG(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all()
+        ? db.prepare("SELECT pa.id,pa.kind,pa.status,pa.image_key,pa.activity_date,pa.created_at,pa.reject_reason,STRING_AGG(allm.display_name,' · ') AS members FROM party_activities pa JOIN party_activity_members mine ON mine.party_activity_id=pa.id AND mine.member_id=? JOIN party_activity_members allpam ON allpam.party_activity_id=pa.id JOIN members allm ON allm.id=allpam.member_id GROUP BY pa.id ORDER BY pa.created_at DESC LIMIT 30").bind(me.id).all()
         : empty,
       db.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
       db.prepare(`SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN (${POINTS_BY_DAY}) pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100`).bind(since).all(),
@@ -109,11 +110,11 @@ export async function GET(request: Request) {
           ? db.prepare("SELECT l.id,l.leave_date,l.reason,l.created_at,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all()
           : db.prepare("SELECT l.id,l.leave_date,l.reason,l.created_at,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by WHERE l.member_id=? ORDER BY l.leave_date DESC LIMIT 100").bind(me.id).all(),
       wants.log
-        ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.round_time AS detail,a.activity_date,a.status,a.created_at,a.image_key,m.display_name AS submitted_by,approver.display_name AS approved_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id LEFT JOIN members approver ON approver.id=a.approved_by UNION ALL SELECT 'party' AS type,pa.id,CASE pa.kind WHEN 'loop' THEN 'ลูป' ELSE 'งัดร้าน' END AS detail,pa.activity_date,pa.status,pa.created_at,pa.image_key,submitter.display_name AS submitted_by,approver.display_name AS approved_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id LEFT JOIN members approver ON approver.id=pa.approved_by) x ORDER BY created_at DESC LIMIT 300").bind().all()
+        ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.round_time AS detail,a.activity_date,a.status,a.created_at,a.image_key,a.reject_reason,m.display_name AS submitted_by,approver.display_name AS approved_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id LEFT JOIN members approver ON approver.id=a.approved_by UNION ALL SELECT 'party' AS type,pa.id,CASE pa.kind WHEN 'loop' THEN 'ลูป' ELSE 'งัดร้าน' END AS detail,pa.activity_date,pa.status,pa.created_at,pa.image_key,pa.reject_reason,submitter.display_name AS submitted_by,approver.display_name AS approved_by FROM party_activities pa LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id LEFT JOIN members approver ON approver.id=pa.approved_by) x ORDER BY created_at DESC LIMIT 300").bind().all()
         : empty,
       db.prepare(`SELECT COALESCE(SUM(points),0) AS total FROM (${POINTS_BY_DAY}) x WHERE member_id=?`).bind(me.id).first<any>(),
       wants.admin
-        ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.image_key,a.round_time AS detail,a.created_at,m.display_name AS submitted_by FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.status='pending' UNION ALL SELECT 'party' AS type,pa.id,pa.image_key,CASE pa.kind WHEN 'loop' THEN 'ลูป' ELSE COALESCE('งัดร้าน · '||sp.shop_name,'งัดร้าน') END AS detail,pa.created_at,submitter.display_name AS submitted_by FROM party_activities pa LEFT JOIN parties sp ON sp.id=pa.party_id LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id WHERE pa.status='pending') x ORDER BY created_at DESC LIMIT 200").bind().all()
+        ? db.prepare("SELECT * FROM (SELECT 'airdrop' AS type,a.id,a.image_key,a.round_time AS detail,a.created_at,a.activity_date,a.round_time,NULL AS kind,m.display_name AS submitted_by,m.display_name AS members,1 AS member_count FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.status='pending' UNION ALL SELECT 'party' AS type,pa.id,pa.image_key,CASE pa.kind WHEN 'loop' THEN 'ลูป' ELSE COALESCE('งัดร้าน · '||sp.shop_name,'งัดร้าน') END AS detail,pa.created_at,pa.activity_date,NULL AS round_time,pa.kind,submitter.display_name AS submitted_by,(SELECT STRING_AGG(cm.display_name,' · ' ORDER BY cm.display_name) FROM party_activity_members cpam JOIN members cm ON cm.id=cpam.member_id WHERE cpam.party_activity_id=pa.id) AS members,(SELECT COUNT(*) FROM party_activity_members cpam WHERE cpam.party_activity_id=pa.id) AS member_count FROM party_activities pa LEFT JOIN parties sp ON sp.id=pa.party_id LEFT JOIN members submitter ON submitter.id=pa.submitted_by_member_id WHERE pa.status='pending') x ORDER BY created_at ASC LIMIT 200").bind().all()
         : empty,
     ]);
     // Dependent on partyBase.id, so it can't join the batch above. It stays on
@@ -159,6 +160,13 @@ export async function GET(request: Request) {
     const monthMe = await db.prepare(
       `WITH s AS (SELECT x.member_id,SUM(x.points) AS score FROM (${POINTS_BY_DAY}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 AND x.day>=? GROUP BY x.member_id) SELECT (SELECT score FROM s WHERE member_id=?) AS score,(SELECT COUNT(*)+1 FROM s WHERE score>(SELECT score FROM s WHERE member_id=?)) AS rank`
     ).bind(`${date.slice(0, 7)}-01`, me.id, me.id).first<any>();
+    // "แต้มของฉัน": the member's own points per day, split by where they came
+    // from (same source as every score, so the totals always agree).
+    const myPoints = wants.mine
+      ? (await db.prepare(
+          `SELECT day,category,SUM(points) AS points,COUNT(*) AS n FROM (${pointsDetailSql(date)}) d WHERE member_id=? GROUP BY day,category ORDER BY day DESC`
+        ).bind(me.id).all<any>()).results.map((row: any) => ({ ...row, points: Number(row.points), n: Number(row.n) }))
+      : null;
     let boards: Record<string, any[]> | null = null;
     let monthBoards: Record<string, any[]> | null = null;
     if (view === "score") {
@@ -223,7 +231,8 @@ export async function GET(request: Request) {
       }),
       ...(wants.admin && {
         managedMembers: managed.results,
-        pending: pending.results,
+        // Points each credited member would get, by the rule on that date.
+        pending: pending.results.map((row: any) => ({ ...row, points: pointsFor(row.type, row.kind, String(row.activity_date)) })),
         adminParties: adminParties!.results,
         ledger: ledger!.results,
         adminLeaves: adminLeaves!.results,
@@ -235,6 +244,7 @@ export async function GET(request: Request) {
       ...(boards && { boards, monthBoards }),
       ...(wants.leave && { leaveRequests: leaveRequests.results }),
       ...(wants.log && { submissionLog: submissionLog.results }),
+      ...(myPoints && { myPoints }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ";
@@ -321,13 +331,15 @@ export async function POST(request: Request) {
     }
     if (body.action === "reject") {
       const admin = await requireAdmin(request), type = validType(body.type), table = type === "party" ? "party_activities" : "airdrop_submissions";
-      const rejected = await db.prepare(`UPDATE ${table} SET status='rejected',approved_by=? WHERE id=? AND status='pending' RETURNING activity_date${type === "party" ? ",kind" : ",round_time"}`).bind(admin.id, Number(body.id)).first<any>();
+      const reason = String(body.reason || "").trim().replace(/\s+/g, " ").slice(0, 120) || null;
+      const rejected = await db.prepare(`UPDATE ${table} SET status='rejected',approved_by=?,reject_reason=? WHERE id=? AND status='pending' RETURNING activity_date${type === "party" ? ",kind" : ",round_time"}`).bind(admin.id, reason, Number(body.id)).first<any>();
       if (!rejected) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
       const people = (type === "party"
         ? await db.prepare("SELECT m.display_name AS name,m.external_user_id FROM party_activity_members pam JOIN members m ON m.id=pam.member_id WHERE pam.party_activity_id=? ORDER BY m.display_name").bind(Number(body.id)).all<any>()
         : await db.prepare("SELECT m.display_name AS name,m.external_user_id FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.id=?").bind(Number(body.id)).all<any>()
       ).results;
       await notifyRejection({
+        reason,
         kind: type === "party" ? `${rejected.kind === "loop" ? "ลูป" : "งัดร้าน"} · ${rejected.activity_date}` : `แอร์ดรอปรอบ ${rejected.round_time} · ${rejected.activity_date}`,
         rejectedBy: admin.display_name,
         people: people.map((p: any) => ({ name: p.name, discordId: discordUserId(p.external_user_id) })),

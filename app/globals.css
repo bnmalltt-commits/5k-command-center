@@ -1682,3 +1682,74 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
   height: 9px;
   box-shadow: 0 0 0 2px #121212;
 }
+
+/* Review dialog: one evidence at a time, large photo. */
+.ui-dialog.review {
+  max-width: 640px;
+  max-height: calc(100vh - 36px);
+  overflow-y: auto;
+}
+.review__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.review__img {
+  display: block;
+  width: 100%;
+  max-height: 58vh;
+  object-fit: contain;
+  background: #000;
+  border-radius: var(--ui-radius-sm);
+}
+.review__title { margin: 12px 0 4px; color: var(--ui-text); font-weight: 700; }
+.review__meta { margin: 0; color: var(--ui-text-2); font-size: 13px; line-height: 1.6; word-break: break-word; }
+.review__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr 2fr;
+  gap: 8px;
+  margin-top: 14px;
+}
+.review__actions .ui-btn { min-height: 46px; }
+.review__reject { display: grid; gap: 10px; margin-top: 12px; }
+.review__reject .ui-input { margin-top: 0; }
+
+/* Team evidence: tick who actually took part. */
+.present-picks { display: flex; flex-wrap: wrap; gap: 6px; }
+.present-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 10px 4px 6px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 999px;
+  color: var(--ui-text-3);
+  font-size: 13px;
+  text-decoration: line-through;
+}
+.present-chip.is-on {
+  border-color: var(--ui-green);
+  color: var(--ui-text);
+  text-decoration: none;
+}
+.present-chip:disabled { cursor: default; opacity: 1; }
+
+/* แต้มของฉัน: totals by source. */
+.points-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 6px;
+}
+.points-split__cell {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border: 1px solid var(--ui-line);
+  border-radius: var(--ui-radius-sm);
+}
+.points-split__cell span { color: var(--ui-text-3); font-size: 12px; }
+.points-split__cell b { color: var(--ui-green); font-size: 18px; font-variant-numeric: tabular-nums; }
+.points-split__cell.is-minus b { color: var(--ui-red-light); }
