@@ -14,6 +14,7 @@ const PAGE = `<!doctype html><html lang="th"><head><meta charset="utf-8"><meta n
   try {
     const r = await fetch("/api/auth/discord", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ accessToken: p.get("access_token"), state: p.get("state") }) });
     const x = await r.json();
+    if (x.claim) return location.replace("/?claim=1");
     done(x.error || x.message || "");
   } catch { done("เข้าสู่ระบบด้วย Discord ไม่สำเร็จ"); }
 })();

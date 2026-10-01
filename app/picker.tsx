@@ -7,21 +7,50 @@ import { Camera, Clipboard, X } from "lucide-react";
 // phone photos are often 5–8 MB. Anything over the budget is re-encoded as a
 // JPEG, capped on its long side — plenty to read a screenshot or group photo.
 const UPLOAD_BUDGET = 3.5 * 1024 * 1024;
+// A failure the member can act on (shown as-is instead of "try again").
+export const imageError = (message: string) => Object.assign(Error(message), { name: "ImageError" });
+
+// Decodes with createImageBitmap, falling back to an <img> element, which can
+// open formats (e.g. HEIC on Safari) that createImageBitmap rejects.
+async function decode(file: File): Promise<{ source: CanvasImageSource; width: number; height: number; done: () => void }> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    return { source: bitmap, width: bitmap.width, height: bitmap.height, done: () => bitmap.close() };
+  } catch {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.src = url;
+    try {
+      await img.decode();
+    } catch {
+      URL.revokeObjectURL(url);
+      throw imageError("เปิดรูปนี้ไม่ได้ ลองแคปหน้าจอแล้วส่งรูปแคปแทน");
+    }
+    return { source: img, width: img.naturalWidth, height: img.naturalHeight, done: () => URL.revokeObjectURL(url) };
+  }
+}
+
 export async function shrinkImage(file: File): Promise<File> {
   if (file.size <= UPLOAD_BUDGET) return file;
-  const bitmap = await createImageBitmap(file);
+  const image = await decode(file);
   let result: Blob | null = null;
-  for (const [side, quality] of [[2400, 0.85], [1800, 0.8], [1400, 0.72]] as const) {
-    const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext("2d")!.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    result = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
-    if (result && result.size <= UPLOAD_BUDGET) break;
+  try {
+    for (const [side, quality] of [[2400, 0.85], [1800, 0.8], [1400, 0.72]] as const) {
+      const scale = Math.min(1, side / Math.max(image.width, image.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(image.width * scale);
+      canvas.height = Math.round(image.height * scale);
+      const context = canvas.getContext("2d");
+      if (!context) continue;
+      context.drawImage(image.source, 0, 0, canvas.width, canvas.height);
+      result = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+      canvas.width = canvas.height = 0; // free the canvas memory now (iOS)
+      if (result && result.size <= UPLOAD_BUDGET) break;
+    }
+  } finally {
+    image.done();
   }
-  bitmap.close();
-  if (!result) return file;
+  if (!result || result.size > UPLOAD_BUDGET) throw imageError("รูปใหญ่เกินไป ลองแคปหน้าจอแล้วส่งรูปแคปแทน");
   return new File([result], "evidence.jpg", { type: "image/jpeg" });
 }
 
@@ -73,7 +102,11 @@ export function Picker({ onChange, resetToken }: { onChange: (file: File | null)
             className="sr-only"
             type="file"
             accept="image/*"
-            onChange={(e) => applyFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              applyFile(e.target.files?.[0] || null);
+              // Clear it so choosing the same photo again still fires onChange.
+              e.target.value = "";
+            }}
           />
         </label>
         {preview && (

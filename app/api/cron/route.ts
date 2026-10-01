@@ -6,7 +6,7 @@ import { pointsByDaySql, shopStatusSql } from "@/lib/points";
 export const maxDuration = 30;
 
 // Scheduled Discord reminders. A GitHub Actions workflow calls this every
-// 30 minutes; this route decides what is due from the Bangkok clock. Each
+// 10 minutes; this route decides what is due from the Bangkok clock. Each
 // reminder claims a unique key in notification_log before posting, so it is
 // sent at most once however often (or by whom) this URL is hit — which is why
 // it needs no secret.
@@ -133,22 +133,31 @@ async function autoAbsence(nowMs: number) {
   const date = bkkDateOf(nowMs - 86400_000);
   if (date < AUTO_ABSENT_START) return [];
   const url = process.env.DISCORD_REMINDER_WEBHOOK_URL || process.env.DISCORD_POINTS_WEBHOOK_URL;
-  if (!(await claim(`absent:${date}`))) return [];
-  const absent = (await db.prepare(
-    `SELECT m.id,m.display_name,m.external_user_id FROM members m
-     WHERE m.active=1 AND (m.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date <= ?::date
-       AND NOT EXISTS (SELECT 1 FROM leave_requests l WHERE l.member_id=m.id AND l.leave_date=?)
-       AND NOT EXISTS (SELECT 1 FROM airdrop_submissions a WHERE a.member_id=m.id AND a.activity_date=?)
-       AND NOT EXISTS (SELECT 1 FROM party_activity_members pam JOIN party_activities pa ON pa.id=pam.party_activity_id WHERE pam.member_id=m.id AND pa.activity_date=?)
-     ORDER BY m.display_name`
-  ).bind(date, date, date, date).all<any>()).results;
-  if (!absent.length) return [`absent ${date}: none`];
-  // Recorded by the owner account (leave_requests.created_by is required).
-  const owner = await db.prepare("SELECT id FROM members WHERE is_primary_admin=1 LIMIT 1").bind().first<any>();
-  await db.batch(absent.map((m: any) =>
-    db.prepare("INSERT INTO leave_requests (member_id,leave_date,reason,created_by,created_at) VALUES (?,?,?,?,?) ON CONFLICT (member_id,leave_date) DO NOTHING")
-      .bind(m.id, date, ABSENT_REASON, owner?.id ?? m.id, now())
-  ));
+  const key = `absent:${date}`;
+  if (!(await claim(key))) return [];
+  let absent: any[];
+  try {
+    // A leave row this job wrote itself still counts as absent, so a retry
+    // after a failed Discord post finds the same people again.
+    absent = (await db.prepare(
+      `SELECT m.id,m.display_name,m.external_user_id FROM members m
+       WHERE m.active=1 AND (m.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date < ?::date
+         AND NOT EXISTS (SELECT 1 FROM leave_requests l WHERE l.member_id=m.id AND l.leave_date=? AND l.reason<>?)
+         AND NOT EXISTS (SELECT 1 FROM airdrop_submissions a WHERE a.member_id=m.id AND a.activity_date=?)
+         AND NOT EXISTS (SELECT 1 FROM party_activity_members pam JOIN party_activities pa ON pa.id=pam.party_activity_id WHERE pam.member_id=m.id AND pa.activity_date=?)
+       ORDER BY m.display_name`
+    ).bind(date, date, ABSENT_REASON, date, date).all<any>()).results;
+    if (!absent.length) return [`absent ${date}: none`];
+    // Recorded by the owner account (leave_requests.created_by is required).
+    const owner = await db.prepare("SELECT id FROM members WHERE is_primary_admin=1 LIMIT 1").bind().first<any>();
+    await db.batch(absent.map((m: any) =>
+      db.prepare("INSERT INTO leave_requests (member_id,leave_date,reason,created_by,created_at) VALUES (?,?,?,?,?) ON CONFLICT (member_id,leave_date) DO NOTHING")
+        .bind(m.id, date, ABSENT_REASON, owner?.id ?? m.id, now())
+    ));
+  } catch (error) {
+    await release(key); // nothing posted; let the next run try again
+    throw error;
+  }
   if (url) {
     const ok = await postCard(url, {
       title: `📋 ไม่ได้ส่งอะไรเลยเมื่อวาน · บันทึกเป็นขาด`,
@@ -161,7 +170,7 @@ async function autoAbsence(nowMs: number) {
       color: 0xef4444,
       mention: mentions(absent),
     });
-    if (!ok) await release(`absent:${date}`); // leave rows are idempotent; retry the post
+    if (!ok) await release(key); // leave rows are idempotent; retry the post
   }
   return [`absent ${date}: ${absent.length}`];
 }

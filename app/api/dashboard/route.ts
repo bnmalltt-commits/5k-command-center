@@ -3,7 +3,7 @@ import { leaveStatements } from "@/lib/party";
 import { notifyApproval, notifyRejection, discordUserId, discordAvatarUrl, postCard } from "@/lib/notify";
 import { pointsByDaySql, shopStatusSql, SHOP_RULE_START, SHOP_PER_DAY, SHOP_PENALTY } from "@/lib/points";
 import { storage } from "@/lib/storage";
-import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
+import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 
 // Give the ~11 parallel queries this route fires room to finish instead of
 // Vercel killing the function mid-flight, which would abandon their Postgres
@@ -93,7 +93,7 @@ export async function GET(request: Request) {
         : empty,
       db.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
       db.prepare(`SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN (${POINTS_BY_DAY}) pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100`).bind(since).all(),
-      wants.admin ? db.prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash IS NOT NULL AS has_pin,COALESCE(external_user_id LIKE 'discord:%',false) AS discord_linked FROM members ORDER BY active DESC,display_name").bind().all() : empty,
+      wants.admin ? db.prepare("SELECT id,username,display_name,role,active,is_primary_admin,COALESCE(external_user_id LIKE 'discord:%',false) AS discord_linked FROM members ORDER BY active DESC,display_name").bind().all() : empty,
       db.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
       wants.party
         ? db.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all()
@@ -272,35 +272,38 @@ export async function POST(request: Request) {
             .bind(r.member_id, type, id, points, type === "party" ? "ปาร์ตี้ตรวจผ่าน" : "แอร์ดรอปตรวจผ่าน", now())
         )
       );
-      await notifyApproval({
-        kind: type === "party"
-          ? `กิจกรรมปาร์ตี้ · ${updated.activity_date}`
-          : `แอร์ดรอปรอบ ${updated.round_time} · ${updated.activity_date}`,
-        approvedBy: admin.display_name,
-        // Only people this approval actually credited.
-        people: await (async () => {
-          const ids = credited.filter((_: any, i: number) => inserted[i]?.meta.changes).map((r: any) => String(r.member_id));
-          const after = await totalsFor(ids, today);
-          return after
-            .map((row: any) => ({
-              name: row.name,
-              discordId: discordUserId(row.external_user_id),
-              before: Number(before.find((b: any) => String(b.member_id) === String(row.member_id))?.total || 0),
-              after: Number(row.total),
-            }))
-            .sort((a: any, b: any) => a.name.localeCompare(b.name));
-        })(),
-        // Read before the delete below — this is the last moment the photo exists.
-        loadImage: async () => {
-          if (!updated.image_key) return null;
-          const object = await storage.get(updated.image_key);
-          if (!object) return null;
-          return {
-            blob: await new Response(object.body).blob(),
-            ext: String(updated.image_key).split(".").pop() || "png",
-          };
-        },
-      });
+      // The approval is committed; nothing in the Discord card may turn it into an error.
+      try {
+        await notifyApproval({
+          kind: type === "party"
+            ? `กิจกรรมปาร์ตี้ · ${updated.activity_date}`
+            : `แอร์ดรอปรอบ ${updated.round_time} · ${updated.activity_date}`,
+          approvedBy: admin.display_name,
+          // Only people this approval actually credited.
+          people: await (async () => {
+            const ids = credited.filter((_: any, i: number) => inserted[i]?.meta.changes).map((r: any) => String(r.member_id));
+            const after = await totalsFor(ids, today);
+            return after
+              .map((row: any) => ({
+                name: row.name,
+                discordId: discordUserId(row.external_user_id),
+                before: Number(before.find((b: any) => String(b.member_id) === String(row.member_id))?.total || 0),
+                after: Number(row.total),
+              }))
+              .sort((a: any, b: any) => a.name.localeCompare(b.name));
+          })(),
+          // Read before the delete below — this is the last moment the photo exists.
+          loadImage: async () => {
+            if (!updated.image_key) return null;
+            const object = await storage.get(updated.image_key);
+            if (!object) return null;
+            return {
+              blob: await new Response(object.body).blob(),
+              ext: String(updated.image_key).split(".").pop() || "png",
+            };
+          },
+        });
+      } catch {}
       // Evidence is only needed until it's verified — delete it once approved
       // so storage doesn't fill up. Best-effort: never fail the approval over it.
       if (updated.image_key) await storage.delete(updated.image_key).catch(() => {});
@@ -385,53 +388,19 @@ export async function POST(request: Request) {
       ]);
       return json({ ok: true });
     }
-    // A reset issues a new random PIN rather than clearing pin_hash: the login
-    // route treats a null pin_hash as "accept any PIN and adopt it", so a
-    // cleared account is claimable by whoever types the display name first.
-    if (body.action === "member_pin_reset") {
+    // Undo a wrong Discord claim: the member loses their Discord link and is
+    // signed out everywhere, so the real owner can sign in and pick the name.
+    if (body.action === "member_discord_unlink") {
       const admin = await requireAdmin(request), id = Number(body.id);
-      if (!id) throw Error("ไม่พบสมาชิก");
-      const target = await db.prepare("SELECT id,display_name,is_primary_admin FROM members WHERE id=? AND active=1").bind(id).first<any>();
-      if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
-      if (target.is_primary_admin && !sameId(id, admin.id)) throw Error("ไม่สามารถรีเซ็ต PIN บัญชีเจ้าของแก๊งได้");
-      const pin = randomPin();
-      const statements = [db.prepare("UPDATE members SET pin_hash=?,failed_logins=0,login_locked_until=NULL WHERE id=?").bind(await pinDigest(pin), id)];
-      // Evict the member so a reset also cuts off anyone already signed in as
-      // them — except when you reset your own PIN, which keeps you logged in.
-      if (!sameId(id, admin.id)) statements.push(db.prepare("DELETE FROM sessions WHERE member_id=?").bind(id));
-      await db.batch(statements);
-      return json({ ok: true, pins: [{ name: target.display_name, pin }] });
-    }
-    if (body.action === "member_pin_reset_all") {
-      await requireSam(request);
-      const targets = await db.prepare("SELECT id,display_name FROM members WHERE active=1 AND is_primary_admin=0 ORDER BY display_name").bind().all<any>();
-      const pins: { name: string; pin: string }[] = [];
-      const statements = [];
-      for (const target of targets.results) {
-        const pin = randomPin();
-        pins.push({ name: target.display_name, pin });
-        statements.push(db.prepare("UPDATE members SET pin_hash=?,failed_logins=0,login_locked_until=NULL WHERE id=?").bind(await pinDigest(pin), target.id));
-        statements.push(db.prepare("DELETE FROM sessions WHERE member_id=?").bind(target.id));
-      }
-      await db.batch(statements);
-      return json({ ok: true, pins });
-    }
-    // Protective, so any admin may run it: issues PINs only to accounts that
-    // have none, which are otherwise claimable by whoever types the name first.
-    // Sessions are kept — the people signed in there are the real owners.
-    if (body.action === "member_pin_issue_missing") {
-      const admin = await requireAdmin(request);
-      const targets = await db.prepare("SELECT id,display_name FROM members WHERE active=1 AND pin_hash IS NULL AND (is_primary_admin=0 OR id=?) ORDER BY display_name").bind(admin.id).all<any>();
-      if (!targets.results.length) throw Error("ทุกบัญชีมี PIN แล้ว");
-      const pins: { name: string; pin: string }[] = [];
-      const statements = [];
-      for (const target of targets.results) {
-        const pin = randomPin();
-        pins.push({ name: target.display_name, pin });
-        statements.push(db.prepare("UPDATE members SET pin_hash=? WHERE id=? AND pin_hash IS NULL").bind(await pinDigest(pin), target.id));
-      }
-      await db.batch(statements);
-      return json({ ok: true, pins });
+      if (!id || sameId(id, admin.id)) throw Error("ยกเลิกผูก Discord ของตัวเองไม่ได้ (จะเข้าเว็บไม่ได้)");
+      const target = await db.prepare("SELECT role,is_primary_admin FROM members WHERE id=?").bind(id).first<any>();
+      if (!target || target.is_primary_admin) throw Error("ยกเลิกผูก Discord บัญชีเจ้าของแก๊งไม่ได้");
+      if (target.role === "admin" && !admin.is_primary_admin) throw Error("เฉพาะเจ้าของแก๊งที่ยกเลิกผูก Discord ของแอดมินได้");
+      await db.batch([
+        db.prepare("UPDATE members SET external_user_id=NULL,discord_avatar=NULL WHERE id=?").bind(id),
+        db.prepare("DELETE FROM sessions WHERE member_id=?").bind(id),
+      ]);
+      return json({ ok: true });
     }
     if (body.action === "member_reactivate") {
       await requireAdmin(request);

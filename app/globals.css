@@ -1095,36 +1095,34 @@ button:disabled {
 }
 .admin-party__member span { color: var(--ui-red-light); }
 
-.pin-list {
-  max-height: 46vh;
+/* First Discord sign-in: pick your own name. */
+.claim-list {
+  max-height: 42vh;
   overflow-y: auto;
-  margin-top: 14px;
   border: 1px solid var(--ui-line);
   border-radius: var(--ui-radius-sm);
+  text-align: left;
 }
-.pin-list__row {
+.claim-list__item {
   display: flex;
+  width: 100%;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--ui-line);
-}
-.pin-list__row:last-child { border-bottom: 0; }
-.pin-list__name {
-  min-width: 0;
-  color: var(--ui-text-2);
-  font-size: 13px;
-  word-break: break-word;
-}
-.pin-list__pin {
-  flex-shrink: 0;
   color: var(--ui-text);
   font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  font-variant-numeric: tabular-nums;
+  text-align: left;
+  word-break: break-word;
 }
+.claim-list__item:last-child { border-bottom: 0; }
+.claim-list__item:hover,
+.claim-list__item:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  outline: none;
+}
+.claim-list__item svg { flex-shrink: 0; color: var(--ui-text-3); }
 
 /* --- Redesigned shell --- */
 
@@ -1594,16 +1592,6 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
 .hud-tile--wide { grid-column: 1 / -1; }
 .hud-tile__warn { color: var(--ui-red-light); font-size: 12px; }
 
-.login-or {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 16px 0 12px;
-  color: var(--ui-text-3);
-  font-size: 12px;
-}
-.login-or::before,
-.login-or::after { content: ""; flex: 1; height: 1px; background: var(--ui-line-strong); }
 .discord-btn {
   display: flex;
   align-items: center;

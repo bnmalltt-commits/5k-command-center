@@ -12,7 +12,6 @@ import {
   ChevronRight,
   Crosshair,
   History,
-  KeyRound,
   LayoutGrid,
   LogOut,
   RefreshCw,
@@ -32,8 +31,6 @@ import {
   Dot,
   EmptyState,
   Panel,
-  PinChangeDialog,
-  PinDialog,
   PromptDialog,
   Row,
   SearchInput,
@@ -49,6 +46,126 @@ const uploadResult = async (r: Response) =>
         ? "รูปใหญ่เกินไป ลองใช้รูปที่เล็กลงหรือแคปหน้าจอใหม่"
         : "ส่งรูปไม่สำเร็จ ลองใหม่อีกครั้ง",
   }));
+
+// First Discord sign-in: the person picks their own name from members not yet
+// on Discord, or registers a new one. The server re-checks everything.
+function ClaimScreen({
+  claim,
+  onDone,
+  onCancel,
+}: {
+  claim: { discordName: string; avatar: string | null; members: { id: string; display_name: string }[] };
+  onDone: (error?: string) => void;
+  onCancel: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [picked, setPicked] = useState<{ id: string; display_name: string } | null>(null);
+  const [newName, setNewName] = useState(claim.discordName || "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const q = query.trim().toLowerCase();
+  const shown = claim.members.filter((m) => !q || m.display_name.toLowerCase().includes(q));
+  const submit = async (body: any) => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const r = await fetch("/api/auth/discord", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "claim", ...body }),
+      });
+      const x: any = await r.json().catch(() => ({}));
+      if (x.error) setError(x.error);
+      else onDone();
+    } catch {
+      setError("เชื่อมต่อไม่สำเร็จ ลองใหม่อีกครั้ง");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
+      <section className="command-panel hud-login w-full max-w-md p-7 text-center">
+        <div className="flex justify-center">
+          <Avatar url={claim.avatar} name={claim.discordName} size={64} />
+        </div>
+        <p className="label mt-4">FIRST LOGIN</p>
+        <h1 className="mt-1 text-2xl font-black">สวัสดี {claim.discordName}</h1>
+        <p className="mt-3 text-sm text-[var(--ui-text-3)]">
+          เลือกชื่อของคุณในแก๊ง ทำครั้งเดียว ครั้งหน้ากดเข้าด้วย Discord ได้เลย
+          <br />
+          เลือกชื่อคนอื่นไม่ได้นะ แอดมินเห็นทุกครั้งที่มีคนผูกชื่อ
+        </p>
+        {picked ? (
+          <div className="mt-6 space-y-3">
+            <p className="text-lg font-bold">ฉันคือ “{picked.display_name}”</p>
+            <button disabled={busy} onClick={() => submit({ memberId: picked.id })} className="red-action hud-clip w-full">
+              {busy ? "กำลังบันทึก…" : "ยืนยัน ใช่ชื่อนี้"}
+            </button>
+            <button disabled={busy} onClick={() => setPicked(null)} className="ui-btn ui-btn--ghost w-full">
+              เลือกใหม่
+            </button>
+          </div>
+        ) : (
+          <>
+            <input
+              id="claim-search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="ค้นหาชื่อของคุณ"
+              className="hud-clip mt-6 w-full border border-white/15 bg-black/30 px-4 py-3"
+            />
+            <div className="claim-list mt-3">
+              {shown.length ? (
+                shown.map((m) => (
+                  <button key={m.id} type="button" onClick={() => setPicked(m)} className="claim-list__item">
+                    {m.display_name}
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                ))
+              ) : (
+                <p className="p-3 text-sm text-[var(--ui-text-3)]">
+                  {claim.members.length ? "ไม่พบชื่อนี้" : "ทุกชื่อในแก๊งผูก Discord แล้ว"}
+                </p>
+              )}
+            </div>
+            <form
+              className="mt-5 space-y-2 text-left"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submit({ newName });
+              }}
+            >
+              <label htmlFor="claim-new" className="text-sm text-[var(--ui-text-3)]">
+                ไม่มีชื่อคุณ? สมัครเป็นสมาชิกใหม่
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="claim-new"
+                  required
+                  minLength={2}
+                  maxLength={40}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="ชื่อในแก๊ง"
+                  className="ui-input min-w-0 flex-1"
+                />
+                <button disabled={busy} className="ui-btn ui-btn--primary">
+                  สมัคร
+                </button>
+              </div>
+            </form>
+          </>
+        )}
+        {error && <p className="mt-4 text-sm text-[var(--ui-text)]">{error}</p>}
+        <button type="button" onClick={onCancel} className="mt-5 text-xs text-[var(--ui-text-3)] underline">
+          ยกเลิก
+        </button>
+      </section>
+    </main>
+  );
+}
 
 type Round = "17:00" | "20:00" | "23:00" | "01:00";
 const ROUNDS: Round[] = ["17:00", "20:00", "23:00", "01:00"];
@@ -676,13 +793,14 @@ function AdminCommandCenter({
   const [pointMember, setPointMember] = useState("");
   const [pointValue, setPointValue] = useState("");
   const [pointReason, setPointReason] = useState("");
-  const sam = data.me.name === "Sam";
-  // A non-owner admin can only sign in with their member code, and this list
-  // is the only place it is ever shown — without it, promoting someone locks
-  // them out for good once their session expires.
+  // The owner flag, not the display name: names can be edited.
+  const sam = Boolean(
+    data.managedMembers.find((member: any) => String(member.id) === String(data.me.id))
+      ?.is_primary_admin,
+  );
   const adminSubtitle = (member: any) =>
     member.role === "admin" && !member.is_primary_admin
-      ? `แอดมิน · รหัสเข้าระบบ ${member.username}`
+      ? "แอดมิน"
       : member.role === "admin"
         ? "แอดมิน (เจ้าของแก๊ง)"
         : "สมาชิก";
@@ -693,22 +811,13 @@ function AdminCommandCenter({
     !normalizedQuery || String(text || "").toLowerCase().includes(normalizedQuery);
   const activeMembers = data.managedMembers.filter((member: any) => member.active);
   const removedMembers = data.managedMembers.filter((member: any) => !member.active);
-  // The server never issues a PIN to the owner on another admin's behalf, so
-  // counting the owner here left a warning (and a button) nobody could clear.
-  const noPinMembers = activeMembers.filter(
-    (member: any) =>
-      !member.has_pin &&
-      (!member.is_primary_admin || member.id === data.me.id),
-  );
   const noDiscordMembers = activeMembers.filter((member: any) => !member.discord_linked);
   const memberPool =
     memberFilter === "removed"
       ? removedMembers
-      : memberFilter === "nopin"
-        ? noPinMembers
-        : memberFilter === "nodiscord"
-          ? noDiscordMembers
-          : activeMembers;
+      : memberFilter === "nodiscord"
+        ? noDiscordMembers
+        : activeMembers;
   const visibleMembers = memberPool.filter((member: any) =>
     matches(member.display_name),
   );
@@ -896,26 +1005,16 @@ function AdminCommandCenter({
                 onChange={setMemberFilter}
                 options={[
                   { id: "active", label: `ใช้งาน ${activeMembers.length}` },
-                  { id: "nopin", label: `ยังไม่มี PIN ${noPinMembers.length}` },
                   { id: "nodiscord", label: `ยังไม่ผูก Discord ${noDiscordMembers.length}` },
                   { id: "removed", label: `ถูกเอาออก ${removedMembers.length}` },
                 ]}
               />
-              {noPinMembers.length > 0 && (
+              {noDiscordMembers.length > 0 && (
                 <div className="admin-warning">
                   <p>
-                    {noPinMembers.length} บัญชียังไม่มี PIN — ใครพิมพ์ชื่อถูกก็เข้าบัญชีนั้นได้ทันที
+                    {noDiscordMembers.length} คนยังไม่ผูก Discord — ให้กดเข้าสู่ระบบด้วย Discord แล้วเลือกชื่อตัวเอง
+                    ถ้ามีใครเลือกชื่อผิด กด “ยกเลิกผูก Discord” ที่ชื่อนั้น
                   </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      call({ action: "member_pin_issue_missing", count: noPinMembers.length })
-                    }
-                    className="ui-btn ui-btn--primary ui-btn--sm"
-                  >
-                    สุ่ม PIN ให้ {noPinMembers.length} คนนี้
-                  </button>
                 </div>
               )}
               {memberFilter === "active" && (
@@ -944,16 +1043,6 @@ function AdminCommandCenter({
                     เพิ่ม
                   </button>
                 </form>
-              )}
-              {memberFilter === "active" && sam && (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => call({ action: "member_pin_reset_all" })}
-                  className="ui-btn ui-btn--ghost ui-btn--sm"
-                >
-                  รีเซ็ต PIN ทั้งหมด
-                </button>
               )}
             </>
           )}
@@ -1083,7 +1172,6 @@ function AdminCommandCenter({
                 title={member.display_name}
                 subtitle={[
                   adminSubtitle(member),
-                  member.active && !member.has_pin && "ยังไม่มี PIN",
                   member.active && (member.discord_linked ? "ผูก Discord แล้ว" : "ยังไม่ผูก Discord"),
                 ]
                   .filter(Boolean)
@@ -1114,20 +1202,25 @@ function AdminCommandCenter({
                       >
                         แก้ชื่อ
                       </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() =>
-                          call({
-                            action: "member_pin_reset",
-                            id: member.id,
-                            name: member.display_name,
-                          })
-                        }
-                        className="ui-btn ui-btn--ghost ui-btn--sm"
-                      >
-                        รีเซ็ต PIN
-                      </button>
+                      {member.discord_linked &&
+                        member.id !== data.me.id &&
+                        !member.is_primary_admin &&
+                        (member.role !== "admin" || sam) && (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() =>
+                              call({
+                                action: "member_discord_unlink",
+                                id: member.id,
+                                name: member.display_name,
+                              })
+                            }
+                            className="ui-btn ui-btn--ghost ui-btn--sm"
+                          >
+                            ยกเลิกผูก Discord
+                          </button>
+                        )}
                       {member.id !== data.me.id && (
                         <button
                           type="button"
@@ -1152,11 +1245,9 @@ function AdminCommandCenter({
               title={
                 memberFilter === "removed"
                   ? "ไม่มีสมาชิกที่ถูกเอาออก"
-                  : memberFilter === "nopin"
-                    ? "ทุกบัญชีมี PIN แล้ว"
-                    : memberFilter === "nodiscord"
-                      ? "ทุกคนผูก Discord แล้ว"
-                      : "ยังไม่มีสมาชิก"
+                  : memberFilter === "nodiscord"
+                    ? "ทุกคนผูก Discord แล้ว"
+                    : "ยังไม่มีสมาชิก"
               }
             />
           ))}
@@ -1313,7 +1404,11 @@ function AdminCommandCenter({
                   ? "ทุกคนส่งครบหรือแจ้งลาแล้ว"
                   : attFilter === "done"
                     ? "ยังไม่มีใครส่งครบ 4 รอบ"
-                    : "ไม่มีใครลาวันนี้"
+                    : attFilter === "shop"
+                      ? "ไม่มีใครค้างงัดร้าน"
+                      : shownAttDate === data.date
+                        ? "ไม่มีใครลาวันนี้"
+                        : "ไม่มีใครลาวันนั้น"
               }
             />
           ))}
@@ -1330,23 +1425,13 @@ function AdminCommandCenter({
                 key={member.id}
                 inset={false}
                 title={member.display_name}
-                subtitle={adminSubtitle(member)}
+                subtitle={
+                  member.role === "admin" && !member.discord_linked
+                    ? `${adminSubtitle(member)} · ยังไม่ผูก Discord (ถอดแอดมินชั่วคราว ให้เจ้าตัวเข้าด้วย Discord เลือกชื่อ แล้วเพิ่มกลับ)`
+                    : adminSubtitle(member)
+                }
                 trailing={
                   <>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() =>
-                        call({
-                          action: "member_pin_reset",
-                          id: member.id,
-                          name: member.display_name,
-                        })
-                      }
-                      className="ui-btn ui-btn--ghost ui-btn--sm"
-                    >
-                      รีเซ็ต PIN
-                    </button>
                     <button
                       disabled={busy}
                       onClick={() =>
@@ -1397,13 +1482,10 @@ export default function Home() {
     [loading, setLoading] = useState(false),
     [name, setName] = useState(""),
     [authNeeded, setAuthNeeded] = useState(false),
-    [loginName, setLoginName] = useState(""),
-    [loginPin, setLoginPin] = useState(""),
     [partyName, setPartyName] = useState(""),
     [loadedViews, setLoadedViews] = useState<string[]>([]),
     [pickerReset, setPickerReset] = useState(0),
-    [pinResult, setPinResult] = useState<{ name: string; pin: string }[] | null>(null),
-    [changingPin, setChangingPin] = useState(false),
+    [claim, setClaim] = useState<any>(null),
     [discordLater, setDiscordLater] = useState(false),
     [confirmState, setConfirmState] = useState<{
       message: string;
@@ -1422,13 +1504,18 @@ export default function Home() {
   // `load` is passed straight to onClick and setInterval, so it has to stay
   // zero-argument — the current view rides along in a ref instead.
   const viewRef = useRef(view);
+  // Only the newest load may write: a slow 60s poll that lands after an
+  // upload's refresh would otherwise put the old data back.
+  const loadSeq = useRef(0);
   const load = async () => {
+    const seq = ++loadSeq.current;
     setLoading(true);
     try {
       const r = await fetch(`/api/dashboard?view=${viewRef.current}`, {
           cache: "no-store",
         }),
         x: any = await r.json();
+      if (seq !== loadSeq.current) return;
       if (r.status === 401) {
         setData(null);
         setLoadedViews([]);
@@ -1444,9 +1531,9 @@ export default function Home() {
         setAuthNeeded(false);
       }
     } catch {
-      setNotice("เชื่อมต่อระบบไม่สำเร็จ ลองรีเฟรชอีกครั้ง");
+      if (seq === loadSeq.current) setNotice("เชื่อมต่อระบบไม่สำเร็จ ลองรีเฟรชอีกครั้ง");
     } finally {
-      setLoading(false);
+      if (seq === loadSeq.current) setLoading(false);
     }
   };
   useEffect(() => {
@@ -1467,8 +1554,10 @@ export default function Home() {
         el.setAttribute("role", "status");
         Object.assign(el.style, {
           position: "fixed",
-          right: "20px",
-          bottom: "20px",
+          left: "50%",
+          top: "calc(env(safe-area-inset-top, 0px) + 12px)",
+          transform: "translateX(-50%)",
+          pointerEvents: "none",
           zIndex: "100",
           padding: "12px 16px",
           borderRadius: "10px",
@@ -1518,6 +1607,22 @@ export default function Home() {
       if (sessionStorage.getItem("fivek_discord_later")) setDiscordLater(true);
     } catch {}
   }, []);
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has("claim")) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    fetch("/api/auth/discord", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "claim_options" }),
+    })
+      .then((r) => r.json())
+      .then((x: any) => {
+        if (x.error) setNotice(x.error);
+        else if (x.ok) void load(); // already linked (another tab)
+        else setClaim(x);
+      })
+      .catch(() => setNotice("เชื่อมต่อไม่สำเร็จ ลองเข้าสู่ระบบด้วย Discord อีกครั้ง"));
+  }, []);
   const autoRoundDone = useRef(false);
   useEffect(() => {
     if (!data || autoRoundDone.current) return;
@@ -1554,8 +1659,7 @@ export default function Home() {
       member: `ยืนยันเพิ่มสมาชิกใหม่ชื่อ “${body.name}” ใช่หรือไม่?`,
       member_update: `ตรวจสอบชื่อก่อนบันทึก\n\nยืนยันเปลี่ยนชื่อเป็น “${body.name}” ใช่หรือไม่?`,
       member_delete: "ยืนยันเอาสมาชิกนี้ออกจากแก๊งใช่หรือไม่? สมาชิกจะออกจากระบบทันทีและจะไม่แสดงในรายชื่ออีก",
-      member_pin_reset: `ยืนยันรีเซ็ต PIN ของ “${body.name}” ใช่หรือไม่?\n\nระบบจะสุ่ม PIN ใหม่มาแสดงให้คุณส่งต่อ และสมาชิกคนนี้จะถูกออกจากระบบทันที`,
-      member_pin_issue_missing: `ยืนยันสุ่ม PIN ให้ ${body.count} บัญชีที่ยังไม่มี PIN ใช่หรือไม่?\n\nระบบจะแสดง PIN ให้คุณส่งต่อ สมาชิกที่ล็อกอินค้างอยู่จะยังใช้งานต่อได้ แต่ครั้งหน้าต้องใช้ PIN นี้`,
+      member_discord_unlink: `ยืนยันยกเลิกผูก Discord ของ “${body.name}” ใช่หรือไม่?\n\nคนที่ใช้บัญชีนี้อยู่จะถูกออกจากระบบ แล้วเจ้าของตัวจริงเข้าด้วย Discord และเลือกชื่อนี้ใหม่ได้`,
       member_reactivate: `ยืนยันเอา “${body.name}” กลับเข้าแก๊งใช่หรือไม่? แต้มและประวัติเดิมจะกลับมาด้วย`,
       admin_party_dissolve: `ยืนยันยุบปาร์ตี้ “${body.name}” ใช่หรือไม่? สมาชิกทุกคนจะออกจากทีมทันที`,
       admin_party_remove_member: `ยืนยันนำ “${body.name}” ออกจากปาร์ตี้ “${body.partyName}” ใช่หรือไม่? ถ้าเป็นหัวหน้า ตำแหน่งจะส่งต่อให้สมาชิกคนถัดไป`,
@@ -1565,7 +1669,6 @@ export default function Home() {
           ? `ยืนยันยกเลิกการปรับแต้มของ “${body.names}” ใช่หรือไม่?`
           : `ยืนยันยกเลิกการอนุมัตินี้ใช่หรือไม่?\n\nแต้มของ ${body.names} จะถูกดึงคืน และรายการจะเปลี่ยนเป็น “ไม่ผ่าน” (ย้อนกลับไปรอตรวจไม่ได้ เพราะรูปหลักฐานถูกลบไปแล้ว)`,
       leave_delete: `ยืนยันลบรายการลาของ “${body.name}” วันที่ ${body.date} ใช่หรือไม่?`,
-      member_pin_reset_all:"ยืนยันรีเซ็ต PIN ของสมาชิกทุกคน (ยกเว้นเจ้าของแก๊ง) ใช่หรือไม่?\n\nระบบจะสุ่ม PIN ใหม่ให้ทุกคนมาแสดงให้คุณส่งต่อ และทุกคนจะถูกออกจากระบบทันที",
       admin_access: body.enabled
         ? "ยืนยันเพิ่มสิทธิ์แอดมินให้สมาชิกนี้ใช่หรือไม่?"
         : "ยืนยันถอนสิทธิ์แอดมินของสมาชิกนี้ใช่หรือไม่?",
@@ -1601,7 +1704,6 @@ export default function Home() {
         x: any = await r.json();
       setNotice(x.error || x.notice || "บันทึกแล้ว");
       if (!x.error) {
-        if (x.pins?.length) setPinResult(x.pins);
         await load();
         return true;
       }
@@ -1640,69 +1742,50 @@ export default function Home() {
         setPickerReset((value) => value + 1);
         await load();
       }
-    } catch {
-      setNotice("ส่งรูปไม่สำเร็จ ลองใหม่อีกครั้ง");
-    } finally {
-      setBusy(false);
-    }
-  };
-  const unlinkDiscord = async () => {
-    if (!(await confirmAsync("เลิกเชื่อม Discord ใช่หรือไม่? ครั้งหน้าต้องเข้าสู่ระบบด้วยชื่อและ PIN"))) return;
-    const r = await fetch("/api/auth/discord", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "unlink" }),
-    });
-    const x: any = await r.json().catch(() => ({}));
-    setNotice(x.error || "เลิกเชื่อม Discord แล้ว");
-    if (!x.error) await load();
-  };
-  const changePin = async (currentPin: string, newPin: string) => {
-    setBusy(true);
-    try {
-      const r = await fetch("/api/auth", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ action: "change_pin", currentPin, newPin }),
-        }),
-        x: any = await r.json();
-      if (x.error) return setNotice(x.error);
-      setChangingPin(false);
-      setNotice("เปลี่ยน PIN แล้ว ใช้ PIN ใหม่ตอนเข้าสู่ระบบครั้งหน้า");
-    } catch {
-      setNotice("เปลี่ยน PIN ไม่สำเร็จ ลองใหม่อีกครั้ง");
+    } catch (error) {
+      setNotice(
+        error instanceof Error && error.name === "ImageError"
+          ? error.message
+          : "ส่งรูปไม่สำเร็จ ลองใหม่อีกครั้ง",
+      );
     } finally {
       setBusy(false);
     }
   };
   const logout = async () => {
-    await fetch("/api/auth", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action: "logout" }),
-    });
-    setData(null);
-    setAuthNeeded(true);
-    setLoginName("");
-  };
-  const login = async (event: FormEvent) => {
-    event.preventDefault();
-    setBusy(true);
+    loadSeq.current++; // drop any load still in flight for this account
     try {
-      const r = await fetch("/api/auth", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ name: loginName, pin: loginPin }),
-        }),
-        x: any = await r.json();
-      if (x.error) setNotice(x.error);
-      else await load();
-    } catch {
-      setNotice("เข้าสู่ระบบไม่สำเร็จ ลองใหม่อีกครั้ง");
-    } finally {
-      setBusy(false);
-    }
+      await fetch("/api/auth", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "logout" }),
+      });
+    } catch {}
+    try {
+      sessionStorage.removeItem("fivek_discord_later");
+    } catch {}
+    setData(null);
+    setLoadedViews([]);
+    setView("airdrop");
+    viewRef.current = "airdrop";
+    autoRoundDone.current = false;
+    setDiscordLater(false);
+    setNotice("");
+    setLoading(false);
+    setAuthNeeded(true);
   };
+  if (claim)
+    return (
+      <ClaimScreen
+        claim={claim}
+        onCancel={() => setClaim(null)}
+        onDone={() => {
+          setClaim(null);
+          setNotice("");
+          void load();
+        }}
+      />
+    );
   if (!data && authNeeded)
     return (
       <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
@@ -1717,36 +1800,14 @@ export default function Home() {
           <p className="label mt-4">ACCESS TERMINAL</p>
           <h1 className="mt-1 text-2xl font-black">เข้าสู่ระบบแก๊ง</h1>
           <p className="mt-3 text-sm text-[var(--ui-text-3)]">
-            พิมพ์ชื่อและตั้งรหัสสมาชิก 6 หลัก · ชื่อใหม่จะสมัครเป็นสมาชิกให้อัตโนมัติ
+            เข้าด้วยบัญชี Discord ของคุณ
             <br />
-            แอดมินใช้รหัสสมาชิกของตัวเอง
+            ครั้งแรกจะให้เลือกชื่อของคุณในแก๊ง
           </p>
-          <form onSubmit={login} className="mt-6 space-y-3">
-            <input
-              required
-              minLength={2}
-              maxLength={120}
-              value={loginName}
-              onChange={(e) => setLoginName(e.target.value)}
-              placeholder="ชื่อสำหรับเข้าแก๊ง หรือรหัสแอดมิน"
-              className="hud-clip w-full border border-white/15 bg-black/30 px-4 py-3"
-            />
-            <input required inputMode="numeric" pattern="[0-9]{6}" minLength={6} maxLength={6} value={loginPin} onChange={(e) => setLoginPin(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="รหัสสมาชิก 6 หลัก" className="hud-clip w-full border border-white/15 bg-black/30 px-4 py-3 text-center tracking-[0.35em]" />
-            <button
-              disabled={busy}
-              className="red-action hud-clip w-full"
-            >
-              เข้าสู่ระบบ
-            </button>
-          </form>
-          <div className="login-or"><span>หรือ</span></div>
-          <a href="/api/auth/discord" className="discord-btn">
+          <a href="/api/auth/discord" className="discord-btn mt-6">
             <DiscordMark />
             เข้าสู่ระบบด้วย Discord
           </a>
-          <p className="mt-2 text-xs text-[var(--ui-text-3)]">
-            ครั้งแรกต้องเข้าด้วยชื่อและ PIN แล้วกด เพิ่มเติม → เชื่อม Discord ก่อน
-          </p>
           {notice && <p className="mt-4 text-sm text-[var(--ui-text)]">{notice}</p>}
         </section>
       </main>
@@ -1843,10 +1904,12 @@ export default function Home() {
                 {id === "admin" && pendingBadge}
               </button>
             ))}
-            <button onClick={() => setChangingPin(true)} className="hud-clip-sm side-nav__item">
-              <KeyRound className="h-4 w-4" />
-              เปลี่ยน PIN
-            </button>
+            {!data.me.discordLinked && (
+              <a href="/api/auth/discord?mode=link" className="hud-clip-sm side-nav__item">
+                <DiscordMark />
+                เชื่อม Discord
+              </a>
+            )}
             <button onClick={logout} className="hud-clip-sm side-nav__item">
               <LogOut className="h-4 w-4" />
               ออกจากระบบ
@@ -1887,7 +1950,7 @@ export default function Home() {
               <div className="min-w-0 flex-1">
                 <p className="link-discord__title">ผูกบัญชี Discord ของคุณ</p>
                 <p className="link-discord__sub">
-                  ต้องผูกก่อนถึงจะส่งหลักฐานและแจ้งลาได้ · ครั้งหน้าเข้าด้วย Discord ได้เลย
+                  เว็บเข้าด้วย Discord อย่างเดียวแล้ว · ถ้าไม่ผูก ออกจากระบบแล้วจะเข้าบัญชีนี้ไม่ได้ และส่งหลักฐาน/แจ้งลาไม่ได้
                 </p>
               </div>
               <div className="link-discord__actions">
@@ -2015,36 +2078,20 @@ export default function Home() {
                   }
                 />
               ))}
-              <Row
-                inset={false}
-                {...(data.me.discordLinked
-                  ? { onClick: () => void unlinkDiscord() }
-                  : { href: "/api/auth/discord?mode=link" })}
-                leading={
-                  <span className="more-icon">
-                    <DiscordMark />
-                  </span>
-                }
-                title={data.me.discordLinked ? "เลิกเชื่อม Discord" : "เชื่อม Discord"}
-                subtitle={
-                  data.me.discordLinked
-                    ? "เชื่อมแล้ว · เข้าสู่ระบบด้วย Discord ได้"
-                    : "ครั้งหน้ากดเข้าสู่ระบบด้วย Discord ได้ ไม่ต้องจำ PIN"
-                }
-                trailing={<ChevronRight className="h-4 w-4 text-[var(--ui-text-3)]" />}
-              />
-              <Row
-                inset={false}
-                onClick={() => setChangingPin(true)}
-                leading={
-                  <span className="more-icon">
-                    <KeyRound className="h-5 w-5" />
-                  </span>
-                }
-                title="เปลี่ยน PIN"
-                subtitle="ตั้ง PIN 6 หลักใหม่ของคุณเอง"
-                trailing={<ChevronRight className="h-4 w-4 text-[var(--ui-text-3)]" />}
-              />
+              {!data.me.discordLinked && (
+                <Row
+                  inset={false}
+                  href="/api/auth/discord?mode=link"
+                  leading={
+                    <span className="more-icon">
+                      <DiscordMark />
+                    </span>
+                  }
+                  title="เชื่อม Discord"
+                  subtitle="ต้องผูกก่อน ไม่งั้นออกจากระบบแล้วจะเข้าบัญชีนี้ไม่ได้"
+                  trailing={<ChevronRight className="h-4 w-4 text-[var(--ui-text-3)]" />}
+                />
+              )}
               <Row
                 inset={false}
                 onClick={logout}
@@ -2134,8 +2181,12 @@ export default function Home() {
                   if (x.error) return false;
                   await load();
                   return true;
-                } catch {
-                  setNotice("ส่งหลักฐานกิจกรรมไม่สำเร็จ ลองใหม่อีกครั้ง");
+                } catch (error) {
+                  setNotice(
+                    error instanceof Error && error.name === "ImageError"
+                      ? error.message
+                      : "ส่งหลักฐานกิจกรรมไม่สำเร็จ ลองใหม่อีกครั้ง",
+                  );
                   return false;
                 } finally {
                   setBusy(false);
@@ -2239,16 +2290,6 @@ export default function Home() {
             setConfirmState(null);
           }}
         />
-      )}
-      {changingPin && (
-        <PinChangeDialog
-          busy={busy}
-          onCancel={() => setChangingPin(false)}
-          onSave={changePin}
-        />
-      )}
-      {pinResult && (
-        <PinDialog pins={pinResult} onClose={() => setPinResult(null)} />
       )}
     </main>
   );

@@ -185,72 +185,6 @@ export function Segmented({
   );
 }
 
-// Shown once after a PIN reset. The plain PIN exists only in this response —
-// it is hashed in the database — so the admin has to hand it over from here.
-export function PinDialog({
-  pins,
-  onClose,
-}: {
-  pins: { name: string; pin: string }[];
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const asText = pins.map((entry) => `${entry.name}: ${entry.pin}`).join("\n");
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return (
-    <div
-      className="ui-dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="PIN ใหม่"
-    >
-      <div className="ui-dialog">
-        <p className="ui-dialog__message">
-          {pins.length > 1
-            ? `ตั้ง PIN ใหม่ให้ ${pins.length} คนแล้ว — ส่ง PIN ให้เจ้าตัว แล้วให้เปลี่ยนเองได้ที่ เพิ่มเติม → เปลี่ยน PIN`
-            : "ตั้ง PIN ใหม่แล้ว — ส่ง PIN นี้ให้เจ้าตัว แล้วให้เปลี่ยนเองได้ที่ เพิ่มเติม → เปลี่ยน PIN"}
-        </p>
-        <div className="pin-list">
-          {pins.map((entry) => (
-            <div key={entry.name} className="pin-list__row">
-              <span className="pin-list__name">{entry.name}</span>
-              <span className="pin-list__pin">{entry.pin}</span>
-            </div>
-          ))}
-        </div>
-        <div className="ui-dialog__actions">
-          <button
-            type="button"
-            onClick={() => {
-              navigator.clipboard?.writeText(asText).then(
-                () => setCopied(true),
-                () => setCopied(false),
-              );
-            }}
-            className="ui-btn ui-btn--ghost"
-          >
-            {copied ? "คัดลอกแล้ว" : "คัดลอกทั้งหมด"}
-          </button>
-          <button
-            type="button"
-            autoFocus
-            onClick={onClose}
-            className="ui-btn ui-btn--primary"
-          >
-            ปิด
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // Replaces window.confirm so the confirmation matches the rest of the app and
 // stays usable on a phone. Resolves through the promise the caller is awaiting.
 export function ConfirmDialog({
@@ -359,96 +293,6 @@ export function PromptDialog({
   );
 }
 
-// Self-service PIN change. Validates shape locally so the member sees a
-// mistake (mismatch, too short) before any request is made.
-export function PinChangeDialog({
-  busy,
-  onCancel,
-  onSave,
-}: {
-  busy: boolean;
-  onCancel: () => void;
-  onSave: (currentPin: string, newPin: string) => void;
-}) {
-  const [current, setCurrent] = useState("");
-  const [next, setNext] = useState("");
-  const [confirm, setConfirm] = useState("");
-  const [error, setError] = useState("");
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onCancel();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onCancel]);
-  const digits = (value: string) => value.replace(/\D/g, "").slice(0, 6);
-  const field = (
-    id: string,
-    label: string,
-    value: string,
-    set: (value: string) => void,
-    autoFocus = false,
-  ) => (
-    <label htmlFor={id} className="pin-field">
-      <span>{label}</span>
-      <input
-        id={id}
-        autoFocus={autoFocus}
-        type="password"
-        inputMode="numeric"
-        autoComplete={id === "pin-current" ? "current-password" : "new-password"}
-        maxLength={6}
-        value={value}
-        onChange={(event) => {
-          set(digits(event.target.value));
-          setError("");
-        }}
-        className="ui-input"
-      />
-    </label>
-  );
-  return (
-    <div
-      className="ui-dialog-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="เปลี่ยน PIN"
-    >
-      <form
-        className="ui-dialog"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (next.length !== 6) return setError("PIN ใหม่ต้องเป็นตัวเลข 6 หลัก");
-          if (next !== confirm) return setError("PIN ใหม่ทั้งสองช่องไม่ตรงกัน");
-          if (next === current) return setError("PIN ใหม่ต้องไม่ซ้ำกับ PIN เดิม");
-          onSave(current, next);
-        }}
-      >
-        <p className="ui-dialog__message">เปลี่ยน PIN</p>
-        {field("pin-current", "PIN เดิม", current, setCurrent, true)}
-        {field("pin-new", "PIN ใหม่ 6 หลัก", next, setNext)}
-        {field("pin-confirm", "ยืนยัน PIN ใหม่", confirm, setConfirm)}
-        {error && (
-          <p role="alert" className="pin-field__error">
-            {error}
-          </p>
-        )}
-        <p className="pin-field__hint">
-          อุปกรณ์อื่นที่ล็อกอินบัญชีนี้ไว้จะถูกออกจากระบบ
-        </p>
-        <div className="ui-dialog__actions">
-          <button type="button" onClick={onCancel} className="ui-btn ui-btn--ghost">
-            ยกเลิก
-          </button>
-          <button disabled={busy} className="ui-btn ui-btn--primary">
-            บันทึก PIN
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 // Discord logo, for the login button and link prompts.
 export function DiscordMark() {
   return (
@@ -475,13 +319,18 @@ export function DiscordGate({ what }: { what: string }) {
 
 // Discord avatar when the member has linked Discord, otherwise their initial.
 export function Avatar({ url, name, size = 28 }: { url?: string | null; name: string; size?: number }) {
-  const [broken, setBroken] = useState(false);
+  // Remember which URL failed, so a new avatar URL gets a fresh try.
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
   const style = { width: size, height: size };
-  return url && !broken ? (
-    <img src={url} alt="" width={size} height={size} style={style} className="avatar" loading="lazy" onError={() => setBroken(true)} />
+  // Whole characters (emoji are two code units), skipping Thai leading vowels
+  // so "เจ" shows "จ" rather than a lone "เ".
+  const chars = Array.from(String(name || "").trim());
+  const initial = (chars.find((c) => !/[เ-ไ]/.test(c)) || chars[0] || "?").toUpperCase();
+  return url && url !== brokenUrl ? (
+    <img src={url} alt="" width={size} height={size} style={style} className="avatar" loading="lazy" onError={() => setBrokenUrl(url)} />
   ) : (
     <span className="avatar avatar--initial" style={style} aria-hidden="true">
-      {String(name || "?").trim().charAt(0).toUpperCase()}
+      {initial}
     </span>
   );
 }

@@ -48,13 +48,29 @@ export async function postCard(url: string, {
 }) {
   try {
     const filename = image ? `evidence.${image.ext}` : "";
+    // Discord rejects the whole message past 2000 characters of content or
+    // 4096 of embed description, so trim to fit rather than fail every retry.
+    const tags = [...mentionRoles.map((id) => `<@&${id}>`), ...mention.map((id) => `<@${id}>`)];
+    let content = "";
+    for (const tag of tags) {
+      if (content.length + tag.length + 1 > 1990) break;
+      content += (content ? " " : "") + tag;
+    }
+    const boxes = lines.map(([label, value]) => "```" + `${clean(label)} : ${clean(value)}` + "```");
+    let description = "";
+    for (let i = 0; i < boxes.length; i++) {
+      const more = "```… และอีก " + (boxes.length - i) + " รายการ (ดูในเว็บ)```";
+      if (description.length + boxes[i].length + more.length + 2 > 4000) {
+        description += "\n" + more;
+        break;
+      }
+      description += (description ? "\n" : "") + boxes[i];
+    }
     const form = new FormData();
     form.append(
       "payload_json",
       JSON.stringify({
-        ...((mention.length || mentionRoles.length) && {
-          content: [...mentionRoles.map((id) => `<@&${id}>`), ...mention.map((id) => `<@${id}>`)].join(" "),
-        }),
+        ...(content && { content }),
         allowed_mentions: { parse: [], users: mention.slice(0, 100), roles: mentionRoles.slice(0, 100) },
         embeds: [
           {
@@ -62,7 +78,7 @@ export async function postCard(url: string, {
             url: SITE_URL,
             color,
             // One code box per line, like the gang's other bot cards.
-            description: lines.map(([label, value]) => "```" + `${clean(label)} : ${clean(value)}` + "```").join("\n"),
+            description,
             ...(image && { image: { url: `attachment://${filename}` } }),
             footer: { text: "5K Command Center", icon_url: `${SITE_URL}/5k-logo.png` },
             timestamp: new Date().toISOString(),

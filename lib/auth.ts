@@ -5,16 +5,6 @@ export const thaiDate = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bangkok" }).format(new Date());
 export const onlineSince = () => new Date(Date.now() - 2 * 60 * 1000).toISOString();
 export const makeToken = () => crypto.randomUUID() + crypto.randomUUID().replaceAll("-", "");
-export const pinDigest = async (pin: string) =>
-  Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin))))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-export const randomPin = () => {
-  const buffer = new Uint32Array(1);
-  crypto.getRandomValues(buffer);
-  return String(100000 + (buffer[0] % 900000));
-};
-
 // Postgres returns bigint ids as strings, so a raw `Number(body.x) === me.id`
 // is always false and silently defeats "is this me?" guards. Compare both
 // sides as numbers. This has bitten the upload, dashboard and party routes,
