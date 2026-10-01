@@ -28,6 +28,20 @@ export const discordUserId = (externalId: unknown) => {
   return m ? m[1] : null;
 };
 
+// Discord review buttons for a piece of evidence (handled by
+// app/api/discord/interactions). Only a bot's own messages can carry them.
+export const reviewButtons = (type: "airdrop" | "party", id: unknown) => [
+  {
+    type: 1,
+    components: [
+      { type: 2, style: 3, label: "ผ่าน", emoji: { name: "✅" }, custom_id: `review:approve:${type}:${id}` },
+      { type: 2, style: 4, label: "ไม่ผ่าน", emoji: { name: "❌" }, custom_id: `review:reject:${type}:${id}` },
+    ],
+  },
+];
+
+// `url` is a webhook URL, or "bot:<channel id>" to post as the bot (needed
+// for buttons; uses DISCORD_BOT_TOKEN).
 export async function postCard(url: string, {
   title,
   lines,
@@ -35,6 +49,7 @@ export async function postCard(url: string, {
   image,
   mention = [],
   mentionRoles = [],
+  components,
 }: {
   title: string;
   lines: Line[];
@@ -45,6 +60,8 @@ export async function postCard(url: string, {
   mention?: string[];
   // Discord role ids to tag instead of listing every member.
   mentionRoles?: string[];
+  // Message components (buttons); only honoured on bot messages.
+  components?: unknown[];
 }) {
   try {
     const filename = image ? `evidence.${image.ext}` : "";
@@ -72,6 +89,7 @@ export async function postCard(url: string, {
       JSON.stringify({
         ...(content && { content }),
         allowed_mentions: { parse: [], users: mention.slice(0, 100), roles: mentionRoles.slice(0, 100) },
+        ...(components && { components }),
         embeds: [
           {
             title: clean(title),
@@ -87,7 +105,14 @@ export async function postCard(url: string, {
       }),
     );
     if (image) form.append("files[0]", image.blob, filename);
-    const res = await fetch(url, { method: "POST", body: form, signal: AbortSignal.timeout(8000) });
+    const bot = url.startsWith("bot:");
+    if (bot && !process.env.DISCORD_BOT_TOKEN) return false;
+    const res = await fetch(bot ? `https://discord.com/api/v10/channels/${url.slice(4)}/messages` : url, {
+      method: "POST",
+      body: form,
+      headers: bot ? { authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` } : undefined,
+      signal: AbortSignal.timeout(8000),
+    });
     return res.ok;
   } catch {
     // Notification is optional; the action that triggered it already succeeded.
@@ -104,25 +129,34 @@ async function pendingCount() {
 }
 
 // New evidence waiting for review, with the photo attached.
+// With a bot set up (DISCORD_BOT_TOKEN + DISCORD_EVIDENCE_CHANNEL_ID) the card
+// is posted by the bot with ✅/❌ review buttons; otherwise (or if that fails)
+// through the evidence webhook as before.
 export async function notifyEvidence({
   title,
   lines,
   image,
   ext,
+  review,
 }: {
   title: string;
   lines: Line[];
   image: Blob;
   ext: string;
+  review?: { type: "airdrop" | "party"; id: unknown };
 }) {
-  const url = process.env.DISCORD_WEBHOOK_URL;
-  if (!url) return;
-  await postCard(url, {
+  const card = {
     title,
-    lines: [...lines, ["คิวรอตรวจ", `${await pendingCount().catch(() => 0)} รายการ`]],
+    lines: [...lines, ["คิวรอตรวจ", `${await pendingCount().catch(() => 0)} รายการ`]] as Line[],
     color: 0xd00404,
     image: { blob: image, ext },
-  });
+  };
+  const channel = process.env.DISCORD_EVIDENCE_CHANNEL_ID;
+  if (review && channel && process.env.DISCORD_BOT_TOKEN) {
+    if (await postCard(`bot:${channel}`, { ...card, components: reviewButtons(review.type, review.id) })) return;
+  }
+  const url = process.env.DISCORD_WEBHOOK_URL;
+  if (url) await postCard(url, card);
 }
 
 // An approval that just credited points: each member's total before and after.

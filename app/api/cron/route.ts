@@ -220,6 +220,88 @@ async function teamSummary(nowMs: number) {
   return ok ? [`team ${date}: ${docked.length} docked`] : [];
 }
 
+// Mondays 10:00–14:00: last week's (Mon–Sun) top five, how much evidence
+// passed, and who still owes team points.
+async function weeklySummary(nowMs: number) {
+  const today = bkkDateOf(nowMs);
+  const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+  if (weekday !== 1 || nowMs < bkkTime(today, "10:00") || nowMs >= bkkTime(today, "14:00")) return [];
+  const from = bkkDateOf(nowMs - 7 * 86400_000), to = bkkDateOf(nowMs - 86400_000);
+  const key = `week:${from}`;
+  const url = process.env.DISCORD_REMINDER_WEBHOOK_URL || process.env.DISCORD_POINTS_WEBHOOK_URL;
+  if (!url || !(await claim(key))) return [];
+  let top: any[], approved: any, owing: any[];
+  try {
+    top = (await db.prepare(
+      `SELECT m.display_name,m.external_user_id,SUM(x.points) AS score FROM (${pointsByDaySql(today)}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 AND x.day>=? AND x.day<=? GROUP BY m.id HAVING SUM(x.points)>0 ORDER BY score DESC,m.display_name LIMIT 5`
+    ).bind(from, to).all<any>()).results;
+    approved = await db.prepare(
+      "SELECT (SELECT COUNT(*) FROM airdrop_submissions WHERE status='approved' AND activity_date>=? AND activity_date<=?) AS a,(SELECT COUNT(*) FROM party_activities WHERE status='approved' AND activity_date>=? AND activity_date<=?) AS p"
+    ).bind(from, to, from, to).first<any>();
+    owing = (await db.prepare(
+      `SELECT m.display_name,s.debt FROM (${teamStatusSql(today)}) s JOIN members m ON m.id=s.member_id WHERE s.debt>0 ORDER BY s.debt DESC,m.display_name`
+    ).bind().all<any>()).results;
+  } catch (error) {
+    await release(key);
+    throw error;
+  }
+  const medal = ["🥇", "🥈", "🥉", "4", "5"];
+  const ok = await postCard(url, {
+    title: `📊 สรุปสัปดาห์ ${from} ถึง ${to}`,
+    lines: [
+      ...(top.length
+        ? top.map((m: any, i: number): [string, unknown] => [`${medal[i]} ${m.display_name}`, `${Number(m.score)} แต้ม`])
+        : [["อันดับ", "สัปดาห์นี้ยังไม่มีใครได้แต้ม"] as [string, unknown]]),
+      ["หลักฐานที่ผ่าน", `แอร์ดรอป ${Number(approved?.a || 0)} · ทีม ${Number(approved?.p || 0)} รายการ`],
+      ["ค้างคะแนนทีม", owing.length ? `${owing.length} คน · รวม ${owing.reduce((s: number, m: any) => s + Number(m.debt), 0)} คะแนน` : "ไม่มี 🎉"],
+      ...owing.slice(0, 10).map((m: any): [string, unknown] => [m.display_name, `ค้าง ${Number(m.debt)} คะแนน (ทำชดได้คืน)`]),
+    ],
+    color: 0x60a5fa,
+    mention: mentions(top.slice(0, 3)),
+  });
+  if (!ok) await release(key);
+  return ok ? [`week ${from}`] : [];
+}
+
+// Whenever someone takes sole first place in this month's ranking, announce it
+// once. The month's first leader is recorded quietly (no card for whoever
+// happens to score first); later changes of leader are announced.
+async function leaderWatch(nowMs: number) {
+  const today = bkkDateOf(nowMs);
+  const month = today.slice(0, 7);
+  const url = process.env.DISCORD_REMINDER_WEBHOOK_URL || process.env.DISCORD_POINTS_WEBHOOK_URL;
+  if (!url) return [];
+  const top = (await db.prepare(
+    `SELECT m.id,m.display_name,m.external_user_id,SUM(x.points) AS score FROM (${pointsByDaySql(today)}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 AND substr(x.day,1,7)=? GROUP BY m.id ORDER BY score DESC LIMIT 2`
+  ).bind(month).all<any>()).results;
+  const [first, second] = top;
+  // Only a clear leader: positive score and nobody tied with them.
+  if (!first || Number(first.score) <= 0 || (second && Number(second.score) === Number(first.score))) return [];
+  const key = `leader:${month}:${first.id}`;
+  if (await db.prepare("SELECT 1 FROM notification_log WHERE key=?").bind(key).first()) return [];
+  const previous = (await db.prepare("SELECT key FROM notification_log WHERE key LIKE ?").bind(`leader:${month}:%`).all<any>()).results;
+  if (!(await claim(key))) return [];
+  if (previous.length) {
+    const ok = await postCard(url, {
+      title: `👑 ${first.display_name} แซงขึ้นอันดับ 1 ของเดือน!`,
+      lines: [
+        ["แต้มเดือนนี้", `${Number(first.score)} แต้ม`],
+        ...(second ? [["อันดับ 2", `${second.display_name} · ${Number(second.score)} แต้ม`] as [string, unknown]] : []),
+        ["ลุ้นรางวัล", "อันดับ 1–3 สิ้นเดือนได้ของรางวัล"],
+      ],
+      color: 0xf5c542,
+      mention: mentions([first]),
+    });
+    if (!ok) {
+      await release(key);
+      return [];
+    }
+  }
+  // Only the current leader's key is kept, so a comeback is announced again.
+  for (const row of previous) await release(row.key);
+  return [`leader ${month}: ${first.display_name}${previous.length ? "" : " (recorded)"}`];
+}
+
 export async function GET(request: Request) {
   // ?at=<ISO time> simulates the clock for local testing; ignored in production.
   const at = new URL(request.url).searchParams.get("at");
@@ -231,6 +313,8 @@ export async function GET(request: Request) {
       ...(await monthlyWinners(nowMs)),
       ...(await autoAbsence(nowMs)),
       ...(await teamSummary(nowMs)),
+      ...(await weeklySummary(nowMs)),
+      ...(await leaderWatch(nowMs)),
     ];
     return Response.json({ ok: true, at: new Date(nowMs).toISOString(), bkkDate: thaiDate(), ran });
   } catch (error) {

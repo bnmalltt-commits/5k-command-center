@@ -47,11 +47,12 @@ export async function POST(r: Request) {
       if (old?.status === "approved") throw Error("หลักฐานที่ผ่านแล้วไม่สามารถแก้ไขได้");
       key = `airdrop/${member.id}/${Date.now()}.${ext}`;
       await storage.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
+      let evidenceId = old?.id;
       if (old) {
         const updated = await db.prepare("UPDATE airdrop_submissions SET image_key=?,image_hash=?,reject_reason=NULL,status='pending',approved_by=NULL,created_at=? WHERE id=? AND status<>'approved'").bind(key, hash, now(), old.id).run();
         if (!updated.meta.changes) throw Error("หลักฐานรายการนี้เพิ่งผ่านการตรวจ จึงแก้ไขไม่ได้");
       } else {
-        await db.prepare("INSERT INTO airdrop_submissions (member_id,activity_date,round_time,image_key,image_hash,status,created_at) VALUES (?,?,?,?,?, 'pending',?)").bind(member.id, today, round, key, hash, now()).run();
+        evidenceId = (await db.prepare("INSERT INTO airdrop_submissions (member_id,activity_date,round_time,image_key,image_hash,status,created_at) VALUES (?,?,?,?,?, 'pending',?) RETURNING id").bind(member.id, today, round, key, hash, now()).first<any>())?.id;
       }
       if (old?.image_key) await storage.delete(old.image_key);
       await notifyEvidence({
@@ -64,6 +65,7 @@ export async function POST(r: Request) {
         ],
         image: file,
         ext,
+        review: { type: "airdrop", id: evidenceId },
       });
     } else if (type === "party") {
       // Team evidence is a shop raid (งัดร้าน) or a loop (ลูป).
@@ -103,6 +105,7 @@ export async function POST(r: Request) {
         ],
         image: file,
         ext,
+        review: { type: "party", id: activity.id },
       });
     } else throw Error("ประเภทไม่ถูกต้อง");
 
