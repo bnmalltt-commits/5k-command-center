@@ -1,6 +1,6 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
-import { notifyApproval, notifyRejection, discordUserId, discordAvatarUrl } from "@/lib/notify";
+import { notifyApproval, notifyRejection, discordUserId, discordAvatarUrl, postCard } from "@/lib/notify";
 import { pointsByDaySql, shopStatusSql, SHOP_RULE_START, SHOP_PER_DAY, SHOP_PENALTY } from "@/lib/points";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
@@ -497,6 +497,27 @@ export async function POST(request: Request) {
       await requireAdmin(request);
       const r = await db.prepare("DELETE FROM leave_requests WHERE id=?").bind(Number(body.id)).run();
       if (!r.meta.changes) throw Error("ไม่พบรายการลานี้");
+      return json({ ok: true });
+    }
+    // Sends one sample round reminder to the reminder channel, tagging only the
+    // owner, so admins can check the channel and webhook without pinging anyone.
+    if (body.action === "reminder_test") {
+      await requireAdmin(request);
+      const url = process.env.DISCORD_REMINDER_WEBHOOK_URL || process.env.DISCORD_POINTS_WEBHOOK_URL;
+      if (!url) throw Error("ยังไม่ได้ตั้งค่าห้องเตือน");
+      const owner = await db.prepare("SELECT external_user_id FROM members WHERE is_primary_admin=1 LIMIT 1").bind().first<any>();
+      const ownerId = discordUserId(owner?.external_user_id);
+      const ok = await postCard(url, {
+        title: "⏰ อีก 30 นาทีเริ่มแอร์ดรอปรอบ 20:00 (ทดสอบ)",
+        lines: [
+          ["วันที่", thaiDate()],
+          ["รอบ", "20:00 · เตรียมตัวแล้วส่งหลักฐานในเว็บ"],
+          ["หมายเหตุ", "ข้อความทดสอบ แท็กเฉพาะเจ้าของแก๊ง"],
+        ],
+        color: 0xf59e0b,
+        mention: ownerId ? [ownerId] : [],
+      });
+      if (!ok) throw Error("ส่งเข้า Discord ไม่สำเร็จ ตรวจ Webhook ของห้องเตือน");
       return json({ ok: true });
     }
     throw Error("คำสั่งไม่ถูกต้อง");
