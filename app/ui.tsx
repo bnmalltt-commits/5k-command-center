@@ -4,13 +4,14 @@ import { ReactNode, useEffect, useState } from "react";
 import { Search } from "lucide-react";
 
 export function Panel({
-  label,
   title,
   subtitle,
   trailing,
   flush,
   children,
 }: {
+  // Short English tag (e.g. "SQUAD STATUS"). Kept on callers as a code-side
+  // name for the panel, but not shown: it only repeated the Thai title.
   label?: string;
   title?: string;
   subtitle?: string;
@@ -22,10 +23,9 @@ export function Panel({
 }) {
   return (
     <section className="ui-panel">
-      {(label || title || trailing) && (
+      {(title || trailing) && (
         <header className="ui-panel__head">
           <div className="min-w-0">
-            {label && <p className="ui-eyebrow">{label}</p>}
             {title && <h2 className="ui-panel__title">{title}</h2>}
             {subtitle && <p className="ui-panel__sub">{subtitle}</p>}
           </div>

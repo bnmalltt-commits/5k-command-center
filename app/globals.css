@@ -1803,19 +1803,7 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
   .topbar-stat { padding: 2px 6px; min-width: 0; }
 }
 
-/* Home on desktop: mission card left, today's numbers right. */
-@media (min-width: 1024px) {
-  .home-dash {
-    display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr);
-    gap: 14px;
-    align-items: start;
-    margin-bottom: 14px;
-  }
-  .home-dash > .mission { margin-bottom: 0; }
-  .home-dash .home-stats { grid-template-columns: 1fr; margin-bottom: 0; }
-  .home-dash .hud-tile { padding: 14px 16px; }
-}
+
 
 /* Toasts: top-right, out of the page flow, clear themselves. */
 .toast {
@@ -1919,3 +1907,40 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
   text-align: center;
 }
 .rail-toggle:hover { color: var(--ui-text); }
+
+/* ---- Polish pass 2 ---- */
+
+/* 6. Home layout follows the main column's own width (not the window), so it
+   never squeezes a narrow side column when the right rail is showing. */
+.main-col { container-type: inline-size; }
+@container (min-width: 760px) {
+  .home-dash {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr);
+    gap: 14px;
+    align-items: start;
+    margin-bottom: 14px;
+  }
+  .home-dash > .mission { margin-bottom: 0; }
+  .home-dash .home-stats { grid-template-columns: 1fr; margin-bottom: 0; }
+  .home-dash .hud-tile { padding: 14px 16px; }
+}
+@container (min-width: 560px) and (max-width: 759.98px) {
+  .home-dash .home-stats { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr); }
+  .home-dash .hud-tile--wide { grid-column: auto; }
+}
+
+/* 2. On home the tiles carry rank and team score; the top bar keeps points only. */
+.topbar-stats--home .topbar-stat--extra { display: none; }
+
+/* 3. Thai labels need more size than Latin ones to stay readable. */
+.ui-eyebrow { font-size: 12.5px; }
+.topbar-stat { font-size: 12px; }
+/* The tiny wordmark under the sidebar logo (7px); the logo already says it. */
+.ui-v2 .command-sidebar .side-brand > div { display: none; }
+
+/* 4. Red corner brackets only on the mission card, the thing to act on now. */
+.ui-panel::before,
+.ui-panel::after,
+.hud-tile::before,
+.hud-tile::after { content: none; }

@@ -1784,9 +1784,12 @@ export default function Home() {
   // Only the newest load may write: a slow 60s poll that lands after an
   // upload's refresh would otherwise put the old data back.
   const loadSeq = useRef(0);
-  const load = async () => {
+  // Called as load() from buttons and after saves, or as load({ silent: true })
+  // by the 60s poll, which refreshes quietly instead of flashing the badge.
+  const load = async (options?: { silent?: boolean }) => {
+    const silent = options?.silent === true;
     const seq = ++loadSeq.current;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const r = await fetch(`/api/dashboard?view=${viewRef.current}`, {
           cache: "no-store",
@@ -1808,7 +1811,7 @@ export default function Home() {
         setAuthNeeded(false);
       }
     } catch {
-      if (seq === loadSeq.current) setNotice("เชื่อมต่อระบบไม่สำเร็จ ลองรีเฟรชอีกครั้ง");
+      if (seq === loadSeq.current && !silent) setNotice("เชื่อมต่อระบบไม่สำเร็จ ลองรีเฟรชอีกครั้ง");
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
@@ -1818,7 +1821,7 @@ export default function Home() {
     load();
   }, [view]);
   useEffect(() => {
-    const timer = window.setInterval(load, 60000);
+    const timer = window.setInterval(() => load({ silent: true }), 60000);
     return () => window.clearInterval(timer);
   }, []);
   useEffect(() => {
@@ -2100,7 +2103,7 @@ export default function Home() {
       <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
         <section className="command-panel max-w-md p-6 text-center">
           <p>{loading ? "กำลังเปิดศูนย์บัญชาการ…" : "ยังเปิดข้อมูลไม่ได้"}</p>
-          {!loading && <><p className="mt-2 text-sm text-[var(--ui-text-3)]">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p><button onClick={load} className="red-action mt-5">ลองใหม่</button></>}
+          {!loading && <><p className="mt-2 text-sm text-[var(--ui-text-3)]">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p><button onClick={() => load()} className="red-action mt-5">ลองใหม่</button></>}
         </section>
       </main>
     );
@@ -2203,7 +2206,7 @@ export default function Home() {
             </button>
           </div>
         </aside>
-        <section className="min-w-0 flex-1">
+        <section className="main-col min-w-0 flex-1">
           <header className="topbar">
             <img
               src="/5k-logo.png"
@@ -2217,7 +2220,7 @@ export default function Home() {
                 {data.me.name}
               </div>
             </div>
-            <div className="topbar-stats">
+            <div className={`topbar-stats ${view === "airdrop" ? "topbar-stats--home" : ""}`}>
               <button type="button" onClick={() => setView("mine")} className="topbar-stat">
                 <b>{data.me.monthScore}</b>
                 <span>แต้มเดือนนี้</span>
@@ -2243,7 +2246,7 @@ export default function Home() {
               )}
             </div>
             <button
-              onClick={load}
+              onClick={() => load()}
               aria-label="รีเฟรชข้อมูล"
               className="topbar__icon"
             >
