@@ -515,7 +515,9 @@ export async function POST(request: Request) {
           ["หมายเหตุ", "ข้อความทดสอบ แท็กเฉพาะเจ้าของแก๊ง"],
         ],
         color: 0xf59e0b,
-        mention: ownerId ? [ownerId] : [],
+        ...(body.role && /^[0-9]{5,25}$/.test(process.env.DISCORD_REMINDER_ROLE_ID || "")
+          ? { mentionRoles: [process.env.DISCORD_REMINDER_ROLE_ID!] }
+          : { mention: ownerId ? [ownerId] : [] }),
       });
       if (!ok) throw Error("ส่งเข้า Discord ไม่สำเร็จ ตรวจ Webhook ของห้องเตือน");
       return json({ ok: true });

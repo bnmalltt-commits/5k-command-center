@@ -39,14 +39,16 @@ async function send(key: string, card: Parameters<typeof postCard>[1]) {
 
 const mentions = (rows: any[]) => rows.map((r) => discordUserId(r.external_user_id)).filter(Boolean) as string[];
 
-// 30 minutes before the 20:00 and 23:00 rounds: tag every active member who
-// has linked Discord (members on leave that day are skipped) to get ready.
+// 30 minutes before the 20:00 and 23:00 rounds. With DISCORD_REMINDER_ROLE_ID
+// set it tags that one role (one short ping for everyone); otherwise it tags
+// every active member who has linked Discord, minus anyone on leave that day.
 // The window is 35 minutes wide so a late scheduler run still lands before
 // the round starts.
 const REMINDED_ROUNDS = ["20:00", "23:00"];
 async function roundReminders(nowMs: number) {
   const done: string[] = [];
   const date = bkkDateOf(nowMs);
+  const roleId = /^[0-9]{5,25}$/.test(process.env.DISCORD_REMINDER_ROLE_ID || "") ? process.env.DISCORD_REMINDER_ROLE_ID! : null;
   for (const round of REMINDED_ROUNDS) {
     const start = bkkTime(date, round);
     if (nowMs < start - 35 * 60_000 || nowMs >= start) continue;
@@ -61,7 +63,7 @@ async function roundReminders(nowMs: number) {
         ["รอบ", `${round} · เตรียมตัวแล้วส่งหลักฐานในเว็บ`],
       ],
       color: 0xf59e0b,
-      mention: mentions(people),
+      ...(roleId ? { mentionRoles: [roleId] } : { mention: mentions(people) }),
     });
     if (sent) done.push(`round ${date} ${round}`);
   }

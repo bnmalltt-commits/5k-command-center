@@ -34,6 +34,7 @@ export async function postCard(url: string, {
   color,
   image,
   mention = [],
+  mentionRoles = [],
 }: {
   title: string;
   lines: Line[];
@@ -42,6 +43,8 @@ export async function postCard(url: string, {
   // Discord user ids to tag. Mentions only notify from message content (not
   // from inside an embed), and allowed_mentions limits pings to exactly these.
   mention?: string[];
+  // Discord role ids to tag instead of listing every member.
+  mentionRoles?: string[];
 }) {
   try {
     const filename = image ? `evidence.${image.ext}` : "";
@@ -49,8 +52,10 @@ export async function postCard(url: string, {
     form.append(
       "payload_json",
       JSON.stringify({
-        ...(mention.length && { content: mention.map((id) => `<@${id}>`).join(" ") }),
-        allowed_mentions: { parse: [], users: mention.slice(0, 100) },
+        ...((mention.length || mentionRoles.length) && {
+          content: [...mentionRoles.map((id) => `<@&${id}>`), ...mention.map((id) => `<@${id}>`)].join(" "),
+        }),
+        allowed_mentions: { parse: [], users: mention.slice(0, 100), roles: mentionRoles.slice(0, 100) },
         embeds: [
           {
             title: clean(title),
