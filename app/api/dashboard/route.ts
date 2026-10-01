@@ -34,11 +34,13 @@ function periodStarts(today: string) {
 // Every score read goes through pointsByDaySql (lib/points.ts): ledger points
 // dated by the activity they reward, plus the derived shop-quota penalty.
 // Totals for a set of members, as {member_id, name, total}.
-async function totalsFor(memberIds: unknown[], today: string) {
+// Each member's points for one month ("YYYY-MM"), the same total the monthly
+// ranking shows, so the Discord card matches what members see on the site.
+async function totalsFor(memberIds: unknown[], today: string, month: string) {
   if (!memberIds.length) return [] as any[];
   return (await db.prepare(
-    `SELECT m.id AS member_id,m.display_name AS name,m.external_user_id,COALESCE(SUM(x.points),0) AS total FROM members m LEFT JOIN (${pointsByDaySql(today)}) x ON x.member_id=m.id WHERE m.id = ANY(?::bigint[]) GROUP BY m.id`
-  ).bind(memberIds.map(Number)).all<any>()).results;
+    `SELECT m.id AS member_id,m.display_name AS name,m.external_user_id,COALESCE(SUM(x.points),0) AS total FROM members m LEFT JOIN (${pointsByDaySql(today)}) x ON x.member_id=m.id AND substr(x.day,1,7)=? WHERE m.id = ANY(?::bigint[]) GROUP BY m.id`
+  ).bind(month, memberIds.map(Number)).all<any>()).results;
 }
 
 async function activeParty(memberId: number) {
@@ -263,7 +265,10 @@ export async function POST(request: Request) {
       // before the status flips — an approved activity already counts as a
       // shop, which would fold the refund into "before".
       const today = thaiDate();
-      const before = await totalsFor(credited.map((r: any) => r.member_id), today);
+      // Points count toward the month the activity happened in.
+      const activity = await db.prepare(`SELECT activity_date FROM ${table} WHERE id=?`).bind(id).first<any>();
+      const month = String(activity?.activity_date || today).slice(0, 7);
+      const before = await totalsFor(credited.map((r: any) => r.member_id), today, month);
       const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key,activity_date${type === "party" ? "" : ",round_time"}`).bind(admin.id, id).first<any>();
       if (!updated) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
       const inserted = await db.batch(
@@ -279,10 +284,11 @@ export async function POST(request: Request) {
             ? `กิจกรรมปาร์ตี้ · ${updated.activity_date}`
             : `แอร์ดรอปรอบ ${updated.round_time} · ${updated.activity_date}`,
           approvedBy: admin.display_name,
+          month: new Date(`${month}-01T00:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric", timeZone: "UTC" }),
           // Only people this approval actually credited.
           people: await (async () => {
             const ids = credited.filter((_: any, i: number) => inserted[i]?.meta.changes).map((r: any) => String(r.member_id));
-            const after = await totalsFor(ids, today);
+            const after = await totalsFor(ids, today, month);
             return after
               .map((row: any) => ({
                 name: row.name,

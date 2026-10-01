@@ -129,11 +129,14 @@ export async function notifyEvidence({
 export async function notifyApproval({
   kind,
   approvedBy,
+  month,
   people,
   loadImage,
 }: {
   kind: string;
   approvedBy: string;
+  // Totals are this month's points (they reset each month), e.g. "ตุลาคม 2569".
+  month: string;
   people: { name: string; before: number; after: number; discordId?: string | null }[];
   // Called only when the points channel is configured, so an approval never
   // downloads the evidence just to throw it away.
@@ -151,6 +154,7 @@ export async function notifyApproval({
         ? [
             ["รายการ", kind],
             ["ตรวจโดย", approvedBy],
+            ["นับแต้มเดือน", month],
             ["คะแนนเดิม", `${people[0].before} แต้ม`],
             ["เพิ่มขึ้น", gain(people[0])],
             ["คะแนนรวม", `${people[0].after} แต้ม`],
@@ -158,6 +162,7 @@ export async function notifyApproval({
         : [
             ["รายการ", kind],
             ["ตรวจโดย", approvedBy],
+            ["นับแต้มเดือน", month],
             ...people.map((p): Line => [p.name, `${p.before} → ${p.after} แต้ม (${gain(p)})`]),
           ];
     const image = await loadImage().catch(() => null);
