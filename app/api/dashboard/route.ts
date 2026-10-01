@@ -3,7 +3,7 @@ import { leaveStatements } from "@/lib/party";
 import { notifyApproval } from "@/lib/notify";
 import { pointsByDaySql, shopStatusSql, SHOP_RULE_START, SHOP_PER_DAY, SHOP_PENALTY } from "@/lib/points";
 import { storage } from "@/lib/storage";
-import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin } from "@/lib/auth";
+import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 
 // Give the ~11 parallel queries this route fires room to finish instead of
 // Vercel killing the function mid-flight, which would abandon their Postgres
@@ -319,6 +319,9 @@ export async function POST(request: Request) {
     if (body.action === "leave_request") {
       const requestedId = Number(body.memberId) || Number(me.id);
       if (!sameId(requestedId, me.id)) await requireAdmin(request);
+      // Members must link Discord to file their own leave; an admin may still
+      // record one on someone's behalf.
+      else if (!discordLinked(me)) throw Error(NEEDS_DISCORD);
       const leaveDate = String(body.leaveDate || "").trim();
       const reason = String(body.reason || "").trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(leaveDate)) throw Error("เลือกวันที่ไม่ถูกต้อง");

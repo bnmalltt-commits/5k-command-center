@@ -26,6 +26,8 @@ import { Picker, shrinkImage } from "./picker";
 import {
   Chips,
   ConfirmDialog,
+  DiscordGate,
+  DiscordMark,
   Dot,
   EmptyState,
   Panel,
@@ -46,14 +48,6 @@ const uploadResult = async (r: Response) =>
         ? "รูปใหญ่เกินไป ลองใช้รูปที่เล็กลงหรือแคปหน้าจอใหม่"
         : "ส่งรูปไม่สำเร็จ ลองใหม่อีกครั้ง",
   }));
-
-function DiscordMark() {
-  return (
-    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
-      <path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.2.5a18 18 0 0 1 4.4 2.2 15.5 15.5 0 0 0-15.2 0A18 18 0 0 1 8.8 3.5L8.6 3a19.6 19.6 0 0 0-4.9 1.4C.6 9 -.2 13.5.2 18a19.7 19.7 0 0 0 6 3l.8-1.2-1.6-.8.4-.3a14 14 0 0 0 12.4 0l.4.3-1.6.8.8 1.2a19.7 19.7 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.6ZM8.3 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.4 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
-    </svg>
-  );
-}
 
 type Round = "17:00" | "20:00" | "23:00" | "01:00";
 const ROUNDS: Round[] = ["17:00", "20:00", "23:00", "01:00"];
@@ -231,6 +225,10 @@ function MissionCard({
         <p className="mission__note">
           รอบ {round} ผ่านการตรวจแล้ว ไม่ต้องส่งซ้ำ
         </p>
+      ) : !data.me.discordLinked ? (
+        <div className="mission__submit">
+          <DiscordGate what="ส่งหลักฐาน" />
+        </div>
       ) : (
         <form onSubmit={onSubmit} className="mission__submit">
           <p className="mission__note">
@@ -447,6 +445,9 @@ function LeaveRoom({
         title="แจ้งลา"
         subtitle="สมาชิกแจ้งลาได้ด้วยตัวเอง แอดมินบันทึกแทนสมาชิกได้"
       >
+        {!isAdmin && !data.me.discordLinked ? (
+          <DiscordGate what="แจ้งลา" />
+        ) : (
         <form onSubmit={submit} className="space-y-2.5">
           {isAdmin && (
             <select
@@ -481,6 +482,7 @@ function LeaveRoom({
             </button>
           </div>
         </form>
+        )}
       </Panel>
       <Panel
         label="LEAVE HISTORY"
@@ -1875,7 +1877,7 @@ export default function Home() {
               <div className="min-w-0 flex-1">
                 <p className="link-discord__title">ผูกบัญชี Discord ของคุณ</p>
                 <p className="link-discord__sub">
-                  ครั้งหน้ากดเข้าสู่ระบบด้วย Discord ได้เลย ไม่ต้องจำ PIN
+                  ต้องผูกก่อนถึงจะส่งหลักฐานและแจ้งลาได้ · ครั้งหน้าเข้าด้วย Discord ได้เลย
                 </p>
               </div>
               <div className="link-discord__actions">

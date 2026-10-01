@@ -58,3 +58,7 @@ export async function requireSam(request: Request) {
 }
 
 export const json = (data: unknown, status = 200) => Response.json(data, { status });
+
+// Submitting evidence or a leave request requires a linked Discord account.
+export const discordLinked = (member: any) => String(member?.external_user_id || "").startsWith("discord:");
+export const NEEDS_DISCORD = "ผูกบัญชี Discord ก่อนถึงจะส่งได้ (เพิ่มเติม → เชื่อม Discord)";

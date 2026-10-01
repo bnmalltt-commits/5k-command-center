@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
-import { now, thaiDate, currentMember } from "@/lib/auth";
+import { now, thaiDate, currentMember, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 import { notifyEvidence } from "@/lib/notify";
 
 export const maxDuration = 30;
@@ -27,6 +27,7 @@ export async function POST(r: Request) {
   try {
     const member = await currentMember(r);
     if (!member) return Response.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
+    if (!discordLinked(member)) return Response.json({ error: NEEDS_DISCORD }, { status: 403 });
     const form = await r.formData(), file = form.get("image"), type = String(form.get("type"));
     if (!(file instanceof File) || !file.size) throw Error("กรุณาเลือกรูปหลักฐาน");
     const ext = await image(file), today = thaiDate();

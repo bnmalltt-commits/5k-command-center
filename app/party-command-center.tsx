@@ -11,6 +11,7 @@ import {
   Row,
   SearchInput,
   Segmented,
+  DiscordGate,
 } from "./ui";
 
 type Props = {
@@ -145,7 +146,9 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
             title="ส่งหลักฐานงัดร้าน"
             subtitle={`1 รูป = 1 ร้าน ให้สมาชิกทั้ง ${party.members.length} คน · ขั้นต่ำวันละ ${data.shop?.perDay ?? 3} ร้าน`}
           >
+            {!data.me?.discordLinked && <DiscordGate what="ส่งหลักฐานงัดร้าน" />}
             <form
+              hidden={!data.me?.discordLinked}
               className="space-y-3"
               onSubmit={async (event) => {
                 event.preventDefault();

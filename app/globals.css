@@ -1645,3 +1645,14 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
 .link-discord__sub { margin: 2px 0 0; color: var(--ui-text-2); font-size: 12px; }
 .link-discord__actions { display: flex; gap: 8px; margin-left: auto; }
 .discord-btn--sm { width: auto; min-height: 32px; padding: 0 14px; font-size: 13px; }
+
+.discord-gate {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px dashed rgba(88, 101, 242, 0.6);
+  border-radius: var(--ui-radius-sm);
+  background: rgba(88, 101, 242, 0.08);
+  text-align: center;
+}
+.discord-gate p { margin: 0; color: var(--ui-text); font-size: 14px; }

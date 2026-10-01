@@ -448,3 +448,27 @@ export function PinChangeDialog({
     </div>
   );
 }
+
+// Discord logo, for the login button and link prompts.
+export function DiscordMark() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor">
+      <path d="M20.3 4.4A19.6 19.6 0 0 0 15.4 3l-.2.5a18 18 0 0 1 4.4 2.2 15.5 15.5 0 0 0-15.2 0A18 18 0 0 1 8.8 3.5L8.6 3a19.6 19.6 0 0 0-4.9 1.4C.6 9 -.2 13.5.2 18a19.7 19.7 0 0 0 6 3l.8-1.2-1.6-.8.4-.3a14 14 0 0 0 12.4 0l.4.3-1.6.8.8 1.2a19.7 19.7 0 0 0 6-3c.5-5.2-.8-9.7-3.5-13.6ZM8.3 15.3c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Zm7.4 0c-1.2 0-2.1-1.1-2.1-2.4s.9-2.4 2.1-2.4 2.1 1.1 2.1 2.4-.9 2.4-2.1 2.4Z" />
+    </svg>
+  );
+}
+
+// Stands in for a submit form when the member hasn't linked Discord yet.
+export function DiscordGate({ what }: { what: string }) {
+  return (
+    <div className="discord-gate">
+      <p>
+        ผูกบัญชี Discord ก่อนถึงจะ{what}ได้
+      </p>
+      <a href="/api/auth/discord?mode=link" className="discord-btn">
+        <DiscordMark />
+        ผูก Discord ตอนนี้
+      </a>
+    </div>
+  );
+}
