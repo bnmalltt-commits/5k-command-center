@@ -121,6 +121,51 @@ async function monthlyWinners(nowMs: number) {
   return sent ? [`winners ${prev}`] : [];
 }
 
+// Shortly after midnight (00:00–04:00), for the day that just ended: anyone who sent nothing at all (no airdrop
+// submission of any status, not in any party evidence) and hadn't filed leave
+// is recorded as absent — a leave entry an admin can delete if it's wrong —
+// and tagged so they know. Only from AUTO_ABSENT_START, never retroactively.
+const AUTO_ABSENT_START = "2026-10-02";
+const ABSENT_REASON = "ขาด — ไม่ได้ส่งอะไรเลย (บันทึกอัตโนมัติ)";
+async function autoAbsence(nowMs: number) {
+  const today = bkkDateOf(nowMs);
+  if (nowMs < bkkTime(today, "00:00") || nowMs >= bkkTime(today, "04:00")) return [];
+  const date = bkkDateOf(nowMs - 86400_000);
+  if (date < AUTO_ABSENT_START) return [];
+  const url = process.env.DISCORD_REMINDER_WEBHOOK_URL || process.env.DISCORD_POINTS_WEBHOOK_URL;
+  if (!(await claim(`absent:${date}`))) return [];
+  const absent = (await db.prepare(
+    `SELECT m.id,m.display_name,m.external_user_id FROM members m
+     WHERE m.active=1 AND (m.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date <= ?::date
+       AND NOT EXISTS (SELECT 1 FROM leave_requests l WHERE l.member_id=m.id AND l.leave_date=?)
+       AND NOT EXISTS (SELECT 1 FROM airdrop_submissions a WHERE a.member_id=m.id AND a.activity_date=?)
+       AND NOT EXISTS (SELECT 1 FROM party_activity_members pam JOIN party_activities pa ON pa.id=pam.party_activity_id WHERE pam.member_id=m.id AND pa.activity_date=?)
+     ORDER BY m.display_name`
+  ).bind(date, date, date, date).all<any>()).results;
+  if (!absent.length) return [`absent ${date}: none`];
+  // Recorded by the owner account (leave_requests.created_by is required).
+  const owner = await db.prepare("SELECT id FROM members WHERE is_primary_admin=1 LIMIT 1").bind().first<any>();
+  await db.batch(absent.map((m: any) =>
+    db.prepare("INSERT INTO leave_requests (member_id,leave_date,reason,created_by,created_at) VALUES (?,?,?,?,?) ON CONFLICT (member_id,leave_date) DO NOTHING")
+      .bind(m.id, date, ABSENT_REASON, owner?.id ?? m.id, now())
+  ));
+  if (url) {
+    const ok = await postCard(url, {
+      title: `📋 ไม่ได้ส่งอะไรเลยเมื่อวาน · บันทึกเป็นขาด`,
+      lines: [
+        ["วันที่", date],
+        ["จำนวน", `${absent.length} คน`],
+        ...absent.map((m: any, i: number): [string, unknown] => [`${i + 1}`, m.display_name]),
+        ["หมายเหตุ", "ติดธุระวันไหน แจ้งลาในเว็บล่วงหน้าได้ที่ เพิ่มเติม → ห้องลา"],
+      ],
+      color: 0xef4444,
+      mention: mentions(absent),
+    });
+    if (!ok) await release(`absent:${date}`); // leave rows are idempotent; retry the post
+  }
+  return [`absent ${date}: ${absent.length}`];
+}
+
 export async function GET(request: Request) {
   // ?at=<ISO time> simulates the clock for local testing; ignored in production.
   const at = new URL(request.url).searchParams.get("at");
@@ -130,6 +175,7 @@ export async function GET(request: Request) {
       ...(await roundReminders(nowMs)),
       ...(await shopReminder(nowMs)),
       ...(await monthlyWinners(nowMs)),
+      ...(await autoAbsence(nowMs)),
     ];
     return Response.json({ ok: true, at: new Date(nowMs).toISOString(), bkkDate: thaiDate(), ran });
   } catch (error) {
