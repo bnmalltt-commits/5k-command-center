@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { now, thaiDate } from "@/lib/auth";
 import { postCard, discordUserId } from "@/lib/notify";
-import { pointsByDaySql, shopStatusSql } from "@/lib/points";
+import { pointsByDaySql, teamStatusSql, TEAM_PER_DAY } from "@/lib/points";
 
 export const maxDuration = 30;
 
@@ -70,20 +70,21 @@ async function roundReminders(nowMs: number) {
   return done;
 }
 
-// 21:45–23:45: tag who still needs shop raids to avoid tonight's deduction.
+// 21:45–23:45: tag who still needs team points to avoid tonight's deduction.
 async function shopReminder(nowMs: number) {
   const date = bkkDateOf(nowMs);
   if (nowMs < bkkTime(date, "21:45") || nowMs >= bkkTime(date, "23:45")) return [];
   const short = (await db.prepare(
-    `SELECT m.display_name,m.external_user_id,s.needed_today FROM (${shopStatusSql(date)}) s JOIN members m ON m.id=s.member_id WHERE s.needed_today>0 ORDER BY s.needed_today DESC,m.display_name`
+    `SELECT m.display_name,m.external_user_id,s.needed_today FROM (${teamStatusSql(date)}) s JOIN members m ON m.id=s.member_id WHERE s.needed_today>0 ORDER BY s.needed_today DESC,m.display_name`
   ).bind().all<any>()).results;
   if (!short.length) return [];
   const sent = await send(`shop:${date}`, {
-    title: "🏪 เตือนงัดร้านก่อนจบวัน",
+    title: `🏪 เตือนคะแนนทีมก่อนจบวัน (ขั้นต่ำ ${TEAM_PER_DAY} คะแนน)`,
     lines: [
       ["วันที่", date],
-      ["ยังไม่ครบ", `${short.length} คน · ขาดร้านละ 1 แต้มตอนเที่ยงคืน`],
-      ...short.map((m: any): [string, unknown] => [m.display_name, `ต้องงัดอีก ${m.needed_today} ร้าน`]),
+      ["ยังไม่ครบ", `${short.length} คน · ขาดแต้มละ 1 แต้มตอนเที่ยงคืน`],
+      ["ทำได้", "งัดร้าน +3 · ลูป +1"],
+      ...short.map((m: any): [string, unknown] => [m.display_name, `ต้องได้อีก ${m.needed_today} คะแนน`]),
     ],
     color: 0xf59e0b,
     mention: mentions(short),

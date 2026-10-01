@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, currentMember, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 import { notifyEvidence } from "@/lib/notify";
+import { KIND_LABEL, KIND_POINTS } from "@/lib/points";
 
 export const maxDuration = 30;
 
@@ -58,6 +59,8 @@ export async function POST(r: Request) {
         ext,
       });
     } else if (type === "party") {
+      // Team evidence is a shop raid (งัดร้าน) or a loop (ลูป).
+      const kind = form.get("kind") === "loop" ? "loop" : "shop";
       const ids = JSON.parse(String(form.get("memberIds") || "[]")).map(Number);
       // Postgres bigint columns come back as strings from this driver, so
       // member.id must be coerced before comparing against the numeric ids.
@@ -74,17 +77,17 @@ export async function POST(r: Request) {
       if (!ids.every((id: number) => rosterIds.has(id))) throw Error("เลือกได้เฉพาะสมาชิกในปาร์ตี้ของคุณ");
       key = `party/${member.id}/${Date.now()}.${ext}`;
       await storage.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
-      const shopName = String(form.get("shopName") || "").trim().slice(0, 60) || null;
+      const shopName = kind === "shop" ? String(form.get("shopName") || "").trim().slice(0, 60) || null : null;
       const party = await db.prepare("INSERT INTO parties (name,shop_name,active) VALUES (?,?,0) RETURNING id").bind(`กิจกรรม ${today} ${Date.now()}`, shopName).first<any>();
-      const activity = await db.prepare("INSERT INTO party_activities (party_id,activity_date,image_key,status,submitted_by_member_id,created_at) VALUES (?,?,?,'pending',?,?) RETURNING id").bind(party.id, today, key, member.id, now()).first<any>();
+      const activity = await db.prepare("INSERT INTO party_activities (party_id,activity_date,image_key,status,submitted_by_member_id,created_at,kind) VALUES (?,?,?,'pending',?,?,?) RETURNING id").bind(party.id, today, key, member.id, now(), kind).first<any>();
       await db.batch(ids.map((id: number) => db.prepare("INSERT INTO party_activity_members (party_activity_id,member_id) VALUES (?,?)").bind(activity.id, id)));
       const names = await db.prepare("SELECT display_name FROM members WHERE id = ANY(?::bigint[]) ORDER BY display_name").bind(ids).all<any>();
       await notifyEvidence({
-        title: `${member.display_name} ส่งหลักฐานกิจกรรมปาร์ตี้`,
+        title: `${member.display_name} ส่งหลักฐาน${KIND_LABEL[kind]}`,
         lines: [
-          ["ประเภท", "กิจกรรมปาร์ตี้"],
+          ["ประเภท", `${KIND_LABEL[kind]} · +${KIND_POINTS[kind]} แต้ม/คน`],
           ["ทีม", myParty.name],
-          ["ร้าน", shopName || "ไม่ได้ระบุ"],
+          ...(kind === "shop" ? [["ร้าน", shopName || "ไม่ได้ระบุ"] as [string, unknown]] : []),
           ["จำนวน", `${ids.length} คน`],
           // One box per member so every name shows in full.
           ...names.results.map((r: any, i: number): [string, unknown] => [`สมาชิก ${i + 1}`, r.display_name]),

@@ -20,7 +20,7 @@ type Props = {
   members: any[];
   call: (body: any) => Promise<boolean>;
   busy: boolean;
-  onSubmit?: (ids: number[], file: File, shopName: string) => Promise<boolean>;
+  onSubmit?: (ids: number[], file: File, shopName: string, kind: "shop" | "loop") => Promise<boolean>;
 };
 
 export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Props) {
@@ -31,6 +31,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
   const [inviteeIds, setInviteeIds] = useState<number[]>([]);
   const [activityFile, setActivityFile] = useState<File | null>(null);
   const [shopName, setShopName] = useState("");
+  const [kind, setKind] = useState<"shop" | "loop">("shop");
   const [activityPickerReset, setActivityPickerReset] = useState(0);
   const [createSearch, setCreateSearch] = useState("");
   const [addSearch, setAddSearch] = useState("");
@@ -149,10 +150,10 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
         <>
           <Panel
             label="PARTY ACTIVITY"
-            title="ส่งหลักฐานงัดร้าน"
-            subtitle={`1 รูป = 1 ร้าน ให้สมาชิกทั้ง ${party.members.length} คน · ขั้นต่ำวันละ ${data.shop?.perDay ?? 3} ร้าน`}
+            title="ส่งหลักฐานทีม"
+            subtitle={`ได้แต้มทุกคนในทีม ${party.members.length} คน · งัดร้าน +${data.team?.points?.shop ?? 3} · ลูป +${data.team?.points?.loop ?? 1} · ขั้นต่ำวันละ ${data.team?.perDay ?? 9} คะแนน`}
           >
-            {!data.me?.discordLinked && <DiscordGate what="ส่งหลักฐานงัดร้าน" />}
+            {!data.me?.discordLinked && <DiscordGate what="ส่งหลักฐานทีม" />}
             <form
               hidden={!data.me?.discordLinked}
               className="space-y-3"
@@ -164,7 +165,8 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 const sent = await onSubmit?.(
                   party.members.map((member: any) => member.id),
                   activityFile,
-                  shopName.trim(),
+                  kind === "shop" ? shopName.trim() : "",
+                  kind,
                 );
                 if (!sent) return;
                 setActivityFile(null);
@@ -172,7 +174,17 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 setActivityPickerReset((n) => n + 1);
               }}
             >
+              <Segmented
+                label="ประเภทหลักฐาน"
+                value={kind}
+                onChange={(id) => setKind(id === "loop" ? "loop" : "shop")}
+                options={[
+                  { id: "shop", label: `งัดร้าน +${data.team?.points?.shop ?? 3}` },
+                  { id: "loop", label: `ลูป +${data.team?.points?.loop ?? 1}` },
+                ]}
+              />
               <input
+                hidden={kind !== "shop"}
                 value={shopName}
                 maxLength={60}
                 onChange={(event) => setShopName(event.target.value)}
@@ -191,7 +203,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           </Panel>
           <Panel
             label="ACTIVITY LOG"
-            title="ประวัติกิจกรรมปาร์ตี้"
+            title="ประวัติหลักฐานทีม"
             subtitle={`${data.parties.length} รายการ`}
             flush
           >
@@ -219,7 +231,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                         }
                       />
                     }
-                    title={activity.activity_date}
+                    title={`${activity.kind === "loop" ? "ลูป" : "งัดร้าน"} · ${activity.activity_date}`}
                     subtitle={activity.members}
                     trailing={
                       <span className="text-xs text-[var(--ui-text-3)]">

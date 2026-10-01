@@ -201,12 +201,14 @@ type Data = {
   avatars?: Record<string, string | null>;
   attendance: any[];
   attendanceLeaves: any[];
-  shopStatus: any[];
-  shopDays: any[];
-  shop?: {
+  teamStatus: any[];
+  teamDays: any[];
+  // Team quota: points from shops (+3) and loops (+1) per day.
+  team?: {
     start: string;
     perDay: number;
     penalty: number;
+    points: { shop: number; loop: number; airdrop: number };
     mine: { today: number; debt: number; bank: number; neededToday: number } | null;
   };
   pendingCount?: number;
@@ -231,8 +233,8 @@ const EMPTY_DATA: Omit<Data, "me" | "date" | "myParty"> = {
   monthTop: [],
   attendance: [],
   attendanceLeaves: [],
-  shopStatus: [],
-  shopDays: [],
+  teamStatus: [],
+  teamDays: [],
 };
 const labels: Record<string, string> = {
   pending: "รอตรวจ",
@@ -292,8 +294,10 @@ function MissionCard({
   const selected = mine.get(round);
   const stateOf = (r: Round) => {
     const status = mine.get(r)?.status;
+    // Airdrop points by the rule in force on that day (+5 from the team rule start).
+    const pts = data.team && String(mine.get(r)?.activity_date) >= data.team.start ? data.team.points.airdrop : 3;
     return status === "approved"
-      ? { label: "ผ่านแล้ว · +3", tone: "done" }
+      ? { label: `ผ่านแล้ว · +${pts}`, tone: "done" }
       : status === "pending"
         ? { label: "รอตรวจ", tone: "pending" }
         : status === "rejected"
@@ -873,10 +877,10 @@ function AdminCommandCenter({
       .filter((row: any) => row.leave_date === shownAttDate)
       .map((row: any) => String(row.member_id)),
   );
-  const shopsOn = new Map<string, number>();
-  for (const row of data.shopDays)
+  const teamOn = new Map<string, number>();
+  for (const row of data.teamDays)
     if (row.activity_date === shownAttDate)
-      shopsOn.set(String(row.member_id), Number(row.n));
+      teamOn.set(String(row.member_id), Number(row.n));
   const sentStatus = (status?: string) => status === "approved" || status === "pending";
   const attRows = activeMembers
     .map((member: any) => {
@@ -886,9 +890,9 @@ function AdminCommandCenter({
         rounds,
         sent: rounds.filter(sentStatus).length,
         leave: onLeave.has(String(member.id)),
-        shops: shopsOn.get(String(member.id)) || 0,
-        shopDebt: Number(
-          data.shopStatus.find((row: any) => String(row.member_id) === String(member.id))?.debt || 0,
+        teamPoints: teamOn.get(String(member.id)) || 0,
+        teamDebt: Number(
+          data.teamStatus.find((row: any) => String(row.member_id) === String(member.id))?.debt || 0,
         ),
       };
     })
@@ -899,7 +903,7 @@ function AdminCommandCenter({
         a.member.display_name.localeCompare(b.member.display_name),
     );
   const attCounts = {
-    shopDebt: attRows.filter((r: any) => r.shopDebt > 0).length,
+    teamDebt: attRows.filter((r: any) => r.teamDebt > 0).length,
     missing: attRows.filter((r: any) => !r.leave && r.sent < ROUNDS.length).length,
     done: attRows.filter((r: any) => r.sent === ROUNDS.length).length,
     leave: attRows.filter((r: any) => r.leave).length,
@@ -907,8 +911,8 @@ function AdminCommandCenter({
   const visibleAttendance = attRows.filter(
     (r: any) =>
       matches(r.member.display_name) &&
-      (attFilter === "shop"
-        ? r.shopDebt > 0
+      (attFilter === "team"
+        ? r.teamDebt > 0
         : attFilter === "leave"
         ? r.leave
         : attFilter === "done"
@@ -992,7 +996,7 @@ function AdminCommandCenter({
                   { id: "missing", label: `ยังไม่ครบ ${attCounts.missing}` },
                   { id: "done", label: `ครบแล้ว ${attCounts.done}` },
                   { id: "leave", label: `ลา ${attCounts.leave}` },
-                  { id: "shop", label: `ค้างงัดร้าน ${attCounts.shopDebt}` },
+                  { id: "team", label: `ค้างคะแนนทีม ${attCounts.teamDebt}` },
                 ]}
               />
             </>
@@ -1382,7 +1386,7 @@ function AdminCommandCenter({
                 key={r.member.id}
                 inset={false}
                 title={r.member.display_name}
-                subtitle={`${r.leave ? "ลา" : `ส่งแล้ว ${r.sent}/${ROUNDS.length} รอบ`} · งัด ${r.shops} ร้าน${r.shopDebt > 0 ? ` · ค้าง ${r.shopDebt} ร้าน` : ""}`}
+                subtitle={`${r.leave ? "ลา" : `ส่งแล้ว ${r.sent}/${ROUNDS.length} รอบ`} · ทีม ${r.teamPoints}/${data.team?.perDay ?? 9}${r.teamDebt > 0 ? ` · ค้าง ${r.teamDebt} แต้ม` : ""}`}
                 trailing={
                   <span className="att-rounds" aria-label="สถานะแต่ละรอบ">
                     {ROUNDS.map((round, index) => (
@@ -1404,8 +1408,8 @@ function AdminCommandCenter({
                   ? "ทุกคนส่งครบหรือแจ้งลาแล้ว"
                   : attFilter === "done"
                     ? "ยังไม่มีใครส่งครบ 4 รอบ"
-                    : attFilter === "shop"
-                      ? "ไม่มีใครค้างงัดร้าน"
+                    : attFilter === "team"
+                      ? "ไม่มีใครค้างคะแนนทีม"
                       : shownAttDate === data.date
                         ? "ไม่มีใครลาวันนี้"
                         : "ไม่มีใครลาวันนั้น"
@@ -1995,34 +1999,34 @@ export default function Home() {
                 onClick={() => setView("party")}
                 className="hud-tile hud-tile--wide"
               >
-                <span className="ui-eyebrow">งัดร้านวันนี้</span>
-                {data.shop?.mine ? (
+                <span className="ui-eyebrow">คะแนนทีมวันนี้</span>
+                {data.team?.mine ? (
                   <>
                     <b className="hud-tile__value">
-                      {data.shop.mine.today}/{data.shop.perDay}
+                      {data.team.mine.today}/{data.team.perDay}
                     </b>
                     <span className="hud-tile__sub">
-                      {data.shop.mine.neededToday > 0
-                        ? `ต้องงัดอีก ${data.shop.mine.neededToday} ร้านก่อนจบวัน`
-                        : data.shop.mine.bank > 0
-                          ? `ครบแล้ว · เกินเก็บไว้ ${data.shop.mine.bank} ร้าน`
+                      {data.team.mine.neededToday > 0
+                        ? `ต้องได้อีก ${data.team.mine.neededToday} คะแนนก่อนจบวัน · งัดร้าน +${data.team.points.shop} ลูป +${data.team.points.loop}`
+                        : data.team.mine.bank > 0
+                          ? `ครบแล้ว · เกินเก็บไว้ ${data.team.mine.bank} คะแนน`
                           : "ครบแล้ววันนี้"}
                     </span>
-                    {data.shop.mine.debt > 0 && (
+                    {data.team.mine.debt > 0 && (
                       <span className="hud-tile__warn">
-                        ค้าง {data.shop.mine.debt} ร้าน · ถูกหัก {data.shop.mine.debt * data.shop.penalty} แต้ม (งัดชดแล้วได้คืน)
+                        ค้าง {data.team.mine.debt} คะแนน · ถูกหัก {data.team.mine.debt * data.team.penalty} แต้ม (ทำชดแล้วได้คืน)
                       </span>
                     )}
                   </>
                 ) : (
                   <>
                     <b className="hud-tile__value hud-tile__value--text">
-                      ขั้นต่ำวันละ {data.shop?.perDay ?? 3} ร้าน
+                      ขั้นต่ำวันละ {data.team?.perDay ?? 9} คะแนน
                     </b>
                     <span className="hud-tile__sub">
-                      {data.shop && data.date < data.shop.start
-                        ? `เริ่มนับ ${Number(data.shop.start.slice(8))}/${Number(data.shop.start.slice(5, 7))} · ขาดร้านละ ${data.shop.penalty} แต้ม`
-                        : "ส่งหลักฐานกิจกรรมปาร์ตี้ 1 ครั้ง = 1 ร้าน"}
+                      {data.team && data.date < data.team.start
+                        ? `เริ่ม ${Number(data.team.start.slice(8))}/${Number(data.team.start.slice(5, 7))} · งัดร้าน +${data.team.points.shop} ลูป +${data.team.points.loop} แอร์ดรอป +${data.team.points.airdrop} · ขาดแต้มละ ${data.team.penalty}`
+                        : `งัดร้าน +${data.team?.points.shop ?? 3} · ลูป +${data.team?.points.loop ?? 1}`}
                     </span>
                   </>
                 )}
@@ -2161,10 +2165,10 @@ export default function Home() {
               members={members}
               call={call}
               busy={busy}
-              onSubmit={async (ids, file, shopName) => {
+              onSubmit={async (ids, file, shopName, kind) => {
                 if (
                   !(await confirmAsync(
-                    `ยืนยันส่งหลักฐานกิจกรรมให้สมาชิก ${ids.length} คนเข้าคิวตรวจใช่หรือไม่?`,
+                    `ยืนยันส่งหลักฐาน${kind === "loop" ? "ลูป" : "งัดร้าน"}ให้สมาชิก ${ids.length} คนเข้าคิวตรวจใช่หรือไม่?`,
                   ))
                 )
                   return false;
@@ -2174,6 +2178,7 @@ export default function Home() {
                   form.append("type", "party");
                   form.append("image", await shrinkImage(file));
                   form.append("memberIds", JSON.stringify(ids));
+                  form.append("kind", kind);
                   if (shopName) form.append("shopName", shopName);
                   const r = await fetch("/api/upload", {
                       method: "POST",
