@@ -1910,11 +1910,14 @@ export default function Home() {
                 เชื่อม Discord
               </a>
             )}
-            <button onClick={logout} className="hud-clip-sm side-nav__item">
+          </nav>
+          {/* Pinned to the bottom of the rail, apart from the destinations. */}
+          <div className="side-foot">
+            <button onClick={logout} className="side-nav__item side-nav__item--quiet">
               <LogOut className="h-4 w-4" />
               ออกจากระบบ
             </button>
-          </nav>
+          </div>
         </aside>
         <section className="min-w-0 flex-1">
           <header className="topbar">
