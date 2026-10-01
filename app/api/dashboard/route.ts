@@ -1,6 +1,6 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
-import { notifyApproval } from "@/lib/notify";
+import { notifyApproval, notifyRejection, discordUserId } from "@/lib/notify";
 import { pointsByDaySql, shopStatusSql, SHOP_RULE_START, SHOP_PER_DAY, SHOP_PENALTY } from "@/lib/points";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
@@ -37,7 +37,7 @@ function periodStarts(today: string) {
 async function totalsFor(memberIds: unknown[], today: string) {
   if (!memberIds.length) return [] as any[];
   return (await db.prepare(
-    `SELECT m.id AS member_id,m.display_name AS name,COALESCE(SUM(x.points),0) AS total FROM members m LEFT JOIN (${pointsByDaySql(today)}) x ON x.member_id=m.id WHERE m.id = ANY(?::bigint[]) GROUP BY m.id`
+    `SELECT m.id AS member_id,m.display_name AS name,m.external_user_id,COALESCE(SUM(x.points),0) AS total FROM members m LEFT JOIN (${pointsByDaySql(today)}) x ON x.member_id=m.id WHERE m.id = ANY(?::bigint[]) GROUP BY m.id`
   ).bind(memberIds.map(Number)).all<any>()).results;
 }
 
@@ -280,6 +280,7 @@ export async function POST(request: Request) {
           return after
             .map((row: any) => ({
               name: row.name,
+              discordId: discordUserId(row.external_user_id),
               before: Number(before.find((b: any) => String(b.member_id) === String(row.member_id))?.total || 0),
               after: Number(row.total),
             }))
@@ -303,8 +304,17 @@ export async function POST(request: Request) {
     }
     if (body.action === "reject") {
       const admin = await requireAdmin(request), type = validType(body.type), table = type === "party" ? "party_activities" : "airdrop_submissions";
-      const r = await db.prepare(`UPDATE ${table} SET status='rejected',approved_by=? WHERE id=? AND status='pending'`).bind(admin.id, Number(body.id)).run();
-      if (!r.meta.changes) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
+      const rejected = await db.prepare(`UPDATE ${table} SET status='rejected',approved_by=? WHERE id=? AND status='pending' RETURNING activity_date${type === "party" ? "" : ",round_time"}`).bind(admin.id, Number(body.id)).first<any>();
+      if (!rejected) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
+      const people = (type === "party"
+        ? await db.prepare("SELECT m.display_name AS name,m.external_user_id FROM party_activity_members pam JOIN members m ON m.id=pam.member_id WHERE pam.party_activity_id=? ORDER BY m.display_name").bind(Number(body.id)).all<any>()
+        : await db.prepare("SELECT m.display_name AS name,m.external_user_id FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.id=?").bind(Number(body.id)).all<any>()
+      ).results;
+      await notifyRejection({
+        kind: type === "party" ? `กิจกรรมปาร์ตี้ · ${rejected.activity_date}` : `แอร์ดรอปรอบ ${rejected.round_time} · ${rejected.activity_date}`,
+        rejectedBy: admin.display_name,
+        people: people.map((p: any) => ({ name: p.name, discordId: discordUserId(p.external_user_id) })),
+      });
       return json({ ok: true });
     }
     if (body.action === "admin_access") {

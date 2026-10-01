@@ -14,16 +14,26 @@ type Line = [label: string, value: unknown];
 // Posts one card to a Discord webhook. Best-effort by design: a slow or broken webhook must never fail or
 // stall the upload/approval that triggered it, so it is time-capped and
 // swallows every error.
+// "discord:123" -> "123"; anything else (unlinked, legacy ids) -> null.
+export const discordUserId = (externalId: unknown) => {
+  const m = String(externalId ?? "").match(/^discord:([0-9]+)$/);
+  return m ? m[1] : null;
+};
+
 async function postCard(url: string, {
   title,
   lines,
   color,
   image,
+  mention = [],
 }: {
   title: string;
   lines: Line[];
   color: number;
   image?: { blob: Blob; ext: string };
+  // Discord user ids to tag. Mentions only notify from message content (not
+  // from inside an embed), and allowed_mentions limits pings to exactly these.
+  mention?: string[];
 }) {
   try {
     const filename = image ? `evidence.${image.ext}` : "";
@@ -31,7 +41,8 @@ async function postCard(url: string, {
     form.append(
       "payload_json",
       JSON.stringify({
-        allowed_mentions: { parse: [] },
+        ...(mention.length && { content: mention.map((id) => `<@${id}>`).join(" ") }),
+        allowed_mentions: { parse: [], users: mention.slice(0, 100) },
         embeds: [
           {
             title: clean(title),
@@ -92,7 +103,7 @@ export async function notifyApproval({
 }: {
   kind: string;
   approvedBy: string;
-  people: { name: string; before: number; after: number }[];
+  people: { name: string; before: number; after: number; discordId?: string | null }[];
   // Called only when the points channel is configured, so an approval never
   // downloads the evidence just to throw it away.
   loadImage: () => Promise<{ blob: Blob; ext: string } | null>;
@@ -124,8 +135,36 @@ export async function notifyApproval({
       lines,
       color: 0x4ade80,
       ...(image && { image }),
+      mention: people.map((p) => p.discordId).filter(Boolean) as string[],
     });
   } catch {
     // Notification is optional; the approval already succeeded.
   }
+}
+
+// A rejected submission: tells the member (tagged) to resend, in the points
+// channel where they'll see it, since otherwise they only find out by
+// opening the site.
+export async function notifyRejection({
+  kind,
+  rejectedBy,
+  people,
+}: {
+  kind: string;
+  rejectedBy: string;
+  people: { name: string; discordId: string | null }[];
+}) {
+  const url = process.env.DISCORD_POINTS_WEBHOOK_URL;
+  if (!url || !people.length) return;
+  await postCard(url, {
+    title: people.length === 1 ? `${people[0].name} หลักฐานไม่ผ่าน` : `ทีม ${people.length} คน หลักฐานไม่ผ่าน`,
+    lines: [
+      ["รายการ", kind],
+      ["ตรวจโดย", rejectedBy],
+      ...(people.length > 1 ? people.map((p, i): Line => [`สมาชิก ${i + 1}`, p.name]) : []),
+      ["ทำต่อ", "ส่งหลักฐานใหม่ได้ที่เว็บ"],
+    ],
+    color: 0xf59e0b,
+    mention: people.map((p) => p.discordId).filter(Boolean) as string[],
+  });
 }
