@@ -1,0 +1,20 @@
+# Pings the site every 30 minutes so it can post due Discord reminders
+# (airdrop rounds, shop-raid quota, monthly winners). The site decides what is
+# due from the Bangkok clock and sends each reminder at most once, so this
+# needs no secret and an extra or delayed run is harmless.
+name: Discord reminders
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run due reminders
+        run: curl -fsS --max-time 60 https://airdrop-party-check-v2.vercel.app/api/cron

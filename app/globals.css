@@ -1656,3 +1656,16 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
   text-align: center;
 }
 .discord-gate p { margin: 0; color: var(--ui-text); font-size: 14px; }
+
+.avatar {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  border-radius: 999px;
+  object-fit: cover;
+  background: var(--ui-raised);
+}
+.avatar--initial { color: var(--ui-text-2); font-size: 12px; font-weight: 700; }
+.name-with-avatar { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.avatar-status { position: relative; display: inline-flex; }
+.avatar-status .ui-dot { position: absolute; right: -1px; bottom: -1px; box-shadow: 0 0 0 2px var(--ui-card); }

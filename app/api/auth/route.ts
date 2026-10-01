@@ -3,6 +3,9 @@ import { now, makeToken, pinDigest, setSessionCookie, clearSessionCookie, curren
 
 export const maxDuration = 30;
 
+const MAX_FAILED = 5;
+const LOCK_MINUTES = 15;
+
 const publicUser = (member: any) =>
   member ? { id: member.id, display_name: member.display_name, role: member.role } : null;
 
@@ -47,19 +50,36 @@ export async function POST(request: Request) {
     if (!/^\d{6}$/.test(pin)) throw Error("รหัสสมาชิกต้องเป็นตัวเลข 6 หลัก");
     const hashedPin = await pinDigest(pin);
     let known = await db
-      .prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash FROM members WHERE username=?")
+      .prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash,failed_logins,login_locked_until FROM members WHERE username=?")
       .bind(identifier)
       .first<any>();
     if (!known)
       known = await db
-        .prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash FROM members WHERE lower(display_name)=lower(?) ORDER BY active DESC,id LIMIT 1")
+        .prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash,failed_logins,login_locked_until FROM members WHERE lower(display_name)=lower(?) ORDER BY active DESC,id LIMIT 1")
         .bind(identifier)
         .first<any>();
     if (known && !known.active) throw Error("สมาชิกนี้ถูกปิดใช้งาน โปรดติดต่อแอดมิน");
     // Sam is the primary owner and may sign in with the display name. Other admins use their member ID.
     if (known?.role === "admin" && known.username !== identifier && !known.is_primary_admin)
       throw Error("บัญชีแอดมินต้องเข้าสู่ระบบด้วยรหัสสมาชิกจากหน้าแอดมิน");
-    if (known?.pin_hash && known.pin_hash !== hashedPin) throw Error("รหัสสมาชิกไม่ถูกต้อง");
+    // Brute-force guard: 5 wrong PINs lock the account for 15 minutes. A
+    // signed-in member's existing session is unaffected by the lock.
+    if (known?.login_locked_until && known.login_locked_until > now()) {
+      const minutes = Math.ceil((Date.parse(known.login_locked_until) - Date.now()) / 60000);
+      throw Error(`ใส่ PIN ผิดหลายครั้ง บัญชีนี้ถูกล็อกชั่วคราว ลองใหม่ในอีก ${minutes} นาที หรือเข้าด้วย Discord / ให้แอดมินรีเซ็ต PIN`);
+    }
+    if (known?.pin_hash && known.pin_hash !== hashedPin) {
+      const lockUntil = new Date(Date.now() + LOCK_MINUTES * 60000).toISOString();
+      const after = await db
+        .prepare("UPDATE members SET failed_logins=CASE WHEN failed_logins+1>=? THEN 0 ELSE failed_logins+1 END, login_locked_until=CASE WHEN failed_logins+1>=? THEN ? ELSE login_locked_until END WHERE id=? RETURNING failed_logins,login_locked_until")
+        .bind(MAX_FAILED, MAX_FAILED, lockUntil, known.id)
+        .first<any>();
+      if (after?.login_locked_until === lockUntil)
+        throw Error(`ใส่ PIN ผิด ${MAX_FAILED} ครั้ง บัญชีนี้ถูกล็อก ${LOCK_MINUTES} นาที`);
+      throw Error(`รหัสสมาชิกไม่ถูกต้อง (เหลือ ${MAX_FAILED - Number(after?.failed_logins || 0)} ครั้งก่อนถูกล็อก)`);
+    }
+    if (known && (Number(known.failed_logins) || known.login_locked_until))
+      await db.prepare("UPDATE members SET failed_logins=0,login_locked_until=NULL WHERE id=?").bind(known.id).run();
     let member = known;
     if (!member) {
       const username = `5K-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;

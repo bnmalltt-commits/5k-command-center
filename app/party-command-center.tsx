@@ -11,6 +11,7 @@ import {
   Row,
   SearchInput,
   Segmented,
+  Avatar,
   DiscordGate,
 } from "./ui";
 
@@ -111,7 +112,12 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 <Row
                   key={member.id}
                   inset={false}
-                  leading={<Dot tone={member.online ? "green" : "idle"} />}
+                  leading={
+                    <span className="avatar-status">
+                      <Avatar url={data.avatars?.[String(member.id)]} name={member.display_name} size={30} />
+                      <Dot tone={member.online ? "green" : "idle"} />
+                    </span>
+                  }
                   title={member.display_name}
                   subtitle={`${member.online ? "ออนไลน์" : "ออฟไลน์"} · ${isLeader ? "หัวหน้าทีม" : "สมาชิก"}`}
                   trailing={

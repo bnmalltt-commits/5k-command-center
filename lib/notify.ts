@@ -14,13 +14,21 @@ type Line = [label: string, value: unknown];
 // Posts one card to a Discord webhook. Best-effort by design: a slow or broken webhook must never fail or
 // stall the upload/approval that triggered it, so it is time-capped and
 // swallows every error.
+// Discord CDN avatar for a member, or null if they haven't linked Discord.
+export function discordAvatarUrl(externalId: unknown, avatarHash: unknown) {
+  const id = discordUserId(externalId);
+  if (!id) return null;
+  if (avatarHash) return `https://cdn.discordapp.com/avatars/${id}/${avatarHash}.png?size=64`;
+  return `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(id) >> BigInt(22)) % BigInt(6))}.png`;
+}
+
 // "discord:123" -> "123"; anything else (unlinked, legacy ids) -> null.
 export const discordUserId = (externalId: unknown) => {
   const m = String(externalId ?? "").match(/^discord:([0-9]+)$/);
   return m ? m[1] : null;
 };
 
-async function postCard(url: string, {
+export async function postCard(url: string, {
   title,
   lines,
   color,
@@ -58,9 +66,11 @@ async function postCard(url: string, {
       }),
     );
     if (image) form.append("files[0]", image.blob, filename);
-    await fetch(url, { method: "POST", body: form, signal: AbortSignal.timeout(8000) });
+    const res = await fetch(url, { method: "POST", body: form, signal: AbortSignal.timeout(8000) });
+    return res.ok;
   } catch {
     // Notification is optional; the action that triggered it already succeeded.
+    return false;
   }
 }
 

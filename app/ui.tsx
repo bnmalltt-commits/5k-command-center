@@ -472,3 +472,16 @@ export function DiscordGate({ what }: { what: string }) {
     </div>
   );
 }
+
+// Discord avatar when the member has linked Discord, otherwise their initial.
+export function Avatar({ url, name, size = 28 }: { url?: string | null; name: string; size?: number }) {
+  const [broken, setBroken] = useState(false);
+  const style = { width: size, height: size };
+  return url && !broken ? (
+    <img src={url} alt="" width={size} height={size} style={style} className="avatar" loading="lazy" onError={() => setBroken(true)} />
+  ) : (
+    <span className="avatar avatar--initial" style={style} aria-hidden="true">
+      {String(name || "?").trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}

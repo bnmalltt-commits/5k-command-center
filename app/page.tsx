@@ -25,6 +25,7 @@ import { PartyCommandCenter } from "./party-command-center";
 import { Picker, shrinkImage } from "./picker";
 import {
   Chips,
+  Avatar,
   ConfirmDialog,
   DiscordGate,
   DiscordMark,
@@ -80,6 +81,7 @@ type Data = {
   boards?: Record<string, any[]>;
   monthBoards?: Record<string, any[]>;
   monthTop: any[];
+  avatars?: Record<string, string | null>;
   attendance: any[];
   attendanceLeaves: any[];
   shopStatus: any[];
@@ -269,12 +271,14 @@ function SquadRanking({
   monthBoards,
   compact = false,
   highlightId,
+  avatars = {},
 }: {
   leaderboard: any[];
   boards?: Record<string, any[]>;
   monthBoards?: Record<string, any[]>;
   compact?: boolean;
   highlightId?: number;
+  avatars?: Record<string, string | null>;
 }) {
   const [period, setPeriod] = useState("month");
   const months = Object.keys(monthBoards || {}).sort().reverse();
@@ -372,11 +376,14 @@ function SquadRanking({
               </span>
             }
             title={
-              member.id === highlightId ? (
-                <span className="text-white">{member.display_name} · คุณ</span>
-              ) : (
-                member.display_name
-              )
+              <span className="name-with-avatar">
+                <Avatar url={avatars[String(member.id)]} name={member.display_name} size={24} />
+                {member.id === highlightId ? (
+                  <span className="text-white">{member.display_name} · คุณ</span>
+                ) : (
+                  member.display_name
+                )}
+              </span>
             }
             subtitle={member.online ? "ออนไลน์" : undefined}
             trailing={
@@ -1855,7 +1862,10 @@ export default function Home() {
             />
             <div className="min-w-0 flex-1">
               <div className="topbar__meta">5K // COMMAND</div>
-              <div className="topbar__name">{data.me.name}</div>
+              <div className="topbar__name name-with-avatar">
+                <Avatar url={data.avatars?.[String(data.me.id)]} name={data.me.name} size={22} />
+                {data.me.name}
+              </div>
             </div>
             <div className="topbar__score">
               <b>{data.me.monthScore}</b>
@@ -2144,6 +2154,7 @@ export default function Home() {
                 boards={data.boards}
                 monthBoards={data.monthBoards}
                 highlightId={data.me.id}
+                avatars={data.avatars}
               />
             ))}
           {view === "admin" &&
@@ -2181,7 +2192,12 @@ export default function Home() {
                 <Row
                   key={member.id}
                   inset={false}
-                  leading={<Dot tone={member.online ? "green" : "idle"} />}
+                  leading={
+                    <span className="avatar-status">
+                      <Avatar url={data.avatars?.[String(member.id)]} name={member.display_name} size={28} />
+                      <Dot tone={member.online ? "green" : "idle"} />
+                    </span>
+                  }
                   title={member.display_name}
                   trailing={
                     <span className="text-xs text-[var(--ui-text-3)]">
@@ -2192,7 +2208,7 @@ export default function Home() {
               ))}
             </div>
           </Panel>
-          <SquadRanking leaderboard={data.monthTop} compact />
+          <SquadRanking leaderboard={data.monthTop} avatars={data.avatars} compact />
         </aside>
       </div>
       <nav className="bottom-nav lg:hidden" aria-label="เมนูหลัก">

@@ -1,6 +1,6 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
-import { notifyApproval, notifyRejection, discordUserId } from "@/lib/notify";
+import { notifyApproval, notifyRejection, discordUserId, discordAvatarUrl } from "@/lib/notify";
 import { pointsByDaySql, shopStatusSql, SHOP_RULE_START, SHOP_PER_DAY, SHOP_PENALTY } from "@/lib/points";
 import { storage } from "@/lib/storage";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, pinDigest, randomPin, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
@@ -133,6 +133,9 @@ export async function GET(request: Request) {
           db.prepare("SELECT pam.member_id,pa.activity_date,COUNT(*) AS n FROM party_activities pa JOIN party_activity_members pam ON pam.party_activity_id=pa.id WHERE pa.status='approved' AND pa.activity_date>=? GROUP BY 1,2").bind(attendanceFrom).all(),
         ])
       : [null, null, null, null];
+    // Discord avatars keyed by member id, for every list that shows people.
+    const avatarRows = (await db.prepare("SELECT id,external_user_id,discord_avatar FROM members WHERE active=1 AND external_user_id LIKE 'discord:%'").bind().all<any>()).results;
+    const avatars = Object.fromEntries(avatarRows.map((r: any) => [String(r.id), discordAvatarUrl(r.external_user_id, r.discord_avatar)]));
     // The member's own shop-quota standing, for the home screen (null before
     // the rule starts or for a member it doesn't cover yet).
     const myShop = await db.prepare(`SELECT * FROM (${shopStatusSql(date)}) s WHERE member_id=?`).bind(me.id).first<any>();
@@ -195,6 +198,7 @@ export async function GET(request: Request) {
       favorites: favorites.results.map((x: any) => x.favorite_member_id),
       leaderboard: leaderboard.results,
       monthTop,
+      avatars,
       shop: {
         start: SHOP_RULE_START,
         perDay: SHOP_PER_DAY,
@@ -391,7 +395,7 @@ export async function POST(request: Request) {
       if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
       if (target.is_primary_admin && !sameId(id, admin.id)) throw Error("ไม่สามารถรีเซ็ต PIN บัญชีเจ้าของแก๊งได้");
       const pin = randomPin();
-      const statements = [db.prepare("UPDATE members SET pin_hash=? WHERE id=?").bind(await pinDigest(pin), id)];
+      const statements = [db.prepare("UPDATE members SET pin_hash=?,failed_logins=0,login_locked_until=NULL WHERE id=?").bind(await pinDigest(pin), id)];
       // Evict the member so a reset also cuts off anyone already signed in as
       // them — except when you reset your own PIN, which keeps you logged in.
       if (!sameId(id, admin.id)) statements.push(db.prepare("DELETE FROM sessions WHERE member_id=?").bind(id));
@@ -406,7 +410,7 @@ export async function POST(request: Request) {
       for (const target of targets.results) {
         const pin = randomPin();
         pins.push({ name: target.display_name, pin });
-        statements.push(db.prepare("UPDATE members SET pin_hash=? WHERE id=?").bind(await pinDigest(pin), target.id));
+        statements.push(db.prepare("UPDATE members SET pin_hash=?,failed_logins=0,login_locked_until=NULL WHERE id=?").bind(await pinDigest(pin), target.id));
         statements.push(db.prepare("DELETE FROM sessions WHERE member_id=?").bind(target.id));
       }
       await db.batch(statements);
