@@ -343,7 +343,10 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                           }
                           className={`party-create-invite ${selected ? "is-selected" : ""}`}
                         >
-                          <span className={`status-dot ${member.online ? "" : "status-dot-offline"}`} />
+                          <span className="avatar-status">
+                            <Avatar url={data.avatars?.[String(member.id)]} name={member.display_name} size={22} />
+                            <span className={`status-dot ${member.online ? "" : "status-dot-offline"}`} />
+                          </span>
                           {member.display_name}
                           {selected && <Check className="h-4 w-4" />}
                         </button>
