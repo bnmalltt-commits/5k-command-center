@@ -1619,3 +1619,29 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
   text-decoration: none;
 }
 .discord-btn:hover { background: #4752c4; }
+
+.link-discord {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(88, 101, 242, 0.55);
+  border-radius: var(--ui-radius);
+  background: rgba(88, 101, 242, 0.12);
+}
+.link-discord__icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border-radius: var(--ui-radius-sm);
+  background: #5865f2;
+  color: #fff;
+}
+.link-discord__title { margin: 0; color: var(--ui-text); font-size: 14px; font-weight: 700; }
+.link-discord__sub { margin: 2px 0 0; color: var(--ui-text-2); font-size: 12px; }
+.link-discord__actions { display: flex; gap: 8px; margin-left: auto; }
+.discord-btn--sm { width: auto; min-height: 32px; padding: 0 14px; font-size: 13px; }

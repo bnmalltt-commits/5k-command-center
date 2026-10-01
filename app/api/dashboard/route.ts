@@ -93,7 +93,7 @@ export async function GET(request: Request) {
         : empty,
       db.prepare("SELECT favorite_member_id FROM member_favorites WHERE owner_member_id=?").bind(me.id).all(),
       db.prepare(`SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,COALESCE(SUM(pl.points),0) AS score FROM members m LEFT JOIN (${POINTS_BY_DAY}) pl ON pl.member_id=m.id WHERE m.active=1 GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 100`).bind(since).all(),
-      wants.admin ? db.prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash IS NOT NULL AS has_pin FROM members ORDER BY active DESC,display_name").bind().all() : empty,
+      wants.admin ? db.prepare("SELECT id,username,display_name,role,active,is_primary_admin,pin_hash IS NOT NULL AS has_pin,COALESCE(external_user_id LIKE 'discord:%',false) AS discord_linked FROM members ORDER BY active DESC,display_name").bind().all() : empty,
       db.prepare("SELECT p.id,p.name,p.status,p.owner_member_id,p.active,owner.display_name AS owner_name FROM parties p JOIN party_members mine ON mine.party_id=p.id AND mine.member_id=? LEFT JOIN members owner ON owner.id=p.owner_member_id WHERE p.status IN ('open','locked') ORDER BY p.id DESC LIMIT 1").bind(me.id).first(),
       wants.party
         ? db.prepare("SELECT i.id,i.party_id,i.created_at,p.name AS party_name,inviter.display_name AS inviter_name,COUNT(pm.id) AS member_count FROM party_invites i JOIN parties p ON p.id=i.party_id JOIN members inviter ON inviter.id=i.inviter_member_id LEFT JOIN party_members pm ON pm.party_id=i.party_id WHERE i.invitee_member_id=? AND i.status='pending' AND p.status='open' GROUP BY i.id,p.name,inviter.display_name").bind(me.id).all()

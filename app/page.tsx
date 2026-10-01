@@ -691,12 +691,15 @@ function AdminCommandCenter({
       !member.has_pin &&
       (!member.is_primary_admin || member.id === data.me.id),
   );
+  const noDiscordMembers = activeMembers.filter((member: any) => !member.discord_linked);
   const memberPool =
     memberFilter === "removed"
       ? removedMembers
       : memberFilter === "nopin"
         ? noPinMembers
-        : activeMembers;
+        : memberFilter === "nodiscord"
+          ? noDiscordMembers
+          : activeMembers;
   const visibleMembers = memberPool.filter((member: any) =>
     matches(member.display_name),
   );
@@ -885,6 +888,7 @@ function AdminCommandCenter({
                 options={[
                   { id: "active", label: `ใช้งาน ${activeMembers.length}` },
                   { id: "nopin", label: `ยังไม่มี PIN ${noPinMembers.length}` },
+                  { id: "nodiscord", label: `ยังไม่ผูก Discord ${noDiscordMembers.length}` },
                   { id: "removed", label: `ถูกเอาออก ${removedMembers.length}` },
                 ]}
               />
@@ -1068,11 +1072,13 @@ function AdminCommandCenter({
                 key={member.id}
                 inset={false}
                 title={member.display_name}
-                subtitle={
-                  member.active && !member.has_pin
-                    ? `${adminSubtitle(member)} · ยังไม่มี PIN`
-                    : adminSubtitle(member)
-                }
+                subtitle={[
+                  adminSubtitle(member),
+                  member.active && !member.has_pin && "ยังไม่มี PIN",
+                  member.active && (member.discord_linked ? "ผูก Discord แล้ว" : "ยังไม่ผูก Discord"),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
                 trailing={
                   !member.active ? (
                     <button
@@ -1139,7 +1145,9 @@ function AdminCommandCenter({
                   ? "ไม่มีสมาชิกที่ถูกเอาออก"
                   : memberFilter === "nopin"
                     ? "ทุกบัญชีมี PIN แล้ว"
-                    : "ยังไม่มีสมาชิก"
+                    : memberFilter === "nodiscord"
+                      ? "ทุกคนผูก Discord แล้ว"
+                      : "ยังไม่มีสมาชิก"
               }
             />
           ))}
@@ -1387,6 +1395,7 @@ export default function Home() {
     [pickerReset, setPickerReset] = useState(0),
     [pinResult, setPinResult] = useState<{ name: string; pin: string }[] | null>(null),
     [changingPin, setChangingPin] = useState(false),
+    [discordLater, setDiscordLater] = useState(false),
     [confirmState, setConfirmState] = useState<{
       message: string;
       resolve: (ok: boolean) => void;
@@ -1494,6 +1503,11 @@ export default function Home() {
     if (message === null) return;
     setNotice(message === "unavailable" ? "ยังไม่ได้ตั้งค่าเข้าสู่ระบบด้วย Discord" : message || "เข้าสู่ระบบด้วย Discord แล้ว");
     window.history.replaceState(null, "", window.location.pathname);
+  }, []);
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("fivek_discord_later")) setDiscordLater(true);
+    } catch {}
   }, []);
   const autoRoundDone = useRef(false);
   useEffect(() => {
@@ -1853,6 +1867,36 @@ export default function Home() {
               <RefreshCw className="h-4 w-4" />
             </button>
           </header>
+          {!data.me.discordLinked && !discordLater && (
+            <div className="link-discord">
+              <span className="link-discord__icon">
+                <DiscordMark />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="link-discord__title">ผูกบัญชี Discord ของคุณ</p>
+                <p className="link-discord__sub">
+                  ครั้งหน้ากดเข้าสู่ระบบด้วย Discord ได้เลย ไม่ต้องจำ PIN
+                </p>
+              </div>
+              <div className="link-discord__actions">
+                <a href="/api/auth/discord?mode=link" className="discord-btn discord-btn--sm">
+                  ผูกเลย
+                </a>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDiscordLater(true);
+                    try {
+                      sessionStorage.setItem("fivek_discord_later", "1");
+                    } catch {}
+                  }}
+                  className="ui-btn ui-btn--ghost ui-btn--sm"
+                >
+                  ไว้ทีหลัง
+                </button>
+              </div>
+            </div>
+          )}
           {view === "airdrop" && (
             <MissionCard
               data={data}
