@@ -390,6 +390,17 @@ const monthLabel = (month: string) =>
     year: "numeric",
     timeZone: "UTC",
   });
+// A small progress bar: red under half, amber past half, green when done.
+function Meter({ value, max, label }: { value: number; max: number; label?: string }) {
+  const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+  const tone = pct >= 100 ? "done" : pct >= 50 ? "half" : "low";
+  return (
+    <span className="meter" role="progressbar" aria-valuemin={0} aria-valuemax={max} aria-valuenow={value} aria-label={label}>
+      <span className={`meter__fill meter__fill--${tone}`} style={{ width: `${pct}%` }} />
+    </span>
+  );
+}
+
 function SquadRanking({
   leaderboard: allTime,
   boards,
@@ -490,8 +501,29 @@ function SquadRanking({
           <span className="rank-me__score">{Number(me.score || 0)}</span>
         </div>
       )}
+      {!compact && rows.length > 0 && (
+        // Top three on a podium: 2nd, 1st, 3rd from left to right.
+        <div className="podium">
+          {[1, 0, 2].map((index) => {
+            const member = rows[index];
+            if (!member) return <div key={index} className="podium__slot podium__slot--empty" />;
+            return (
+              <div key={member.id} className={`podium__slot podium__slot--${index + 1}`}>
+                <span className="podium__medal">{ranks[index]}</span>
+                <Avatar url={avatars[String(member.id)]} name={member.display_name} size={index === 0 ? 64 : 52} />
+                <span className="podium__name">
+                  {member.display_name}
+                  {member.id === highlightId ? " · คุณ" : ""}
+                </span>
+                <b className="podium__score">{Number(member.score || 0)}</b>
+                <span className="podium__base" />
+              </div>
+            );
+          })}
+        </div>
+      )}
       {rows.length ? (
-        rows.map((member: any, index: number) => (
+        rows.map((member: any, index: number) => (!compact && index < 3) ? null : (
           <Row
             key={member.id}
             inset={false}
@@ -1731,6 +1763,7 @@ export default function Home() {
     [pickerReset, setPickerReset] = useState(0),
     [claim, setClaim] = useState<any>(null),
     [discordLater, setDiscordLater] = useState(false),
+    [showOffline, setShowOffline] = useState(false),
     [confirmState, setConfirmState] = useState<{
       message: string;
       resolve: (ok: boolean) => void;
@@ -1851,6 +1884,12 @@ export default function Home() {
       if (sessionStorage.getItem("fivek_discord_later")) setDiscordLater(true);
     } catch {}
   }, []);
+  // Toasts clear themselves; longer messages stay up a little longer.
+  useEffect(() => {
+    if (!notice || !data) return;
+    const timer = window.setTimeout(() => setNotice(""), Math.max(5000, notice.length * 80));
+    return () => window.clearTimeout(timer);
+  }, [notice, Boolean(data)]);
   useEffect(() => {
     if (!new URLSearchParams(window.location.search).has("claim")) return;
     window.history.replaceState(null, "", window.location.pathname);
@@ -2178,9 +2217,30 @@ export default function Home() {
                 {data.me.name}
               </div>
             </div>
-            <div className="topbar__score">
-              <b>{data.me.monthScore}</b>
-              <span>แต้มเดือนนี้</span>
+            <div className="topbar-stats">
+              <button type="button" onClick={() => setView("mine")} className="topbar-stat">
+                <b>{data.me.monthScore}</b>
+                <span>แต้มเดือนนี้</span>
+              </button>
+              <button type="button" onClick={() => setView("score")} className="topbar-stat topbar-stat--extra">
+                <b>{data.me.monthRank ? `#${data.me.monthRank}` : "—"}</b>
+                <span>อันดับ</span>
+              </button>
+              {data.team?.mine && (
+                <button type="button" onClick={() => setView("party")} className="topbar-stat topbar-stat--extra">
+                  <b>
+                    {data.team.mine.today}/{data.team.perDay}
+                  </b>
+                  <span>ทีมวันนี้</span>
+                  <Meter value={data.team.mine.today} max={data.team.perDay} label="คะแนนทีมวันนี้" />
+                </button>
+              )}
+              {data.team?.mine && data.team.mine.debt > 0 && (
+                <button type="button" onClick={() => setView("mine")} className="topbar-stat topbar-stat--extra topbar-stat--warn">
+                  <b>{data.team.mine.debt}</b>
+                  <span>ค้างคะแนนทีม</span>
+                </button>
+              )}
             </div>
             <button
               onClick={load}
@@ -2221,6 +2281,7 @@ export default function Home() {
             </div>
           )}
           {view === "airdrop" && (
+            <div className="home-dash">
             <MissionCard
               data={data}
               round={round}
@@ -2232,8 +2293,6 @@ export default function Home() {
               pickerReset={pickerReset}
               onSubmit={(e) => send("airdrop", e)}
             />
-          )}
-          {view === "airdrop" && (
             <div className="home-stats">
               <button
                 type="button"
@@ -2246,6 +2305,7 @@ export default function Home() {
                     <b className="hud-tile__value">
                       {data.team.mine.today}/{data.team.perDay}
                     </b>
+                    <Meter value={data.team.mine.today} max={data.team.perDay} label="คะแนนทีมวันนี้" />
                     <span className="hud-tile__sub">
                       {data.team.mine.neededToday > 0
                         ? `ต้องได้อีก ${data.team.mine.neededToday} คะแนนก่อนจบวัน · งัดร้าน +${data.team.points.shop} ลูป +${data.team.points.loop}`
@@ -2303,6 +2363,7 @@ export default function Home() {
                 </span>
               </button>
             </div>
+            </div>
           )}
           {view === "more" && (
             <Panel label="MENU" title="เพิ่มเติม" flush>
@@ -2354,9 +2415,11 @@ export default function Home() {
             </Panel>
           )}
           {notice && (
-            <div className="mb-5 flex items-center justify-between rounded-lg border border-red-400/30 bg-red-950/30 px-4 py-3 text-sm">
+            <div className="toast" role="status" aria-live="polite">
               <span>{notice}</span>
-              <button onClick={() => setNotice("")}>×</button>
+              <button type="button" onClick={() => setNotice("")} aria-label="ปิดข้อความ">
+                ×
+              </button>
             </div>
           )}
           {view === "airdrop" && (
@@ -2498,7 +2561,10 @@ export default function Home() {
             flush
           >
             <div className="rail-scroll">
-              {members.map((member: any) => (
+              {!members.some((member: any) => member.online) && (
+                <p className="px-4 py-3 text-sm text-[var(--ui-text-3)]">ไม่มีใครออนไลน์ตอนนี้</p>
+              )}
+              {members.filter((member: any) => member.online || showOffline).map((member: any) => (
                 <Row
                   key={member.id}
                   inset={false}
@@ -2516,9 +2582,18 @@ export default function Home() {
                   }
                 />
               ))}
+              {members.some((member: any) => !member.online) && (
+                <button type="button" onClick={() => setShowOffline((v) => !v)} className="rail-toggle">
+                  {showOffline
+                    ? "ซ่อนคนออฟไลน์"
+                    : `ดูคนออฟไลน์ ${members.filter((member: any) => !member.online).length} คน`}
+                </button>
+              )}
             </div>
           </Panel>
-          <SquadRanking leaderboard={data.monthTop} avatars={data.avatars} compact />
+          {view !== "score" && (
+            <SquadRanking leaderboard={data.monthTop} avatars={data.avatars} compact />
+          )}
         </aside>
       </div>
       <nav className="bottom-nav lg:hidden" aria-label="เมนูหลัก">

@@ -114,7 +114,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  --font-sans: "Noto Sans Thai", "Tahoma", Arial, sans-serif;
+  --font-sans: var(--font-chakra), "Noto Sans Thai", "Tahoma", Arial, sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
     "Courier New", monospace;
@@ -709,7 +709,7 @@ button:disabled {
 :root {
   /* Families come from next/font (see app/layout.tsx), which self-hosts them
      and exposes these variables on <html>. */
-  --font-display: var(--font-orbitron), var(--font-mono);
+  --font-display: var(--font-chakra), var(--font-mono);
   --font-hud: var(--font-rajdhani), var(--font-sans);
 }
 .hud-clip {
@@ -1753,3 +1753,169 @@ select option:checked { background: var(--ui-red-deep); color: #fff; }
 .points-split__cell span { color: var(--ui-text-3); font-size: 12px; }
 .points-split__cell b { color: var(--ui-green); font-size: 18px; font-variant-numeric: tabular-nums; }
 .points-split__cell.is-minus b { color: var(--ui-red-light); }
+
+/* ---- UI polish (2026-10): dashboard home, HUD top bar, podium, toasts ---- */
+
+/* Progress bars. */
+.meter {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin: 4px 0 2px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 99px;
+}
+.meter__fill { display: block; height: 100%; border-radius: inherit; transition: width 0.4s ease; }
+.meter__fill--low { background: var(--ui-red); }
+.meter__fill--half { background: var(--ui-amber); }
+.meter__fill--done { background: var(--ui-green); }
+
+/* Top bar: a row of stats, each opening the page behind it. */
+.topbar-stats { display: flex; align-items: stretch; gap: 4px; flex-shrink: 0; }
+.topbar-stat {
+  display: flex;
+  min-width: 72px;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 4px 12px;
+  border-left: 1px solid var(--ui-line);
+  color: var(--ui-text-3);
+  font-size: 11px;
+  text-align: right;
+}
+.topbar-stat:first-child { border-left: 0; }
+.topbar-stat:hover b { color: #fff; }
+.topbar-stat b {
+  color: var(--ui-text);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.topbar-stat:first-child b { color: #ff8f8f; }
+.topbar-stat .meter { width: 64px; margin: 3px 0 0; }
+.topbar-stat--warn b { color: var(--ui-red-light); }
+@media (max-width: 639px) {
+  .topbar-stat--extra { display: none; }
+  .topbar-stat { padding: 2px 6px; min-width: 0; }
+}
+
+/* Home on desktop: mission card left, today's numbers right. */
+@media (min-width: 1024px) {
+  .home-dash {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(260px, 1fr);
+    gap: 14px;
+    align-items: start;
+    margin-bottom: 14px;
+  }
+  .home-dash > .mission { margin-bottom: 0; }
+  .home-dash .home-stats { grid-template-columns: 1fr; margin-bottom: 0; }
+  .home-dash .hud-tile { padding: 14px 16px; }
+}
+
+/* Toasts: top-right, out of the page flow, clear themselves. */
+.toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 64px);
+  right: 20px;
+  z-index: 90;
+  display: flex;
+  max-width: min(420px, calc(100vw - 32px));
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #160a0c;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-left: 3px solid var(--ui-red);
+  border-radius: var(--ui-radius);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  color: var(--ui-text);
+  font-size: 14px;
+  line-height: 1.5;
+  animation: toast-in 0.18s ease-out;
+}
+.toast button { color: var(--ui-text-3); font-size: 18px; line-height: 1; }
+.toast button:hover { color: var(--ui-text); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+@media (max-width: 639px) { .toast { left: 16px; right: 16px; max-width: none; } }
+@media (prefers-reduced-motion: reduce) { .toast { animation: none; } .meter__fill { transition: none; } }
+
+/* Ranking podium. */
+.podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 10px;
+  padding: 18px 16px 6px;
+}
+.podium__slot {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.podium__medal {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  color: #120c02;
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+}
+.podium__slot--1 .podium__medal { background: #f5c542; box-shadow: 0 0 16px rgba(245, 197, 66, 0.5); }
+.podium__slot--2 .podium__medal { background: #c9d1d9; }
+.podium__slot--3 .podium__medal { background: #d08a4a; }
+.podium__slot--1 .avatar { box-shadow: 0 0 0 2px #f5c542; }
+.podium__slot--2 .avatar { box-shadow: 0 0 0 2px #c9d1d9; }
+.podium__slot--3 .avatar { box-shadow: 0 0 0 2px #d08a4a; }
+.podium__name {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--ui-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.podium__score {
+  color: var(--ui-text);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.podium__base {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  border: 1px solid var(--ui-line);
+  border-bottom: 0;
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.01));
+}
+.podium__slot--1 .podium__base { height: 64px; border-color: rgba(245, 197, 66, 0.45); }
+.podium__slot--2 .podium__base { height: 44px; }
+.podium__slot--3 .podium__base { height: 30px; }
+.podium__slot--1 .podium__score { color: #f5c542; font-size: 24px; }
+
+/* Squad status rail: show / hide offline members. */
+.rail-toggle {
+  display: block;
+  width: 100%;
+  padding: 10px 16px;
+  border-top: 1px solid var(--ui-line);
+  color: var(--ui-text-3);
+  font-size: 13px;
+  text-align: center;
+}
+.rail-toggle:hover { color: var(--ui-text); }

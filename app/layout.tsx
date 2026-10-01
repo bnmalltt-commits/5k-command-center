@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
-import { Orbitron, Rajdhani } from "next/font/google";
+import { Chakra_Petch, Rajdhani } from "next/font/google";
 import "./globals.css";
 import CommandScene from "./command-scene-loader";
 
 // Self-hosted via next/font instead of a CSS @import to fonts.googleapis.com,
 // which sat inside the render-blocking stylesheet and chained two extra
 // third-party round trips (googleapis -> gstatic) before first paint.
-const orbitron = Orbitron({
-  subsets: ["latin"],
-  weight: ["600", "700", "800"],
-  variable: "--font-orbitron",
+// Thai + Latin in one squared, esports-style face, for body text and numbers
+// (its zero has no slash, unlike Orbitron's, which read like a "no" sign).
+const chakra = Chakra_Petch({
+  subsets: ["thai", "latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-chakra",
   display: "swap",
 });
 const rajdhani = Rajdhani({
@@ -34,7 +36,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th" className={`${orbitron.variable} ${rajdhani.variable}`}>
+    <html lang="th" className={`${chakra.variable} ${rajdhani.variable}`}>
       <body className="antialiased"><CommandScene />{children}</body>
     </html>
   );
