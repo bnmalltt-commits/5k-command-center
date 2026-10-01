@@ -1511,12 +1511,11 @@ button:disabled {
   color: var(--ui-red-light);
 }
 
-.side-nav__group {
-  margin: 0.9rem 0 0.2rem;
-  color: var(--ui-text-3);
-  font-size: 0.62rem;
-  letter-spacing: 0.14em;
-  text-align: center;
+/* Separates the daily destinations from the occasional ones. */
+.ui-v2 .command-sidebar nav .side-nav__divider {
+  margin: 0.7rem 0.6rem;
+  border: 0;
+  border-top: 1px solid rgba(154, 181, 202, 0.17);
 }
 
 /* Native controls (select popups, date pickers, number spinners, scrollbars)

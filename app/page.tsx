@@ -1891,7 +1891,7 @@ export default function Home() {
                 {label}
               </button>
             ))}
-            <p className="side-nav__group">อื่นๆ</p>
+            <hr className="side-nav__divider" aria-hidden="true" />
             {moreNav.map(([id, label, Icon]: any) => (
               <button
                 key={id}
