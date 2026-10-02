@@ -1,5 +1,9 @@
 import { db } from "./db";
 
+// Reason on the leave entry the midnight job writes for a member who sent
+// nothing all day. It marks an absence, not an excused day.
+export const ABSENT_REASON = "ขาด — ไม่ได้ส่งอะไรเลย (บันทึกอัตโนมัติ)";
+
 // Removes a member and repairs the party in the same transaction: if they led
 // it, the longest-standing remaining member takes over; if nobody is left, it
 // closes. Choosing the successor in SQL (not in an earlier SELECT) means a

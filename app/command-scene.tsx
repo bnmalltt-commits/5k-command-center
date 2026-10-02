@@ -42,6 +42,7 @@ const POSES: Record<string, { position: THREE.Vector3; scale: number; glow: numb
   log: pose(3.1, 1.4, -3.6, 0.85),
   admin: pose(3.4, -0.75, -3.6, 0.85),
   more: pose(-3.1, -0.5, -3.2, 0.85),
+  summary: pose(-3.3, 1.25, -3.6, 0.85),
 };
 // Base opacity of each glowing part, scaled by the pose's glow.
 const RIM = 1, LOGO = 1, RING_A = 0.85, RING_B = 0.7, RING_C = 0.6;

@@ -3,6 +3,7 @@ import { leaveStatements } from "@/lib/party";
 import { discordUserId, discordAvatarUrl, postCard } from "@/lib/notify";
 import { pointsByDaySql, pointsDetailSql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
 import { approveEvidence, rejectEvidence, validType } from "@/lib/review";
+import { buildSummary } from "@/lib/summary";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 
 // Give the ~11 parallel queries this route fires room to finish instead of
@@ -50,7 +51,7 @@ async function partyDetails(party: any) {
 // NOTE: if a nav entry ever grows a badge count (e.g. "คำเชิญ (2)"), the key
 // behind that count has to move into core, since it'd then be read from every
 // view rather than only inside its own.
-const VIEWS = ["airdrop", "party", "score", "admin", "leave", "log", "mine"] as const;
+const VIEWS = ["airdrop", "party", "score", "admin", "leave", "log", "mine", "summary"] as const;
 type View = (typeof VIEWS)[number];
 
 export async function GET(request: Request) {
@@ -67,6 +68,7 @@ export async function GET(request: Request) {
       leave: view === "leave",
       log: view === "log",
       mine: view === "mine",
+      summary: view === "summary",
     };
     await db.prepare("UPDATE members SET last_seen_at=? WHERE id=?").bind(now(), me.id).run();
     const since = onlineSince();
@@ -150,6 +152,8 @@ export async function GET(request: Request) {
           `SELECT day,category,SUM(points) AS points,COUNT(*) AS n FROM (${pointsDetailSql(date)}) d WHERE member_id=? GROUP BY day,category ORDER BY day DESC`
         ).bind(me.id).all<any>()).results.map((row: any) => ({ ...row, points: Number(row.points), n: Number(row.n) }))
       : null;
+    // "สรุป": gang totals per period, monthly results, and admin to-dos.
+    const summary = wants.summary ? await buildSummary(date, me.role === "admin") : null;
     let boards: Record<string, any[]> | null = null;
     let monthBoards: Record<string, any[]> | null = null;
     if (view === "score") {
@@ -228,6 +232,7 @@ export async function GET(request: Request) {
       ...(wants.leave && { leaveRequests: leaveRequests.results }),
       ...(wants.log && { submissionLog: submissionLog.results }),
       ...(myPoints && { myPoints }),
+      ...(summary && { summary }),
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "โหลดข้อมูลไม่สำเร็จ";

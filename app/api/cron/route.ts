@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { now, thaiDate } from "@/lib/auth";
 import { postCard, discordUserId } from "@/lib/notify";
+import { ABSENT_REASON } from "@/lib/party";
 import { pointsByDaySql, teamStatusSql, teamDayResultSql, TEAM_PER_DAY, TEAM_RULE_START, KIND_POINTS } from "@/lib/points";
 
 export const maxDuration = 30;
@@ -153,7 +154,6 @@ async function monthlyWinners(nowMs: number) {
 // is recorded as absent — a leave entry an admin can delete if it's wrong —
 // and tagged so they know. Only from AUTO_ABSENT_START, never retroactively.
 const AUTO_ABSENT_START = "2026-10-02";
-const ABSENT_REASON = "ขาด — ไม่ได้ส่งอะไรเลย (บันทึกอัตโนมัติ)";
 async function autoAbsence(nowMs: number) {
   const today = bkkDateOf(nowMs);
   if (nowMs < bkkTime(today, "00:00") || nowMs >= bkkTime(today, "04:00")) return [];
