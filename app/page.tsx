@@ -437,6 +437,64 @@ const monthLabel = (month: string) =>
     year: "numeric",
     timeZone: "UTC",
   });
+// Counts up to a number when it first appears or changes. Skipped for people
+// who ask for less motion.
+const prefersLessMotion = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function CountUp({ value }: { value: number }) {
+  const [shown, setShown] = useState(() => (prefersLessMotion() ? value : 0));
+  const from = useRef(prefersLessMotion() ? value : 0);
+  useEffect(() => {
+    const start = from.current;
+    if (prefersLessMotion() || start === value) {
+      setShown(value);
+      from.current = value;
+      return;
+    }
+    const began = performance.now();
+    let frame = 0;
+    const step = (time: number) => {
+      const progress = Math.min(1, (time - began) / 650);
+      setShown(Math.round(start + (value - start) * (1 - Math.pow(1 - progress, 3))));
+      if (progress < 1) frame = requestAnimationFrame(step);
+    };
+    frame = requestAnimationFrame(step);
+    return () => {
+      cancelAnimationFrame(frame);
+      from.current = value;
+    };
+  }, [value]);
+  return <>{shown}</>;
+}
+
+// A glowing progress ring with "value/max" in the middle (team score).
+function Ring({ value, max, size = 68 }: { value: number; max: number; size?: number }) {
+  const pct = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+  const tone = pct >= 1 ? "done" : pct >= 0.5 ? "half" : "low";
+  const r = (size - 8) / 2;
+  const c = 2 * Math.PI * r;
+  return (
+    <span className={`score-ring score-ring--${tone}`} style={{ width: size, height: size }} role="img" aria-label={`${value} จาก ${max}`}>
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={r} className="score-ring__track" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          className="score-ring__fill"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - pct)}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </svg>
+      <b className="score-ring__label" aria-hidden="true">
+        <CountUp value={value} />
+        <small>/{max}</small>
+      </b>
+    </span>
+  );
+}
+
 // A small progress bar: red under half, amber past half, green when done.
 function Meter({ value, max, label }: { value: number; max: number; label?: string }) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
@@ -2468,7 +2526,9 @@ export default function Home() {
             </div>
             <div className={`topbar-stats ${view === "airdrop" ? "topbar-stats--home" : ""}`}>
               <button type="button" onClick={() => setView("mine")} className="topbar-stat">
-                <b>{data.me.monthScore}</b>
+                <b>
+                  <CountUp value={data.me.monthScore} />
+                </b>
                 <span>แต้มเดือนนี้</span>
               </button>
               <button type="button" onClick={() => setView("score")} className="topbar-stat topbar-stat--extra">
@@ -2563,22 +2623,23 @@ export default function Home() {
                   </>
                 ) : data.team?.mine ? (
                   <>
-                    <b className="hud-tile__value">
-                      {data.team.mine.today}/{data.team.perDay}
-                    </b>
-                    <Meter value={data.team.mine.today} max={data.team.perDay} label="คะแนนทีมวันนี้" />
-                    <span className="hud-tile__sub">
-                      {data.team.mine.neededToday > 0
-                        ? `ต้องได้อีก ${data.team.mine.neededToday} คะแนนก่อนจบวัน · งัดร้าน +${data.team.points.shop} ลูป +${data.team.points.loop}`
-                        : data.team.mine.bank > 0
-                          ? `ครบแล้ว · เกินเก็บไว้ ${data.team.mine.bank} คะแนน`
-                          : "ครบแล้ววันนี้"}
-                    </span>
-                    {data.team.mine.debt > 0 && (
-                      <span className="hud-tile__warn">
-                        ค้าง {data.team.mine.debt} คะแนน · ถูกหัก {data.team.mine.debt * data.team.penalty} แต้ม (ทำชดแล้วได้คืน)
+                    <span className="tile-ring-row">
+                      <Ring value={data.team.mine.today} max={data.team.perDay} />
+                      <span className="tile-ring-row__text">
+                        <span className="hud-tile__sub">
+                          {data.team.mine.neededToday > 0
+                            ? `ต้องได้อีก ${data.team.mine.neededToday} คะแนนก่อนจบวัน · งัดร้าน +${data.team.points.shop} ลูป +${data.team.points.loop}`
+                            : data.team.mine.bank > 0
+                              ? `ครบแล้ว · เกินเก็บไว้ ${data.team.mine.bank} คะแนน`
+                              : "ครบแล้ววันนี้"}
+                        </span>
+                        {data.team.mine.debt > 0 && (
+                          <span className="hud-tile__warn">
+                            ค้าง {data.team.mine.debt} คะแนน · ถูกหัก {data.team.mine.debt * data.team.penalty} แต้ม (ทำชดแล้วได้คืน)
+                          </span>
+                        )}
                       </span>
-                    )}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -2599,9 +2660,25 @@ export default function Home() {
                 className="hud-tile"
               >
                 <span className="ui-eyebrow">อันดับเดือนนี้</span>
-                <b className="hud-tile__value">
-                  {data.me.monthRank ? `#${data.me.monthRank}` : "—"}
-                </b>
+                {data.me.monthRank ? (
+                  <b
+                    className={`rank-badge rank-badge--${
+                      data.me.monthRank === 1
+                        ? "gold"
+                        : data.me.monthRank === 2
+                          ? "silver"
+                          : data.me.monthRank === 3
+                            ? "bronze"
+                            : data.me.monthRank <= 10
+                              ? "top"
+                              : "base"
+                    }`}
+                  >
+                    #<CountUp value={data.me.monthRank} />
+                  </b>
+                ) : (
+                  <b className="hud-tile__value">—</b>
+                )}
                 <span className="hud-tile__sub">
                   {data.me.monthRank
                     ? `${data.me.monthScore} แต้ม`

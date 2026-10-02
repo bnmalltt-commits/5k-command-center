@@ -2076,3 +2076,115 @@ textarea:focus-visible,
 @media (max-width: 639px) {
   .topbar__icon { width: 40px; height: 40px; }
 }
+
+/* ---- Visual pass: glass, hero mission card, rings, motion ---- */
+
+/* Glass surfaces: the game artwork behind shows through, blurred and darkened
+   enough that text keeps its contrast. */
+:root { --ui-glass: rgba(16, 16, 19, 0.76); }
+.ui-panel,
+.hud-tile,
+.topbar {
+  background: var(--ui-glass);
+  -webkit-backdrop-filter: blur(16px) saturate(125%);
+  backdrop-filter: blur(16px) saturate(125%);
+  border-color: rgba(255, 255, 255, 0.075);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 14px 34px rgba(0, 0, 0, 0.38);
+}
+.hud-tile:hover { background: rgba(24, 24, 28, 0.84); border-color: rgba(255, 255, 255, 0.14); }
+.ui-v2 .command-sidebar {
+  background: linear-gradient(180deg, rgba(8, 12, 17, 0.8), rgba(4, 6, 9, 0.74));
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+/* The mission card is the hero: game art behind a dark wash, a red glow. */
+.mission {
+  background:
+    linear-gradient(100deg, rgba(13, 13, 16, 0.94) 0%, rgba(13, 13, 16, 0.86) 55%, rgba(64, 6, 12, 0.66) 100%),
+    url("/command-center-depth-v1.jpg") 72% 42% / cover no-repeat;
+  border-color: rgba(242, 5, 5, 0.6);
+  box-shadow: 0 0 0 1px rgba(242, 5, 5, 0.12), 0 0 38px rgba(242, 5, 5, 0.16), 0 18px 42px rgba(0, 0, 0, 0.45);
+}
+.mission__title { font-size: 21px; letter-spacing: 0.01em; }
+.mission__count b { text-shadow: 0 0 14px rgba(74, 222, 128, 0.45); }
+.mission__tile {
+  background: rgba(8, 8, 10, 0.55);
+  transition: border-color 0.15s ease, box-shadow 0.2s ease, transform 0.12s ease;
+}
+.mission__tile:hover { border-color: rgba(255, 255, 255, 0.22); }
+.mission__tile.is-done { box-shadow: inset 0 0 0 1px rgba(74, 222, 128, 0.18), 0 0 18px rgba(74, 222, 128, 0.12); }
+.mission__tile.is-active { box-shadow: 0 0 20px rgba(242, 5, 5, 0.3); }
+.mission__seg.is-done { box-shadow: 0 0 8px rgba(74, 222, 128, 0.55); }
+
+/* Team-score ring. */
+.tile-ring-row { display: flex; align-items: center; gap: 14px; width: 100%; margin-top: 4px; }
+.tile-ring-row__text { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.score-ring { position: relative; display: inline-grid; flex-shrink: 0; place-items: center; }
+.score-ring svg { position: absolute; inset: 0; }
+.score-ring__track { fill: none; stroke: rgba(255, 255, 255, 0.08); stroke-width: 6; }
+.score-ring__fill { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.7s ease; }
+.score-ring--low .score-ring__fill { stroke: var(--ui-red); filter: drop-shadow(0 0 5px rgba(242, 5, 5, 0.65)); }
+.score-ring--half .score-ring__fill { stroke: var(--ui-amber); filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.55)); }
+.score-ring--done .score-ring__fill { stroke: var(--ui-green); filter: drop-shadow(0 0 6px rgba(74, 222, 128, 0.6)); }
+.score-ring__label {
+  position: relative;
+  color: var(--ui-text);
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.score-ring__label small { color: var(--ui-text-3); font-size: 11px; font-weight: 600; }
+
+/* Monthly rank badge, coloured by tier. */
+.rank-badge {
+  display: inline-flex;
+  align-items: center;
+  margin: 2px 0;
+  padding: 2px 12px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+.rank-badge--gold { color: #1a1302; background: linear-gradient(135deg, #ffe17a, #f5b81f); border-color: #f5c542; box-shadow: 0 0 18px rgba(245, 197, 66, 0.45); }
+.rank-badge--silver { color: #10151a; background: linear-gradient(135deg, #f1f5f9, #b8c2cc); border-color: #c9d1d9; box-shadow: 0 0 16px rgba(201, 209, 217, 0.35); }
+.rank-badge--bronze { color: #1a0d03; background: linear-gradient(135deg, #f0a868, #c0702c); border-color: #d08a4a; box-shadow: 0 0 16px rgba(208, 138, 74, 0.4); }
+.rank-badge--top { color: #fff; background: rgba(208, 4, 4, 0.22); border-color: rgba(242, 5, 5, 0.6); }
+.rank-badge--base { color: var(--ui-text); background: rgba(255, 255, 255, 0.04); }
+
+/* Motion: a view's content rises in when it opens; tiles and podium follow
+   in a short stagger. Nothing re-animates on background refreshes. */
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.main-col > :not(.topbar):not(.toast) { animation: rise 0.32s ease both; }
+.home-stats > .hud-tile { animation: rise 0.36s ease both; }
+.home-stats > .hud-tile:nth-child(2) { animation-delay: 0.06s; }
+.home-stats > .hud-tile:nth-child(3) { animation-delay: 0.12s; }
+.podium__slot { animation: rise 0.4s ease both; }
+.podium__slot--1 { animation-delay: 0.08s; }
+.podium__slot--3 { animation-delay: 0.16s; }
+.ui-btn--primary:hover:not(:disabled),
+.red-action:hover:not(:disabled) { box-shadow: 0 0 20px rgba(242, 5, 5, 0.45); }
+.ui-btn--ok:hover:not(:disabled) { box-shadow: 0 0 20px rgba(74, 222, 128, 0.4); }
+
+/* Phones: keep it light (no blur), slightly more opaque surfaces. */
+@media (max-width: 639px) {
+  .ui-panel,
+  .hud-tile,
+  .topbar {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(18, 18, 21, 0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .main-col > *,
+  .home-stats > .hud-tile,
+  .podium__slot { animation: none !important; }
+  .score-ring__fill,
+  .mission__tile { transition: none; }
+}
