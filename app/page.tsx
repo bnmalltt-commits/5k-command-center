@@ -1094,6 +1094,93 @@ function ReviewDialog({
   );
 }
 
+// Fixes an approved team entry that was sent wrong: shop ↔ loop, and who it
+// credits (tap a name to take them out; at least one must stay).
+function EditAwardDialog({
+  entry,
+  data,
+  busy,
+  onSave,
+  onCancel,
+}: {
+  entry: any;
+  data: Data;
+  busy: boolean;
+  onSave: (kind: "shop" | "loop", keep: string[]) => void;
+  onCancel: () => void;
+}) {
+  const people: { id: string; name: string }[] = entry.people || [];
+  const [kind, setKind] = useState<"shop" | "loop">(entry.kind === "loop" ? "loop" : "shop");
+  const [keep, setKeep] = useState<string[]>(people.map((p) => String(p.id)));
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancel();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onCancel]);
+  // Points follow the rule for the entry's date (before the new scoring every
+  // team entry was +1).
+  const newRule = Boolean(data.team && String(entry.activity_date) >= data.team.pointsStart);
+  const pointsOf = (k: "shop" | "loop") => (newRule ? data.team!.points[k] : 1);
+  return (
+    <div className="ui-dialog-backdrop" role="dialog" aria-modal="true" aria-label="แก้ไขแต้มหลักฐานทีม">
+      <div className="ui-dialog">
+        <p className="ui-dialog__message">แก้ไขหลักฐานทีม · {entry.activity_date}</p>
+        <div className="mt-3 space-y-3">
+          <Segmented
+            label="ประเภทหลักฐาน"
+            value={kind}
+            onChange={(id) => setKind(id === "loop" ? "loop" : "shop")}
+            options={[
+              { id: "shop", label: `งัดร้าน +${pointsOf("shop")}` },
+              { id: "loop", label: `ลูป +${pointsOf("loop")}` },
+            ]}
+          />
+          <p className="text-sm text-[var(--ui-text-2)]">ใครได้แต้ม · แตะชื่อเพื่อเอาคนที่ไม่ได้ไปออก</p>
+          <div className="present-picks">
+            {people.map((person) => {
+              const id = String(person.id);
+              const on = keep.includes(id);
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={on && keep.length === 1}
+                  title={on && keep.length === 1 ? "ต้องเหลืออย่างน้อย 1 คน" : undefined}
+                  onClick={() => setKeep(on ? keep.filter((x) => x !== id) : [...keep, id])}
+                  className={`present-chip ${on ? "is-on" : ""}`}
+                >
+                  <Avatar url={data.avatars?.[id]} name={person.name} size={20} />
+                  {person.name}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-sm text-[var(--ui-text)]">
+            หลังแก้: {keep.length} คน คนละ +{pointsOf(kind)} แต้ม
+            {people.length > keep.length ? ` · เอาออก ${people.length - keep.length} คน` : ""}
+          </p>
+        </div>
+        <div className="ui-dialog__actions">
+          <button type="button" onClick={onCancel} className="ui-btn ui-btn--ghost">
+            ยกเลิก
+          </button>
+          <button
+            type="button"
+            disabled={busy || !keep.length}
+            onClick={() => onSave(kind, keep)}
+            className="ui-btn ui-btn--primary"
+          >
+            บันทึก
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminCommandCenter({
   data,
   call,
@@ -1121,6 +1208,7 @@ function AdminCommandCenter({
   const [pointValue, setPointValue] = useState("");
   const [pointReason, setPointReason] = useState("");
   const [review, setReview] = useState<{ items: any[]; start: number } | null>(null);
+  const [editingAward, setEditingAward] = useState<any>(null);
   useEffect(() => {
     if (!reviewTarget) return;
     const index = data.pending.findIndex((item: any) => `${item.type}-${item.id}` === reviewTarget);
@@ -1177,8 +1265,8 @@ function AdminCommandCenter({
     entry.source === "adjustment"
       ? "ปรับแต้มโดยแอดมิน"
       : entry.source === "party"
-        ? "ปาร์ตี้ตรวจผ่าน"
-        : "แอร์ดรอปตรวจผ่าน";
+        ? `${entry.kind === "loop" ? "ลูป" : "งัดร้าน"}ตรวจผ่าน${String(entry.note || "").includes("แก้โดย") ? ` · ${String(entry.note).split(" · ").slice(1).join(" · ")}` : ""}`
+        : `แอร์ดรอปรอบ ${entry.round_time || ""} ตรวจผ่าน`;
   // created_at is stored as UTC; without this, anything done between midnight
   // and 7am in Thailand would be labelled with the previous day.
   const bangkokDate = (value: string) => {
@@ -1644,23 +1732,35 @@ function AdminCommandCenter({
                 key={entry.source + entry.source_id}
                 inset={false}
                 title={`${entry.points > 0 ? "+" : ""}${entry.points} · ${entry.names}`}
-                subtitle={`${entry.source === "adjustment" ? entry.note : sourceLabel(entry)} · ${bangkokDate(entry.created_at)}`}
+                subtitle={`${entry.source === "adjustment" ? entry.note : sourceLabel(entry)} · ${entry.activity_date || bangkokDate(entry.created_at)}`}
                 trailing={
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() =>
-                      call({
-                        action: "points_undo",
-                        source: entry.source,
-                        sourceId: entry.source_id,
-                        names: entry.names,
-                      })
-                    }
-                    className="ui-btn ui-btn--ghost ui-btn--sm"
-                  >
-                    ยกเลิก
-                  </button>
+                  <>
+                    {entry.source === "party" && (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setEditingAward(entry)}
+                        className="ui-btn ui-btn--ghost ui-btn--sm"
+                      >
+                        แก้ไข
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        call({
+                          action: "points_undo",
+                          source: entry.source,
+                          sourceId: entry.source_id,
+                          names: entry.names,
+                        })
+                      }
+                      className="ui-btn ui-btn--ghost ui-btn--sm"
+                    >
+                      ยกเลิก
+                    </button>
+                  </>
                 }
               />
             ))
@@ -1781,6 +1881,26 @@ function AdminCommandCenter({
             noMatch
           ))}
       </Panel>
+      {editingAward && (
+        <EditAwardDialog
+          entry={editingAward}
+          data={data}
+          busy={busy}
+          onCancel={() => setEditingAward(null)}
+          onSave={async (kind, keep) => {
+            if (
+              await call({
+                action: "points_edit",
+                sourceId: editingAward.source_id,
+                kind,
+                keep,
+                confirmed: true,
+              })
+            )
+              setEditingAward(null);
+          }}
+        />
+      )}
       {review && (
         <ReviewDialog
           items={review.items}

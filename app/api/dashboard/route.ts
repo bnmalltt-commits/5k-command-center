@@ -130,7 +130,7 @@ export async function GET(request: Request) {
           db.prepare("SELECT p.id,p.name,p.status,owner.display_name AS owner_name,COALESCE(json_agg(json_build_object('id',m.id,'name',m.display_name) ORDER BY pm.id) FILTER (WHERE m.id IS NOT NULL),'[]') AS members FROM parties p LEFT JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id LEFT JOIN members m ON m.id=pm.member_id WHERE p.status IN ('open','locked') GROUP BY p.id,owner.display_name ORDER BY p.id DESC").bind().all(),
           // One row per award: a party approval credits up to 5 people under the
           // same source_id, and undoing it has to take back all of them at once.
-          db.prepare("SELECT pl.source,pl.source_id,MAX(pl.id) AS id,MAX(pl.points) AS points,MAX(pl.note) AS note,MAX(pl.created_at) AS created_at,STRING_AGG(m.display_name,' · ' ORDER BY m.display_name) AS names FROM point_ledger pl JOIN members m ON m.id=pl.member_id GROUP BY pl.source,pl.source_id ORDER BY MAX(pl.id) DESC LIMIT 60").bind().all(),
+          db.prepare("SELECT pl.source,pl.source_id,MAX(pl.id) AS id,MAX(pl.points) AS points,MAX(pl.note) AS note,MAX(pl.created_at) AS created_at,STRING_AGG(m.display_name,' · ' ORDER BY m.display_name) AS names,json_agg(json_build_object('id',m.id::text,'name',m.display_name) ORDER BY m.display_name) AS people,MAX(pa.kind) AS kind,MAX(COALESCE(pa.activity_date,a.activity_date)) AS activity_date,MAX(a.round_time) AS round_time FROM point_ledger pl JOIN members m ON m.id=pl.member_id LEFT JOIN party_activities pa ON pl.source='party' AND pa.id=pl.source_id LEFT JOIN airdrop_submissions a ON pl.source='airdrop' AND a.id=pl.source_id GROUP BY pl.source,pl.source_id ORDER BY MAX(pl.id) DESC LIMIT 60").bind().all(),
           db.prepare("SELECT l.id,l.leave_date,l.reason,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all(),
         ])
       : [null, null, null];
@@ -395,6 +395,51 @@ export async function POST(request: Request) {
       ]);
       if (!revoked.meta.changes) throw Error("รายการนี้ถูกยกเลิกไปแล้วหรือไม่พบข้อมูล");
       return json({ ok: true });
+    }
+    // Fixes an approved team entry that was sent wrong: switch it between shop
+    // and loop (points follow the rule for its date) and/or take out members
+    // who weren't there. The activity's own kind and member list change too,
+    // so the team quota counts it the same way as the points do.
+    if (body.action === "points_edit") {
+      const admin = await requireAdmin(request);
+      const sourceId = Number(body.sourceId);
+      const kind = body.kind === "loop" ? "loop" : "shop";
+      const activity = await db.prepare("SELECT id,kind,activity_date FROM party_activities WHERE id=? AND status='approved'").bind(sourceId).first<any>();
+      if (!activity) throw Error("แก้ได้เฉพาะหลักฐานทีมที่ตรวจผ่านแล้ว");
+      const credited = (await db.prepare("SELECT pl.member_id,pl.points,m.display_name,m.external_user_id FROM point_ledger pl JOIN members m ON m.id=pl.member_id WHERE pl.source='party' AND pl.source_id=?").bind(sourceId).all<any>()).results;
+      const keep = [...new Set((Array.isArray(body.keep) ? body.keep : []).map(String))].filter((id) => credited.some((row: any) => String(row.member_id) === id));
+      if (!keep.length) throw Error("ต้องเหลืออย่างน้อย 1 คน ถ้าจะเอาออกทั้งหมดให้กด ยกเลิก แทน");
+      const points = pointsFor("party", kind, String(activity.activity_date));
+      const removed = credited.filter((row: any) => !keep.includes(String(row.member_id)));
+      const changed = kind !== activity.kind || removed.length > 0 || credited.some((row: any) => Number(row.points) !== points);
+      if (!changed) throw Error("ไม่มีอะไรเปลี่ยน");
+      const label = kind === "loop" ? "ลูป" : "งัดร้าน";
+      const keepIds = keep.map(Number);
+      await db.batch([
+        db.prepare("UPDATE party_activities SET kind=? WHERE id=?").bind(kind, sourceId),
+        db.prepare("DELETE FROM point_ledger WHERE source='party' AND source_id=? AND NOT (member_id = ANY(?::bigint[]))").bind(sourceId, keepIds),
+        db.prepare("DELETE FROM party_activity_members WHERE party_activity_id=? AND NOT (member_id = ANY(?::bigint[]))").bind(sourceId, keepIds),
+        db.prepare("UPDATE point_ledger SET points=?,note=? WHERE source='party' AND source_id=?").bind(points, `${label}ตรวจผ่าน · แก้โดย ${admin.display_name}`, sourceId),
+      ]);
+      // Tell the people whose points changed, in the points channel.
+      const affected = credited
+        .map((row: any) => ({ ...row, after: keep.includes(String(row.member_id)) ? points : 0 }))
+        .filter((row: any) => Number(row.points) !== row.after);
+      if (affected.length && process.env.DISCORD_POINTS_WEBHOOK_URL)
+        await postCard(process.env.DISCORD_POINTS_WEBHOOK_URL, {
+          title: "✏️ แก้ไขแต้มหลักฐานทีม",
+          lines: [
+            ["รายการ", `${activity.kind === kind ? label : `${activity.kind === "loop" ? "ลูป" : "งัดร้าน"} → ${label}`} · ${activity.activity_date}`],
+            ["แก้โดย", admin.display_name],
+            ...affected.map((row: any): [string, unknown] => [
+              row.display_name,
+              row.after ? `${Number(row.points)} → ${row.after} แต้ม` : `เอาออก (-${Number(row.points)} แต้ม)`,
+            ]),
+          ],
+          color: 0x60a5fa,
+          mention: affected.map((row: any) => discordUserId(row.external_user_id)).filter(Boolean) as string[],
+        });
+      return json({ ok: true, notice: `แก้แล้ว · ${label} คนละ +${points} · ${keep.length} คน` });
     }
     if (body.action === "leave_delete") {
       await requireAdmin(request);
