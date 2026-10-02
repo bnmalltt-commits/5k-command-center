@@ -25,6 +25,9 @@ export function pointsFor(type: "airdrop" | "party", kind: unknown, activityDate
 // read, so making up the shortfall restores the points immediately and
 // undoing an approval puts the debt back.
 export const TEAM_PER_DAY = 9;
+// Team points from this date already count (and bank), a day before the quota
+// itself is due: work done on 2026-10-01 carries into the first quota day.
+export const TEAM_BANK_START = POINTS_START < TEAM_RULE_START ? POINTS_START : TEAM_RULE_START;
 export const TEAM_PENALTY = 1;
 
 const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -34,27 +37,28 @@ const kindPointsSql = `CASE pa.kind WHEN 'loop' THEN ${KIND_POINTS.loop} ELSE ${
 
 // Per member, per day since they became subject to the rule: that day's team
 // points, cumulative points, cumulative requirement (today's quota isn't due
-// until the day ends) and the resulting debt. Dates are inlined after
+// until the day ends; days before TEAM_RULE_START only bank points) and the
+// resulting debt. Dates are inlined after
 // validation so this text can be embedded in queries that bind their own `?`
 // parameters.
 function teamDebtCte(today: string) {
-  if (!isDate(today) || !isDate(TEAM_RULE_START)) throw Error("invalid date");
+  if (!isDate(today) || !isDate(TEAM_RULE_START) || !isDate(TEAM_BANK_START)) throw Error("invalid date");
   return `team_days AS (
     SELECT m.id AS member_id, d::date AS day
     FROM members m
     CROSS JOIN LATERAL generate_series(
-      GREATEST('${TEAM_RULE_START}'::date, (m.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date),
+      GREATEST('${TEAM_BANK_START}'::date, (m.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date),
       '${today}'::date, interval '1 day') d
     WHERE m.active=1),
   team_counts AS (
     SELECT pam.member_id, pa.activity_date AS day, SUM(${kindPointsSql}) AS n
     FROM party_activities pa JOIN party_activity_members pam ON pam.party_activity_id=pa.id
-    WHERE pa.status='approved' AND pa.activity_date>='${TEAM_RULE_START}'
+    WHERE pa.status='approved' AND pa.activity_date>='${TEAM_BANK_START}'
     GROUP BY 1,2),
   team_cum AS (
     SELECT td.member_id, td.day, COALESCE(tc.n,0) AS n,
       SUM(COALESCE(tc.n,0)) OVER w AS done,
-      ${TEAM_PER_DAY}*(ROW_NUMBER() OVER w - CASE WHEN td.day='${today}'::date THEN 1 ELSE 0 END) AS req
+      ${TEAM_PER_DAY}*SUM(CASE WHEN td.day>='${TEAM_RULE_START}'::date AND td.day<>'${today}'::date THEN 1 ELSE 0 END) OVER w AS req
     FROM team_days td
     LEFT JOIN team_counts tc ON tc.member_id=td.member_id AND tc.day=to_char(td.day,'YYYY-MM-DD')
     WINDOW w AS (PARTITION BY td.member_id ORDER BY td.day)),
@@ -100,7 +104,7 @@ export function teamDayResultSql(today: string, day: string) {
 export function teamStatusSql(today: string) {
   return `WITH ${teamDebtCte(today)}
     SELECT member_id, n AS today, debt, GREATEST(0, done-req) AS bank,
-      GREATEST(0, req+${TEAM_PER_DAY}-done) AS needed_today
+      GREATEST(0, req+CASE WHEN '${today}'::date>='${TEAM_RULE_START}'::date THEN ${TEAM_PER_DAY} ELSE 0 END-done) AS needed_today
     FROM team_debt WHERE day='${today}'::date`;
 }
 
