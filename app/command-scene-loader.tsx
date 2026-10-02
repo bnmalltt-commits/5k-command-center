@@ -14,7 +14,11 @@ export default function CommandSceneLoader() {
   useEffect(() => {
     const mobile = window.matchMedia("(max-width: 900px)");
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setEnabled(!mobile.matches && !reduced.matches);
+    // Development only: ?force3d shows the scene even with reduced motion set,
+    // so it can be checked on machines that have that setting on.
+    const forced =
+      process.env.NODE_ENV !== "production" && new URLSearchParams(window.location.search).has("force3d");
+    const update = () => setEnabled(!mobile.matches && (forced || !reduced.matches));
     update();
     mobile.addEventListener("change", update);
     reduced.addEventListener("change", update);
@@ -23,6 +27,11 @@ export default function CommandSceneLoader() {
       reduced.removeEventListener("change", update);
     };
   }, []);
+
+  // Lets CSS drop the flat background image while the live scene is showing.
+  useEffect(() => {
+    document.documentElement.dataset.scene = enabled ? "on" : "off";
+  }, [enabled]);
 
   if (!enabled) return null;
   return <CommandScene />;

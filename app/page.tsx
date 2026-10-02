@@ -86,7 +86,7 @@ function ClaimScreen({
     }
   };
   return (
-    <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
+    <main className="login-stage grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
       <section className="command-panel hud-login w-full max-w-md p-7 text-center">
         <div className="flex justify-center">
           <Avatar url={claim.avatar} name={claim.discordName} size={64} />
@@ -593,7 +593,7 @@ function SquadRanking({
         </div>
       )}
       {!compact && me && (
-        <div className="rank-me">
+        <div className="rank-me tilt">
           <span className="rank-me__pos">#{myRank}</span>
           <div className="min-w-0 flex-1">
             <div className="rank-me__label">อันดับของคุณ</div>
@@ -613,7 +613,7 @@ function SquadRanking({
             const member = rows[index];
             if (!member) return <div key={index} className="podium__slot podium__slot--empty" />;
             return (
-              <div key={member.id} className={`podium__slot podium__slot--${index + 1}`}>
+              <div key={member.id} className={`podium__slot podium__slot--${index + 1} tilt`}>
                 <span className="podium__medal">{ranks[index]}</span>
                 <Avatar url={avatars[String(member.id)]} name={member.display_name} size={index === 0 ? 64 : 52} />
                 <span className="podium__name">
@@ -621,7 +621,7 @@ function SquadRanking({
                   {member.id === highlightId ? " · คุณ" : ""}
                 </span>
                 <b className="podium__score">{Number(member.score || 0)}</b>
-                <span className="podium__base" />
+                <span className="podium__base" data-rank={ranks[index]} />
               </div>
             );
           })}
@@ -859,7 +859,7 @@ function MyPoints({ data }: { data: Data }) {
         )}
         <div className="points-split">
           {POINT_CATEGORIES.filter(([id]) => byCategory.has(id)).map(([id, label]) => (
-            <div key={id} className={`points-split__cell ${(byCategory.get(id) || 0) < 0 ? "is-minus" : ""}`}>
+            <div key={id} className={`points-split__cell tilt ${(byCategory.get(id) || 0) < 0 ? "is-minus" : ""}`}>
               <span>{label}</span>
               <b>{signed(byCategory.get(id) || 0)}</b>
             </div>
@@ -1459,7 +1459,7 @@ function AdminCommandCenter({
               />
               <div className="att-summary">
                 {ROUNDS.map((round, index) => (
-                  <div key={round} className="att-summary__cell">
+                  <div key={round} className="att-summary__cell tilt">
                     <span className="att-summary__round">{round}</span>
                     <b>
                       {attRows.filter((r: any) => sentStatus(r.rounds[index])).length}
@@ -2173,6 +2173,43 @@ export default function Home() {
     }
     if (view !== "admin") setView("admin");
   }, [reviewTarget, Boolean(data), data?.me.role]);
+  // The 3D scene centres the emblem on the sign-in / loading screens and gives
+  // it its own spot on each page of the app.
+  useEffect(() => {
+    document.documentElement.dataset.sceneMode = data ? view : "login";
+  }, [Boolean(data), view]);
+  // Cards marked .tilt lean a few degrees towards the mouse, with a soft glare
+  // (desktop mice only, never for reduced motion).
+  useEffect(() => {
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches || prefersLessMotion()) return;
+    let active: HTMLElement | null = null;
+    const reset = (el: HTMLElement) => {
+      for (const name of ["--rx", "--ry", "--gx", "--gy"]) el.style.removeProperty(name);
+    };
+    const onMove = (event: PointerEvent) => {
+      const el = (event.target as Element | null)?.closest?.(".tilt") as HTMLElement | null;
+      if (active && active !== el) reset(active);
+      active = el;
+      if (!el) return;
+      const box = el.getBoundingClientRect();
+      const x = (event.clientX - box.left) / box.width;
+      const y = (event.clientY - box.top) / box.height;
+      el.style.setProperty("--rx", `${((0.5 - y) * 6).toFixed(2)}deg`);
+      el.style.setProperty("--ry", `${((x - 0.5) * 8).toFixed(2)}deg`);
+      el.style.setProperty("--gx", `${(x * 100).toFixed(1)}%`);
+      el.style.setProperty("--gy", `${(y * 100).toFixed(1)}%`);
+    };
+    const onLeave = () => {
+      if (active) reset(active);
+      active = null;
+    };
+    document.addEventListener("pointermove", onMove, { passive: true });
+    document.documentElement.addEventListener("pointerleave", onLeave);
+    return () => {
+      document.removeEventListener("pointermove", onMove);
+      document.documentElement.removeEventListener("pointerleave", onLeave);
+    };
+  }, []);
   // Celebrate milestones reached since the last refresh (never on first load,
   // so reopening the site doesn't replay them).
   const milestones = useRef<{ rounds: number; team: number; rank: number | null } | null>(null);
@@ -2359,7 +2396,7 @@ export default function Home() {
     );
   if (!data && authNeeded)
     return (
-      <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
+      <main className="login-stage grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
         <section className="command-panel hud-login w-full max-w-md p-7 text-center">
           <div className="hud-login__ring">
             <img
@@ -2606,7 +2643,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setView("party")}
-                className="hud-tile hud-tile--wide"
+                className="hud-tile hud-tile--wide tilt"
               >
                 <span className="ui-eyebrow">คะแนนทีมวันนี้</span>
                 {data.team?.mine && !data.myParty ? (
@@ -2657,7 +2694,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setView("score")}
-                className="hud-tile"
+                className="hud-tile tilt"
               >
                 <span className="ui-eyebrow">อันดับเดือนนี้</span>
                 {data.me.monthRank ? (
@@ -2688,7 +2725,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => setView("party")}
-                className="hud-tile"
+                className="hud-tile tilt"
               >
                 <span className="ui-eyebrow">ทีมของคุณ</span>
                 <b className="hud-tile__value hud-tile__value--text">

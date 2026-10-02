@@ -2160,11 +2160,11 @@ textarea:focus-visible,
 /* Motion: a view's content rises in when it opens; tiles and podium follow
    in a short stagger. Nothing re-animates on background refreshes. */
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-.main-col > :not(.topbar):not(.toast) { animation: rise 0.32s ease both; }
-.home-stats > .hud-tile { animation: rise 0.36s ease both; }
+.main-col > :not(.topbar):not(.toast) { animation: rise 0.32s ease backwards; }
+.home-stats > .hud-tile { animation: rise 0.36s ease backwards; }
 .home-stats > .hud-tile:nth-child(2) { animation-delay: 0.06s; }
 .home-stats > .hud-tile:nth-child(3) { animation-delay: 0.12s; }
-.podium__slot { animation: rise 0.4s ease both; }
+.podium__slot { animation: rise 0.4s ease backwards; }
 .podium__slot--1 { animation-delay: 0.08s; }
 .podium__slot--3 { animation-delay: 0.16s; }
 .ui-btn--primary:hover:not(:disabled),
@@ -2187,4 +2187,92 @@ textarea:focus-visible,
   .podium__slot { animation: none !important; }
   .score-ring__fill,
   .mission__tile { transition: none; }
+}
+
+/* ---- 3D pass ---- */
+
+/* While the live 3D arena is on, the app shell drops its flat artwork so the
+   scene shows; the dark glass surfaces keep text contrast as before. */
+html[data-scene="on"] .command-shell { background-image: none; }
+html[data-scene="on"] .command-scene { opacity: 0.9; }
+/* With the live scene behind them, panels are a touch more opaque so bright
+   hologram lines can never pull muted text below contrast. */
+html[data-scene="on"] { --ui-glass: rgba(15, 15, 18, 0.85); }
+
+/* Sign-in: the 3D emblem floats above the card, so the card's own logo goes. */
+html[data-scene="on"] .login-stage { align-items: end; padding-bottom: 9vh; }
+html[data-scene="on"] .login-stage .hud-login__ring { display: none; }
+html[data-scene="on"] .login-stage .hud-login {
+  background: rgba(14, 14, 17, 0.8);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+/* Tilt: a few degrees towards the mouse plus a soft moving glare. Text is
+   never blurred or scaled, only the card plane turns slightly. */
+.tilt.tilt {
+  transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(var(--lift, 0px));
+  transition: transform 0.18s ease-out, background-color 0.15s ease, border-color 0.15s ease;
+  will-change: transform;
+}
+.tilt.tilt:hover { --lift: -2px; }
+.tilt.tilt:active { --lift: 0px; }
+.tilt.tilt { position: relative; }
+.tilt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(circle at var(--gx, 50%) var(--gy, 50%), rgba(255, 255, 255, 0.09), transparent 55%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.tilt:hover::after { opacity: 1; }
+
+/* 3D podium: blocks with a lit top face, depth shadow and the rank on the front. */
+.podium { perspective: 900px; perspective-origin: 50% -20%; }
+.podium__slot { transform-style: preserve-3d; }
+.podium__base {
+  position: relative;
+  transform-style: preserve-3d;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.13), rgba(255, 255, 255, 0.03) 55%, rgba(0, 0, 0, 0.35));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 26px 30px -14px rgba(0, 0, 0, 0.85);
+  overflow: visible;
+}
+.podium__base::before {
+  /* top face, tipped back into the screen */
+  content: "";
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  bottom: 100%;
+  height: 22px;
+  transform-origin: bottom;
+  transform: rotateX(72deg);
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.2));
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.podium__base::after {
+  content: attr(data-rank);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.12);
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+}
+.podium__slot--1 .podium__base { border-color: rgba(245, 197, 66, 0.5); background: linear-gradient(180deg, rgba(245, 197, 66, 0.22), rgba(245, 197, 66, 0.04) 55%, rgba(0, 0, 0, 0.35)); }
+.podium__slot--1 .podium__base::before { background: linear-gradient(180deg, rgba(245, 197, 66, 0.1), rgba(255, 225, 122, 0.45)); border-color: rgba(245, 197, 66, 0.55); box-shadow: 0 0 24px rgba(245, 197, 66, 0.35); }
+.podium__slot--1 .podium__base::after { color: rgba(255, 225, 122, 0.3); font-size: 38px; }
+.podium__slot--2 .podium__base::before { background: linear-gradient(180deg, rgba(201, 209, 217, 0.08), rgba(226, 232, 240, 0.35)); }
+.podium__slot--3 .podium__base::before { background: linear-gradient(180deg, rgba(208, 138, 74, 0.08), rgba(240, 168, 104, 0.35)); }
+.podium__slot .avatar { position: relative; z-index: 1; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, 0.55)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .tilt.tilt { transform: none; transition: none; }
 }
