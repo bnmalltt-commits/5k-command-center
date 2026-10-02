@@ -150,7 +150,7 @@ export function Picker({ onChange, resetToken }: { onChange: (file: File | null)
             setFilename("กด Ctrl + V เพื่อวางรูป");
           }
         }}
-        className="mx-auto flex items-center gap-2 text-xs text-slate-400 hover:text-red-300"
+        className="picker-paste mx-auto flex items-center gap-2 text-xs text-slate-400 hover:text-red-300"
       >
         <Clipboard className="h-4 w-4" />
         วางจากคลิปบอร์ด · Ctrl + V

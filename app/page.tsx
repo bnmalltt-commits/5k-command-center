@@ -2549,7 +2549,19 @@ export default function Home() {
                 className="hud-tile hud-tile--wide"
               >
                 <span className="ui-eyebrow">คะแนนทีมวันนี้</span>
-                {data.team?.mine ? (
+                {data.team?.mine && !data.myParty ? (
+                  // No team = no way to earn team points: the one thing to do.
+                  <>
+                    <b className="hud-tile__value hud-tile__value--text">ยังไม่มีทีม</b>
+                    <span className="hud-tile__sub">ต้องมีทีมก่อนถึงจะส่งงัดร้าน/ลูปได้ · ทีมคนเดียวก็ได้</span>
+                    <span className="tile-cta">สร้างหรือเข้าทีม →</span>
+                    {data.team.mine.debt > 0 && (
+                      <span className="hud-tile__warn">
+                        ค้าง {data.team.mine.debt} คะแนน · ถูกหัก {data.team.mine.debt * data.team.penalty} แต้ม (ทำชดแล้วได้คืน)
+                      </span>
+                    )}
+                  </>
+                ) : data.team?.mine ? (
                   <>
                     <b className="hud-tile__value">
                       {data.team.mine.today}/{data.team.perDay}
@@ -2562,11 +2574,6 @@ export default function Home() {
                           ? `ครบแล้ว · เกินเก็บไว้ ${data.team.mine.bank} คะแนน`
                           : "ครบแล้ววันนี้"}
                     </span>
-                    {!data.myParty && (
-                      <span className="hud-tile__warn">
-                        ยังไม่มีทีม ส่งหลักฐานทีมไม่ได้ · กดเพื่อสร้างหรือเข้าทีม (คนเดียวก็ได้)
-                      </span>
-                    )}
                     {data.team.mine.debt > 0 && (
                       <span className="hud-tile__warn">
                         ค้าง {data.team.mine.debt} คะแนน · ถูกหัก {data.team.mine.debt * data.team.penalty} แต้ม (ทำชดแล้วได้คืน)
@@ -2608,12 +2615,12 @@ export default function Home() {
               >
                 <span className="ui-eyebrow">ทีมของคุณ</span>
                 <b className="hud-tile__value hud-tile__value--text">
-                  {data.myParty?.name || "ยังไม่มีทีม"}
+                  {data.myParty?.name || "＋ สร้างทีม"}
                 </b>
                 <span className="hud-tile__sub">
                   {data.myParty
                     ? `${data.myParty.members?.length || 0}/5 คน`
-                    : "สร้างหรือเข้าร่วมทีม"}
+                    : "หรือเข้าร่วมทีมของเพื่อน"}
                 </span>
               </button>
             </div>

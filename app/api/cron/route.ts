@@ -37,6 +37,30 @@ async function send(key: string, card: Parameters<typeof postCard>[1]) {
   return ok;
 }
 
+// Names packed onto as few card lines as fit (postCard caps each value at
+// 200 characters), continuing on "(ต่อ)" lines when there are many.
+function nameLines(label: string, names: string[], max = 190): [string, unknown][] {
+  const lines: [string, unknown][] = [];
+  let current = "";
+  for (const name of names) {
+    const next = current ? `${current}, ${name}` : name;
+    if (next.length > max && current) {
+      lines.push([lines.length ? `${label} (ต่อ)` : label, current]);
+      current = name;
+    } else current = next;
+  }
+  if (current) lines.push([lines.length ? `${label} (ต่อ)` : label, current]);
+  return lines;
+}
+
+// One line per distinct number (e.g. points still needed), biggest first,
+// instead of one line per member.
+function groupedLines(rows: any[], key: (row: any) => number, label: (n: number) => string) {
+  const groups = new Map<number, string[]>();
+  for (const row of rows) groups.set(key(row), [...(groups.get(key(row)) || []), row.display_name]);
+  return [...groups.entries()].sort((a, b) => b[0] - a[0]).flatMap(([n, names]) => nameLines(label(n), names));
+}
+
 const mentions = (rows: any[]) => rows.map((r) => discordUserId(r.external_user_id)).filter(Boolean) as string[];
 
 // 30 minutes before the 20:00 and 23:00 rounds. With DISCORD_REMINDER_ROLE_ID
@@ -84,14 +108,9 @@ async function shopReminder(nowMs: number) {
       ["วันที่", date],
       ["ยังไม่ครบ", `${short.length} คน · ขาดแต้มละ 1 แต้มตอนเที่ยงคืน`],
       ["ทำได้", "งัดร้าน +3 · ลูป +1"],
-      // Without a team they can't send team evidence at all: say so up front.
-      ...(short.some((m: any) => !m.in_team)
-        ? [["ยังไม่มีทีม", `${short.filter((m: any) => !m.in_team).length} คน · สร้างหรือเข้าทีมในเว็บก่อน (ทีมคนเดียวก็ได้)`] as [string, unknown]]
-        : []),
-      ...short.map((m: any): [string, unknown] => [
-        `${m.display_name}${m.in_team ? "" : " (ไม่มีทีม)"}`,
-        `ต้องได้อีก ${m.needed_today} คะแนน`,
-      ]),
+      ...groupedLines(short, (m) => Number(m.needed_today), (n) => `ขาดอีก ${n}`),
+      // Without a team they can't send team evidence at all: say so.
+      ...nameLines("ยังไม่มีทีม (สร้างทีมก่อน คนเดียวก็ได้)", short.filter((m: any) => !m.in_team).map((m: any) => m.display_name)),
     ],
     color: 0xf59e0b,
     mention: mentions(short),
@@ -172,7 +191,7 @@ async function autoAbsence(nowMs: number) {
       lines: [
         ["วันที่", date],
         ["จำนวน", `${absent.length} คน`],
-        ...absent.map((m: any, i: number): [string, unknown] => [`${i + 1}`, m.display_name]),
+        ...nameLines("รายชื่อ", absent.map((m: any) => m.display_name)),
         ["หมายเหตุ", "ติดธุระวันไหน แจ้งลาในเว็บล่วงหน้าได้ที่ เพิ่มเติม → ห้องลา"],
       ],
       color: 0xef4444,
@@ -214,14 +233,14 @@ async function teamSummary(nowMs: number) {
     lines: [
       ["ไม่โดนหัก", `${Math.max(0, total - docked.length)} คน`],
       ["โดนหัก", docked.length ? `${docked.length} คน · หักตามคะแนนที่ขาด` : "ไม่มี ทุกคนทำครบ 🎉"],
-      ...(docked.some((m: any) => !m.in_team)
-        ? [["ยังไม่มีทีม", `${docked.filter((m: any) => !m.in_team).length} คน · สร้างหรือเข้าทีมก่อน (คนเดียวก็ได้) ไม่งั้นโดนหักทุกคืน`] as [string, unknown]]
+      ...groupedLines(docked, (m) => Number(m.inc), (n) => `หัก ${n} แต้ม`),
+      ...nameLines("ยังไม่มีทีม (สร้างทีมก่อน ไม่งั้นโดนหักทุกคืน)", docked.filter((m: any) => !m.in_team).map((m: any) => m.display_name)),
+      ...(docked.length
+        ? [
+            ["ทำชดได้คืน", `งัดร้าน +${KIND_POINTS.shop} · ลูป +${KIND_POINTS.loop} วันไหนก็ได้`] as [string, unknown],
+            ["ดูยอดค้างของตัวเอง", "เว็บ → เพิ่มเติม → แต้มของฉัน"] as [string, unknown],
+          ]
         : []),
-      ...docked.map((m: any): [string, unknown] => [
-        `${m.display_name}${m.in_team ? "" : " (ไม่มีทีม)"}`,
-        `ได้ ${Number(m.n)}/${TEAM_PER_DAY} · หัก ${Number(m.inc)} แต้ม · ค้างรวม ${Number(m.debt)}`,
-      ]),
-      ...(docked.length ? [["ทำชดได้คืน", `งัดร้าน +${KIND_POINTS.shop} · ลูป +${KIND_POINTS.loop} วันไหนก็ได้`] as [string, unknown]] : []),
     ],
     color: docked.length ? 0xef4444 : 0x4ade80,
     mention: mentions(docked),
@@ -264,7 +283,7 @@ async function weeklySummary(nowMs: number) {
         : [["อันดับ", "สัปดาห์นี้ยังไม่มีใครได้แต้ม"] as [string, unknown]]),
       ["หลักฐานที่ผ่าน", `แอร์ดรอป ${Number(approved?.a || 0)} · ทีม ${Number(approved?.p || 0)} รายการ`],
       ["ค้างคะแนนทีม", owing.length ? `${owing.length} คน · รวม ${owing.reduce((s: number, m: any) => s + Number(m.debt), 0)} คะแนน` : "ไม่มี 🎉"],
-      ...owing.slice(0, 10).map((m: any): [string, unknown] => [m.display_name, `ค้าง ${Number(m.debt)} คะแนน (ทำชดได้คืน)`]),
+      ...groupedLines(owing, (m) => Number(m.debt), (n) => `ค้าง ${n}`),
     ],
     color: 0x60a5fa,
     mention: mentions(top.slice(0, 3)),

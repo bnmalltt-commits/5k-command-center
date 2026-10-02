@@ -2058,3 +2058,21 @@ textarea:focus-visible,
   .celebrate__burst { display: none; }
   .hud-tile:hover, .hud-tile:active, .ui-btn:active:not(:disabled) { transform: none; }
 }
+
+/* Call to action inside a tile (e.g. "สร้างหรือเข้าทีม →"). */
+.tile-cta {
+  display: inline-flex;
+  margin-top: 6px;
+  padding: 5px 12px;
+  border-radius: 99px;
+  background: var(--ui-red-fill);
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* Comfortable tap targets on phones (at least 40px). */
+.picker-paste { min-height: 40px; padding: 0 12px; }
+@media (max-width: 639px) {
+  .topbar__icon { width: 40px; height: 40px; }
+}
