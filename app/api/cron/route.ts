@@ -75,7 +75,7 @@ async function shopReminder(nowMs: number) {
   const date = bkkDateOf(nowMs);
   if (nowMs < bkkTime(date, "21:45") || nowMs >= bkkTime(date, "23:45")) return [];
   const short = (await db.prepare(
-    `SELECT m.display_name,m.external_user_id,s.needed_today FROM (${teamStatusSql(date)}) s JOIN members m ON m.id=s.member_id WHERE s.needed_today>0 ORDER BY s.needed_today DESC,m.display_name`
+    `SELECT m.display_name,m.external_user_id,s.needed_today,EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=m.id AND p.status IN ('open','locked')) AS in_team FROM (${teamStatusSql(date)}) s JOIN members m ON m.id=s.member_id WHERE s.needed_today>0 ORDER BY s.needed_today DESC,m.display_name`
   ).bind().all<any>()).results;
   if (!short.length) return [];
   const sent = await send(`shop:${date}`, {
@@ -84,7 +84,14 @@ async function shopReminder(nowMs: number) {
       ["วันที่", date],
       ["ยังไม่ครบ", `${short.length} คน · ขาดแต้มละ 1 แต้มตอนเที่ยงคืน`],
       ["ทำได้", "งัดร้าน +3 · ลูป +1"],
-      ...short.map((m: any): [string, unknown] => [m.display_name, `ต้องได้อีก ${m.needed_today} คะแนน`]),
+      // Without a team they can't send team evidence at all: say so up front.
+      ...(short.some((m: any) => !m.in_team)
+        ? [["ยังไม่มีทีม", `${short.filter((m: any) => !m.in_team).length} คน · สร้างหรือเข้าทีมในเว็บก่อน (ทีมคนเดียวก็ได้)`] as [string, unknown]]
+        : []),
+      ...short.map((m: any): [string, unknown] => [
+        `${m.display_name}${m.in_team ? "" : " (ไม่มีทีม)"}`,
+        `ต้องได้อีก ${m.needed_today} คะแนน`,
+      ]),
     ],
     color: 0xf59e0b,
     mention: mentions(short),
@@ -193,7 +200,7 @@ async function teamSummary(nowMs: number) {
   let total = 0;
   try {
     docked = (await db.prepare(
-      `SELECT m.display_name,m.external_user_id,r.n,r.debt,r.inc FROM (${teamDayResultSql(today, date)}) r JOIN members m ON m.id=r.member_id WHERE m.active=1 ORDER BY r.inc DESC,m.display_name`
+      `SELECT m.display_name,m.external_user_id,r.n,r.debt,r.inc,EXISTS (SELECT 1 FROM party_members pm JOIN parties p ON p.id=pm.party_id WHERE pm.member_id=m.id AND p.status IN ('open','locked')) AS in_team FROM (${teamDayResultSql(today, date)}) r JOIN members m ON m.id=r.member_id WHERE m.active=1 ORDER BY r.inc DESC,m.display_name`
     ).bind().all<any>()).results;
     total = Number((await db.prepare(
       "SELECT COUNT(*) AS n FROM members WHERE active=1 AND (created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date <= ?::date"
@@ -207,8 +214,11 @@ async function teamSummary(nowMs: number) {
     lines: [
       ["ไม่โดนหัก", `${Math.max(0, total - docked.length)} คน`],
       ["โดนหัก", docked.length ? `${docked.length} คน · หักตามคะแนนที่ขาด` : "ไม่มี ทุกคนทำครบ 🎉"],
+      ...(docked.some((m: any) => !m.in_team)
+        ? [["ยังไม่มีทีม", `${docked.filter((m: any) => !m.in_team).length} คน · สร้างหรือเข้าทีมก่อน (คนเดียวก็ได้) ไม่งั้นโดนหักทุกคืน`] as [string, unknown]]
+        : []),
       ...docked.map((m: any): [string, unknown] => [
-        m.display_name,
+        `${m.display_name}${m.in_team ? "" : " (ไม่มีทีม)"}`,
         `ได้ ${Number(m.n)}/${TEAM_PER_DAY} · หัก ${Number(m.inc)} แต้ม · ค้างรวม ${Number(m.debt)}`,
       ]),
       ...(docked.length ? [["ทำชดได้คืน", `งัดร้าน +${KIND_POINTS.shop} · ลูป +${KIND_POINTS.loop} วันไหนก็ได้`] as [string, unknown]] : []),

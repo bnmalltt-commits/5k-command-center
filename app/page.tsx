@@ -2562,6 +2562,11 @@ export default function Home() {
                           ? `ครบแล้ว · เกินเก็บไว้ ${data.team.mine.bank} คะแนน`
                           : "ครบแล้ววันนี้"}
                     </span>
+                    {!data.myParty && (
+                      <span className="hud-tile__warn">
+                        ยังไม่มีทีม ส่งหลักฐานทีมไม่ได้ · กดเพื่อสร้างหรือเข้าทีม (คนเดียวก็ได้)
+                      </span>
+                    )}
                     {data.team.mine.debt > 0 && (
                       <span className="hud-tile__warn">
                         ค้าง {data.team.mine.debt} คะแนน · ถูกหัก {data.team.mine.debt * data.team.penalty} แต้ม (ทำชดแล้วได้คืน)
