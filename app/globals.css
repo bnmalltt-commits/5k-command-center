@@ -1507,6 +1507,23 @@ html[data-scene="on"] .login-stage .auth-emblem { display: none; }
 .todo-done { display: flex; align-items: center; gap: 6px; color: var(--ui-text-2); font-size: 14px; }
 .todo-clear svg,
 .todo-done svg { flex-shrink: 0; color: var(--ui-green); }
+/* Per-person day / week / month table. */
+.sort-btn { padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.sort-btn:hover,
+.todo-table thead th[aria-sort] .sort-btn { color: var(--ui-text); }
+.stats-table td { font-variant-numeric: tabular-nums; }
+.stats-table th,
+.stats-table td { padding: 10px 7px; }
+.stats-table th:first-child { padding-left: 14px; }
+.stats-table tbody th .truncate { display: inline-block; max-width: 132px; vertical-align: middle; }
+.stats-table thead th small { font-size: 12px; }
+.stat-pos { color: var(--ui-green); font-weight: 600; }
+.stat-neg { color: var(--ui-red-light); font-weight: 600; }
+.stat-warn { color: var(--ui-amber); font-weight: 600; }
+.stat-zero { color: var(--ui-text-3); }
+.stat-refund { color: var(--ui-green); font-size: 12px; }
+.todo-table tfoot th,
+.todo-table tfoot td { border-top: 1px solid var(--ui-line-strong); border-bottom: 0; background-color: #1b1b1f; color: var(--ui-text); font-weight: 700; }
 .todo-legend { color: var(--ui-text-3); font-size: 12.5px; line-height: 1.6; }
 
 /* ---- Motion ------------------------------------------------------------------ */

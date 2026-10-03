@@ -1359,7 +1359,145 @@ function MonthlyResults({ data, summary }: { data: Data; summary: any }) {
 
 // Admin to-dos as one table: a row per member who needs chasing, a column
 // per thing to chase, so each person shows up once with everything they owe.
+const ADMIN_MODES = [
+  { id: "now", label: "ต้องตามตอนนี้" },
+  { id: "day", label: "วันนี้" },
+  { id: "week", label: "สัปดาห์นี้" },
+  { id: "month", label: "เดือนนี้" },
+];
+type StatKey = "name" | "points" | "airdrop" | "missed" | "team" | "met" | "penalty" | "leave" | "absent";
+
+// Every member's numbers for one period, one row each, sortable by column.
+function PeopleStats({ data, rows, range }: { data: Data; rows: any[]; range: string }) {
+  const [sort, setSort] = useState<{ key: StatKey; dir: 1 | -1 }>({ key: "points", dir: -1 });
+  const names = memberNames(data);
+  const perDay = data.team?.perDay ?? 9;
+  const missed = (r: any) => Math.max(0, r.due - r.sent);
+  const value = (r: any, key: StatKey): number | string =>
+    key === "name"
+      ? names.get(r.id) || ""
+      : key === "airdrop"
+        ? r.due ? r.sent / r.due : 2
+        : key === "missed"
+          ? missed(r)
+          : key === "met"
+            ? r.quotaDays ? r.met / r.quotaDays : 2
+            : r[key];
+  const sorted = [...rows].sort((a, b) => {
+    const va = value(a, sort.key), vb = value(b, sort.key);
+    const c = typeof va === "string" ? va.localeCompare(String(vb)) : va - Number(vb);
+    return c * sort.dir || (names.get(a.id) || "").localeCompare(names.get(b.id) || "");
+  });
+  const total = rows.reduce(
+    (t, r) => ({
+      points: t.points + r.points,
+      sent: t.sent + r.sent,
+      due: t.due + r.due,
+      missed: t.missed + missed(r),
+      team: t.team + r.team,
+      met: t.met + r.met,
+      quotaDays: t.quotaDays + r.quotaDays,
+      penalty: t.penalty + r.penalty,
+      leave: t.leave + r.leave,
+      absent: t.absent + r.absent,
+    }),
+    { points: 0, sent: 0, due: 0, missed: 0, team: 0, met: 0, quotaDays: 0, penalty: 0, leave: 0, absent: 0 },
+  );
+  const head = (key: StatKey, label: string, sub?: string) => (
+    <th scope="col" aria-sort={sort.key === key ? (sort.dir === 1 ? "ascending" : "descending") : undefined}>
+      <button
+        type="button"
+        className="sort-btn"
+        onClick={() => setSort((now) => ({ key, dir: now.key === key ? (now.dir === 1 ? -1 : 1) : key === "name" ? 1 : -1 }))}
+      >
+        {label}
+        {sort.key === key ? (sort.dir === -1 ? " ↓" : " ↑") : ""}
+      </button>
+      {sub && <small>{sub}</small>}
+    </th>
+  );
+  const ok = (
+    <>
+      <Check className="todo-ok" aria-hidden="true" />
+      <span className="sr-only">ไม่มี</span>
+    </>
+  );
+  return (
+    <div className="space-y-3">
+      <p className="hint">{range} · แตะหัวตารางเพื่อเรียงลำดับ</p>
+      <div className="todo-table-wrap">
+        <table className="todo-table stats-table">
+          <thead>
+            <tr>
+              {head("name", "ชื่อ")}
+              {head("points", "แต้มรวม")}
+              {head("airdrop", "แอร์ดรอป", "ส่ง / ต้องส่ง")}
+              {head("missed", "ไม่ส่ง", "รอบ")}
+              {head("team", "แต้มทีม", "ร้าน + ลูป")}
+              {head("met", `ทีมครบ ${perDay}`, "วัน")}
+              {head("penalty", "โดนหัก", "แต้ม")}
+              {head("leave", "ลา", "วัน")}
+              {head("absent", "ขาด", "วัน")}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((r) => (
+              <tr key={r.id}>
+                <th scope="row">
+                  <span className="name-with-avatar">
+                    <Avatar url={data.avatars?.[r.id]} name={names.get(r.id) || "?"} size={26} />
+                    <span className="truncate">{names.get(r.id) || "สมาชิก"}</span>
+                  </span>
+                </th>
+                <td>
+                  <span className={r.points > 0 ? "stat-pos" : r.points < 0 ? "stat-neg" : "stat-zero"}>{signed(r.points)}</span>
+                </td>
+                <td>{r.due ? `${r.sent}/${r.due}` : <span className="stat-zero">—</span>}</td>
+                <td>{!r.due ? <span className="stat-zero">—</span> : missed(r) ? <span className="todo-bad">{missed(r)}</span> : ok}</td>
+                <td>{r.team ? r.team : <span className="stat-zero">—</span>}</td>
+                <td>
+                  {r.quotaDays ? (
+                    <span className={r.met < r.quotaDays ? "stat-warn" : "stat-pos"}>
+                      {r.met}/{r.quotaDays}
+                    </span>
+                  ) : (
+                    <span className="stat-zero">—</span>
+                  )}
+                </td>
+                <td>
+                  {r.penalty ? <span className="todo-bad">{r.penalty}</span> : <span className="stat-zero">—</span>}
+                  {r.refund ? <small className="stat-refund"> +{r.refund} คืน</small> : null}
+                </td>
+                <td>{r.leave ? r.leave : <span className="stat-zero">—</span>}</td>
+                <td>{r.absent ? <span className="todo-bad">{r.absent}</span> : ok}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th scope="row">รวมทั้งแก๊ง</th>
+              <td>{signed(total.points)}</td>
+              <td>{total.due ? `${total.sent}/${total.due}` : "—"}</td>
+              <td>{total.missed}</td>
+              <td>{total.team}</td>
+              <td>{total.quotaDays ? `${total.met}/${total.quotaDays}` : "—"}</td>
+              <td>{total.penalty || "—"}</td>
+              <td>{total.leave}</td>
+              <td>{total.absent}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p className="todo-legend">
+        แอร์ดรอป = รอบที่ส่ง (รอตรวจหรือผ่าน) เทียบกับรอบที่ถึงเวลาแล้ว ไม่นับวันลา · ทีมครบ {perDay} = วันที่ได้แต้มทีมถึง {perDay}
+        (นับเฉพาะวันที่จบแล้ว) · โดนหัก = แต้มที่โดนหักเพราะทีมไม่ครบ · ขาด = วันที่ไม่ส่งอะไรเลย
+      </p>
+    </div>
+  );
+}
+
 function AdminTodo({ data, summary, onGo }: { data: Data; summary: any; onGo: (view: string) => void }) {
+  const [mode, setMode] = useState("now");
   const [filter, setFilter] = useState("all");
   const admin = summary.admin;
   const pending = admin.pending.airdrop + admin.pending.party;
@@ -1419,8 +1557,23 @@ function AdminTodo({ data, summary, onGo }: { data: Data; summary: any; onGo: (v
   const focus = columns.findIndex((column) => column.id === filter);
   const shown = focus < 0 ? rows : rows.filter((row) => row.problems[focus]);
   const fine = data.members.length - rows.length;
+  const modeSwitch = <Chips value={mode} onChange={setMode} options={ADMIN_MODES} />;
+  if (mode !== "now" && admin.people) {
+    const start = admin.starts?.[mode] || summary.date;
+    const range =
+      mode === "day"
+        ? `วันนี้ ${dayLabel(summary.date)} · ถึง ${summary.clock} น.`
+        : `${mode === "week" ? "สัปดาห์นี้" : "เดือนนี้"} ${dayLabel(start)} – ${dayLabel(summary.date)}`;
+    return (
+      <div className="space-y-4 p-4">
+        {modeSwitch}
+        <PeopleStats key={mode} data={data} rows={admin.people[mode] || []} range={range} />
+      </div>
+    );
+  }
   return (
     <div className="space-y-3 p-4">
+      {modeSwitch}
       {pending > 0 && (
         <div className="todo-alert">
           <span>
