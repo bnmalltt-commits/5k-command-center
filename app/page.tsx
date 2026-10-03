@@ -473,6 +473,84 @@ function MissionCard({
     </section>
   );
 }
+// The member's own airdrop history: one row per day with the four rounds as
+// small coloured chips, instead of one row per round.
+const ROUND_STATE: Record<string, [string, string]> = {
+  approved: ["done", "ผ่านแล้ว"],
+  pending: ["pending", "รอตรวจ"],
+  rejected: ["rejected", "ไม่ผ่าน"],
+};
+function AirdropHistory({ data }: { data: Data }) {
+  const [days, setDays] = useState(5);
+  const byDay = new Map<string, Map<string, any>>();
+  for (const x of data.airdrops) {
+    if (!byDay.has(x.activity_date)) byDay.set(x.activity_date, new Map());
+    byDay.get(x.activity_date)!.set(x.round_time, x);
+  }
+  const dates = [...byDay.keys()].sort().reverse();
+  return (
+    <Panel
+      label="AIRDROP LOG"
+      title="ประวัติแอร์ดรอปของคุณ"
+      subtitle="เขียว ผ่าน · เหลือง รอตรวจ · แดง ไม่ผ่าน (แตะเพื่อดูรูป)"
+      flush
+    >
+      {dates.length ? (
+        <>
+          {dates.slice(0, days).map((date) => {
+            const rounds = byDay.get(date)!;
+            const passed = ROUNDS.filter((r) => rounds.get(r)?.status === "approved").length;
+            const rejected = ROUNDS.map((r) => rounds.get(r)).filter((x) => x?.status === "rejected");
+            return (
+              <Row
+                key={date}
+                inset={false}
+                leading={<DateBadge date={date} today={data.date} />}
+                title={`${date === data.date ? "วันนี้ · " : ""}ผ่าน ${passed}/${ROUNDS.length} รอบ`}
+                subtitle={
+                  rejected.length
+                    ? `ไม่ผ่าน ${rejected.map((x) => `${x.round_time}${x.reject_reason ? ` (${x.reject_reason})` : ""}`).join(" · ")}`
+                    : undefined
+                }
+                trailing={
+                  <span className="round-pills">
+                    {ROUNDS.map((r) => {
+                      const x = rounds.get(r);
+                      const [tone, label] = ROUND_STATE[x?.status] || ["none", "ไม่ได้ส่ง"];
+                      const chip = (
+                        <span className={`round-pill round-pill--${tone}`} title={`รอบ ${r} · ${label}`} aria-label={`รอบ ${r} ${label}`}>
+                          {r.slice(0, 2)}
+                        </span>
+                      );
+                      // Approved photos are deleted to save space; the rest open.
+                      return x && x.status !== "approved" && x.image_key ? (
+                        <a key={r} href={`/api/image/${x.image_key}`} target="_blank" rel="noreferrer">
+                          {chip}
+                        </a>
+                      ) : (
+                        <span key={r}>{chip}</span>
+                      );
+                    })}
+                  </span>
+                }
+              />
+            );
+          })}
+          {dates.length > days && (
+            <div className="p-3 text-center">
+              <button type="button" onClick={() => setDays((n) => n + 7)} className="ui-btn ui-btn--ghost ui-btn--sm">
+                ดูย้อนหลังเพิ่ม
+              </button>
+            </div>
+          )}
+        </>
+      ) : (
+        <EmptyState title="ยังไม่มีประวัติแอร์ดรอป" hint="ส่งหลักฐานรอบแรกจากการ์ดภารกิจด้านบน" />
+      )}
+    </Panel>
+  );
+}
+
 const PERIODS = [
   { id: "day", label: "วันนี้", title: "ตารางคะแนนวันนี้" },
   { id: "week", label: "สัปดาห์นี้", title: "ตารางคะแนนสัปดาห์นี้" },
@@ -3366,47 +3444,7 @@ export default function Home() {
             </div>
           )}
           {view === "airdrop" && (
-            <Panel label="AIRDROP LOG" title="ประวัติแอร์ดรอปของคุณ" flush>
-              {data.airdrops.length ? (
-                data.airdrops.map((x: any) => (
-                  <Row
-                    key={x.id}
-                    inset={false}
-                    // Approved evidence is deleted from storage to save
-                    // space, so there's nothing left to link to.
-                    href={
-                      x.status !== "approved" && x.image_key
-                        ? `/api/image/${x.image_key}`
-                        : undefined
-                    }
-                    leading={
-                      <Thumb
-                        imageKey={x.status !== "approved" ? x.image_key : null}
-                        tone={
-                          x.status === "approved"
-                            ? "green"
-                            : x.status === "rejected"
-                              ? "red"
-                              : "amber"
-                        }
-                      />
-                    }
-                    title={`${x.activity_date} · รอบ ${x.round_time}`}
-                    subtitle={
-                      x.status === "rejected" && x.reject_reason
-                        ? `ไม่ผ่าน: ${x.reject_reason}`
-                        : new Date(x.created_at).toLocaleString("th-TH")
-                    }
-                    trailing={<Status value={x.status} />}
-                  />
-                ))
-              ) : (
-                <EmptyState
-                  title="ยังไม่มีประวัติแอร์ดรอป"
-                  hint="ส่งหลักฐานรอบแรกจากการ์ดภารกิจด้านบน"
-                />
-              )}
-            </Panel>
+            <AirdropHistory data={data} />
           )}
           {view === "party" &&
             (!loadedViews.includes("party") ? (
