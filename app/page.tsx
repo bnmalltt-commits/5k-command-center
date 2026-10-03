@@ -27,6 +27,7 @@ import {
   X,
 } from "lucide-react";
 import { PartyCommandCenter } from "./party-command-center";
+import { bangkokHour, roundDate, LATE_ROUND_UNTIL_HOUR } from "@/lib/rounds";
 import { Picker, shrinkImage } from "./picker";
 import {
   Chips,
@@ -413,7 +414,10 @@ function MissionCard({
           <Ring value={approved} max={ROUNDS.length} size={80} />
         </span>
         <div className="min-w-0">
-          <p className="ui-eyebrow">แอร์ดรอป · {data.date}</p>
+          <p className="ui-eyebrow">
+            แอร์ดรอป · {data.date}
+            {bangkokHour() < LATE_ROUND_UNTIL_HOUR ? " · 17–23 น. ยังนับเป็นของเมื่อคืน" : ""}
+          </p>
           <h2 className="mission__title">
             {done ? "ครบทุกรอบแล้ว" : `เหลืออีก ${ROUNDS.length - approved} รอบ`}
           </h2>
@@ -895,6 +899,7 @@ function LeaveRoom({
             <input
               type="date"
               value={leaveDate}
+              min={isAdmin ? undefined : data.date}
               onChange={(e) => setLeaveDate(e.target.value)}
               required
               className="ui-input"
@@ -2783,13 +2788,10 @@ export default function Home() {
     [view, setView] = useState("airdrop"),
     [round, setRound] = useState<Round>(ROUNDS[0]),
     [image, setImage] = useState<File | null>(null),
-    [crew, setCrew] = useState<number[]>([]),
     [notice, setNotice] = useState(""),
     [busy, setBusy] = useState(false),
     [loading, setLoading] = useState(false),
-    [name, setName] = useState(""),
     [authNeeded, setAuthNeeded] = useState(false),
-    [partyName, setPartyName] = useState(""),
     [loadedViews, setLoadedViews] = useState<string[]>([]),
     [pickerReset, setPickerReset] = useState(0),
     [claim, setClaim] = useState<any>(null),
@@ -2874,15 +2876,17 @@ export default function Home() {
       document.getElementById(id)?.remove();
     };
   }, [loading, busy]);
-  const mine = useMemo(
-    () =>
-      new Map(
-        data?.airdrops
-          .filter((x: any) => x.activity_date === data.date)
-          .map((x: any) => [x.round_time, x]) || [],
-      ),
-    [data],
-  );
+  // Each round's evidence, on the date that round counts for: until 05:00 the
+  // evening rounds are still last night's (a late 23:00 counts for it).
+  const mine = useMemo(() => {
+    if (!data) return new Map<any, any>();
+    const hour = bangkokHour();
+    return new Map(
+      data.airdrops
+        .filter((x: any) => x.activity_date === roundDate(x.round_time, data.date, hour))
+        .map((x: any) => [x.round_time, x]),
+    );
+  }, [data]);
   // Open on the unsent round closest to the current Bangkok time, so the send
   // button is the next thing to do (at 00:50 that's 01:00, not 17:00). Only on
   // the first load: a later refresh — including the one that crosses midnight
@@ -3099,30 +3103,23 @@ export default function Home() {
       setBusy(false);
     }
   };
-  const send = async (type: "airdrop" | "party", event: FormEvent) => {
+  // Airdrop evidence for the selected round (team evidence is sent from the
+  // team page).
+  const sendAirdrop = async (event: FormEvent) => {
     event.preventDefault();
     if (!image) return setNotice("กรุณาเลือกรูปหลักฐาน");
-    if (
-      !(await confirmAsync(
-        type === "airdrop"
-          ? `ยืนยันส่งหลักฐานแอร์ดรอปรอบ ${round} เข้าคิวตรวจใช่หรือไม่?`
-          : "ยืนยันส่งหลักฐานกิจกรรมปาร์ตี้เข้าคิวตรวจใช่หรือไม่?",
-      ))
-    )
-      return;
+    if (!(await confirmAsync(`ยืนยันส่งหลักฐานแอร์ดรอปรอบ ${round} เข้าคิวตรวจใช่หรือไม่?`))) return;
     setBusy(true);
     try {
       const form = new FormData();
-      form.append("type", type);
+      form.append("type", "airdrop");
       form.append("image", await shrinkImage(image));
-      if (type === "airdrop") form.append("round", round);
-      else form.append("memberIds", JSON.stringify(crew));
+      form.append("round", round);
       const r = await fetch("/api/upload", { method: "POST", body: form }),
         x: any = await uploadResult(r);
-      setNotice(x.error || "ส่งเข้าคิวตรวจแล้ว");
+      setNotice(x.error || x.notice || "ส่งเข้าคิวตรวจแล้ว");
       if (!x.error) {
         setImage(null);
-        setCrew([]);
         setPickerReset((value) => value + 1);
         await load();
       }
@@ -3244,15 +3241,6 @@ export default function Home() {
         Number(data.favorites.includes(a.id)) ||
       a.display_name.localeCompare(b.display_name),
   );
-  const todayRounds = ROUNDS;
-  const completedRounds = todayRounds.filter(
-    (time) => mine.get(time)?.status === "approved",
-  );
-  const nextIncompleteRound = todayRounds.find(
-    (time) => mine.get(time)?.status !== "approved",
-  );
-  const checkInComplete = completedRounds.length === todayRounds.length;
-  const selectedAirdrop = mine.get(round);
   // Three daily destinations stay one tap away; everything occasional lives
   // under "เพิ่มเติม" so the phone bar never grows past four slots.
   const mainNav: [string, string, any][] = [
@@ -3436,7 +3424,7 @@ export default function Home() {
               image={image}
               setImage={setImage}
               pickerReset={pickerReset}
-              onSubmit={(e) => send("airdrop", e)}
+              onSubmit={sendAirdrop}
             />
             <div className="home-stats">
               <button
@@ -3565,6 +3553,7 @@ export default function Home() {
                 <Row
                   inset={false}
                   href="/api/auth/discord?mode=link"
+                  newTab={false}
                   leading={
                     <span className="more-icon">
                       <DiscordMark />

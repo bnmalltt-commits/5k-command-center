@@ -27,13 +27,6 @@ function periodStarts(today: string) {
   return { day: today, week: monday };
 }
 
-async function activeParty(memberId: number) {
-  return db
-    .prepare("SELECT p.id,p.name,p.status FROM parties p JOIN party_members pm ON pm.party_id=p.id WHERE pm.member_id=? AND p.status IN ('open','locked') LIMIT 1")
-    .bind(memberId)
-    .first<any>();
-}
-
 async function partyDetails(party: any) {
   if (!party) return null;
   const members = await db
@@ -281,6 +274,10 @@ export async function POST(request: Request) {
       const leaveDate = String(body.leaveDate || "").trim();
       const reason = String(body.reason || "").trim();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(leaveDate)) throw Error("เลือกวันที่ไม่ถูกต้อง");
+      // Leave is filed ahead of time. A member backdating it could overwrite
+      // the automatic "ขาด" entry for a day they skipped; only admins correct
+      // the past.
+      if (me.role !== "admin" && leaveDate < thaiDate()) throw Error("แจ้งลาย้อนหลังไม่ได้ ติดต่อแอดมินให้บันทึกให้");
       if (reason.length < 2 || reason.length > 200) throw Error("กรอกเหตุผลการลา 2–200 ตัวอักษร");
       const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(requestedId).first();
       if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");

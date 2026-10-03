@@ -44,6 +44,7 @@ export function Row({
   trailing,
   onClick,
   href,
+  newTab = true,
   inset = true,
 }: {
   leading?: ReactNode;
@@ -52,6 +53,8 @@ export function Row({
   trailing?: ReactNode;
   onClick?: () => void;
   href?: string;
+  // Links open in a new tab (evidence photos); false for in-app navigation.
+  newTab?: boolean;
   // Divider starts past the leading slot so the list reads as one column.
   inset?: boolean;
 }) {
@@ -68,7 +71,7 @@ export function Row({
   const className = `ui-row ${inset ? "ui-row--inset" : ""} ${onClick || href ? "ui-row--tappable" : ""}`;
   if (href)
     return (
-      <a href={href} target="_blank" rel="noreferrer" className={className}>
+      <a href={href} {...(newTab && { target: "_blank", rel: "noreferrer" })} className={className}>
         {inner}
       </a>
     );

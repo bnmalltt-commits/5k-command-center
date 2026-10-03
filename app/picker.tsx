@@ -30,8 +30,12 @@ async function decode(file: File): Promise<{ source: CanvasImageSource; width: n
   }
 }
 
+// What the upload accepts as-is; anything else (HEIC from iPhones, GIF, AVIF,
+// a file with no type) is re-encoded as JPEG here instead of being refused.
+const UPLOAD_TYPES = ["image/jpeg", "image/png", "image/webp"];
+
 export async function shrinkImage(file: File): Promise<File> {
-  if (file.size <= UPLOAD_BUDGET) return file;
+  if (file.size <= UPLOAD_BUDGET && UPLOAD_TYPES.includes(file.type)) return file;
   const image = await decode(file);
   let result: Blob | null = null;
   try {

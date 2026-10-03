@@ -149,14 +149,16 @@ async function monthlyWinners(nowMs: number) {
   return sent ? [`winners ${prev}`] : [];
 }
 
-// Shortly after midnight (00:00–04:00), for the day that just ended: anyone who sent nothing at all (no airdrop
+// Early morning (05:00–09:00), for the day that just ended, once evening
+// rounds sent late after midnight have had until 05:00 to arrive (they count
+// for that day): anyone who sent nothing at all (no airdrop
 // submission of any status, not in any party evidence) and hadn't filed leave
 // is recorded as absent — a leave entry an admin can delete if it's wrong —
 // and tagged so they know. Only from AUTO_ABSENT_START, never retroactively.
 const AUTO_ABSENT_START = "2026-10-02";
 async function autoAbsence(nowMs: number) {
   const today = bkkDateOf(nowMs);
-  if (nowMs < bkkTime(today, "00:00") || nowMs >= bkkTime(today, "04:00")) return [];
+  if (nowMs < bkkTime(today, "05:00") || nowMs >= bkkTime(today, "09:00")) return [];
   const date = bkkDateOf(nowMs - 86400_000);
   if (date < AUTO_ABSENT_START) return [];
   const url = process.env.DISCORD_REMINDER_WEBHOOK_URL || process.env.DISCORD_POINTS_WEBHOOK_URL;
@@ -335,18 +337,28 @@ export async function GET(request: Request) {
   // ?at=<ISO time> simulates the clock for local testing; ignored in production.
   const at = new URL(request.url).searchParams.get("at");
   const nowMs = process.env.NODE_ENV !== "production" && at && !Number.isNaN(Date.parse(at)) ? Date.parse(at) : Date.now();
-  try {
-    const ran = [
-      ...(await roundReminders(nowMs)),
-      ...(await shopReminder(nowMs)),
-      ...(await monthlyWinners(nowMs)),
-      ...(await autoAbsence(nowMs)),
-      ...(await teamSummary(nowMs)),
-      ...(await weeklySummary(nowMs)),
-      ...(await leaderWatch(nowMs)),
-    ];
-    return Response.json({ ok: true, at: new Date(nowMs).toISOString(), bkkDate: thaiDate(), ran });
-  } catch (error) {
-    return Response.json({ ok: false, error: error instanceof Error ? error.message : "cron failed" }, { status: 500 });
+  // Each job on its own: one failing (a Discord or database hiccup) must not
+  // stop the ones after it from running on this tick.
+  const jobs: [string, (ms: number) => Promise<string[]>][] = [
+    ["rounds", roundReminders],
+    ["shop", shopReminder],
+    ["winners", monthlyWinners],
+    ["absent", autoAbsence],
+    ["team", teamSummary],
+    ["week", weeklySummary],
+    ["leader", leaderWatch],
+  ];
+  const ran: string[] = [];
+  const failed: string[] = [];
+  for (const [name, job] of jobs) {
+    try {
+      ran.push(...(await job(nowMs)));
+    } catch (error) {
+      failed.push(`${name}: ${error instanceof Error ? error.message : "failed"}`);
+    }
   }
+  return Response.json(
+    { ok: !failed.length, at: new Date(nowMs).toISOString(), bkkDate: thaiDate(), ran, ...(failed.length && { failed }) },
+    { status: failed.length ? 500 : 200 },
+  );
 }

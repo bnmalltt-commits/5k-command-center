@@ -44,20 +44,25 @@ export async function approveEvidence(admin: { id: unknown; display_name: string
   // before the status flips — an approved activity already counts toward
   // the quota, which would fold the refund into "before".
   const today = thaiDate();
+  const updated = await db.prepare(`SELECT status,image_key,activity_date,created_at${type === "party" ? ",kind" : ",round_time"} FROM ${table} WHERE id=?`).bind(id).first<any>();
+  if (!updated || updated.status !== "pending") throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
   // Points count toward the month the activity happened in.
-  const activity = await db.prepare(`SELECT activity_date${type === "party" ? ",kind" : ""} FROM ${table} WHERE id=?`).bind(id).first<any>();
-  const month = String(activity?.activity_date || today).slice(0, 7);
-  const points = pointsFor(type, activity?.kind, String(activity?.activity_date || today));
-  const kindLabel = type === "party" ? (activity?.kind === "loop" ? "ลูป" : "งัดร้าน") : "แอร์ดรอป";
+  const month = String(updated.activity_date || today).slice(0, 7);
+  const points = pointsFor(type, updated.kind, String(updated.activity_date || today));
+  const kindLabel = type === "party" ? (updated.kind === "loop" ? "ลูป" : "งัดร้าน") : "แอร์ดรอป";
   const before = await totalsFor(credited.map((r: any) => r.member_id), today, month);
-  const updated = await db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending' RETURNING image_key,activity_date,created_at${type === "party" ? "" : ",round_time"}`).bind(admin.id, id).first<any>();
-  if (!updated) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
-  const inserted = await db.batch(
-    credited.map((r: any) =>
-      db.prepare("INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING")
-        .bind(r.member_id, type, id, points, `${kindLabel}ตรวจผ่าน`, now())
-    )
-  );
+  // The status flip and the points go in one transaction, so evidence can
+  // never end up approved without its points (or the reverse). The inserts
+  // only land while the row is approved, and the ledger's unique index keeps
+  // a concurrent second approval from crediting twice.
+  const [flipped, ...inserted] = await db.batch([
+    db.prepare(`UPDATE ${table} SET status='approved',approved_by=? WHERE id=? AND status='pending'`).bind(admin.id, id),
+    ...credited.map((r: any) =>
+      db.prepare(`INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) SELECT ?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM ${table} WHERE id=? AND status='approved') ON CONFLICT DO NOTHING`)
+        .bind(r.member_id, type, id, points, `${kindLabel}ตรวจผ่าน`, now(), id)
+    ),
+  ]);
+  if (!flipped.meta.changes) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
   // The approval is committed; nothing in the Discord card may turn it into an error.
   try {
     await notifyApproval({

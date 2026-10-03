@@ -3,6 +3,7 @@ import { storage } from "@/lib/storage";
 import { now, thaiDate, currentMember, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 import { notifyEvidence } from "@/lib/notify";
 import { KIND_LABEL, KIND_POINTS } from "@/lib/points";
+import { ROUNDS, roundDate } from "@/lib/rounds";
 
 export const maxDuration = 30;
 
@@ -25,6 +26,7 @@ async function image(file: File) {
 
 export async function POST(r: Request) {
   let key = "";
+  let notice: string | undefined;
   try {
     const member = await currentMember(r);
     if (!member) return Response.json({ error: "กรุณาเข้าสู่ระบบ" }, { status: 401 });
@@ -42,8 +44,11 @@ export async function POST(r: Request) {
 
     if (type === "airdrop") {
       const round = String(form.get("round"));
-      if (!["17:00", "20:00", "23:00", "01:00"].includes(round)) throw Error("เลือกรอบไม่ถูกต้อง");
-      const old = await db.prepare("SELECT id,status,image_key FROM airdrop_submissions WHERE member_id=? AND activity_date=? AND round_time=?").bind(member.id, today, round).first<any>();
+      if (!(ROUNDS as readonly string[]).includes(round)) throw Error("เลือกรอบไม่ถูกต้อง");
+      // An evening round sent after midnight counts for the night before.
+      const day = roundDate(round, today);
+      if (day !== today) notice = `ส่งหลังเที่ยงคืน นับเป็นรอบ ${round} ของวันที่ ${day}`;
+      const old = await db.prepare("SELECT id,status,image_key FROM airdrop_submissions WHERE member_id=? AND activity_date=? AND round_time=?").bind(member.id, day, round).first<any>();
       if (old?.status === "approved") throw Error("หลักฐานที่ผ่านแล้วไม่สามารถแก้ไขได้");
       key = `airdrop/${member.id}/${Date.now()}.${ext}`;
       await storage.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
@@ -52,7 +57,7 @@ export async function POST(r: Request) {
         const updated = await db.prepare("UPDATE airdrop_submissions SET image_key=?,image_hash=?,reject_reason=NULL,status='pending',approved_by=NULL,created_at=? WHERE id=? AND status<>'approved'").bind(key, hash, now(), old.id).run();
         if (!updated.meta.changes) throw Error("หลักฐานรายการนี้เพิ่งผ่านการตรวจ จึงแก้ไขไม่ได้");
       } else {
-        evidenceId = (await db.prepare("INSERT INTO airdrop_submissions (member_id,activity_date,round_time,image_key,image_hash,status,created_at) VALUES (?,?,?,?,?, 'pending',?) RETURNING id").bind(member.id, today, round, key, hash, now()).first<any>())?.id;
+        evidenceId = (await db.prepare("INSERT INTO airdrop_submissions (member_id,activity_date,round_time,image_key,image_hash,status,created_at) VALUES (?,?,?,?,?, 'pending',?) RETURNING id").bind(member.id, day, round, key, hash, now()).first<any>())?.id;
       }
       if (old?.image_key) await storage.delete(old.image_key);
       await notifyEvidence({
@@ -60,7 +65,7 @@ export async function POST(r: Request) {
         lines: [
           ["ประเภท", "แอร์ดรอป"],
           ["รอบ", round],
-          ["วันที่", today],
+          ["วันที่", day === today ? today : `${day} (ส่งหลังเที่ยงคืน)`],
           ["สถานะ", old?.status === "rejected" ? "ส่งใหม่หลังไม่ผ่าน" : old ? "แก้ไขหลักฐาน" : "รอตรวจ"],
         ],
         image: file,
@@ -87,9 +92,15 @@ export async function POST(r: Request) {
       key = `party/${member.id}/${Date.now()}.${ext}`;
       await storage.put(key, file.stream(), { httpMetadata: { contentType: file.type } });
       const shopName = kind === "shop" ? String(form.get("shopName") || "").trim().slice(0, 60) || null : null;
-      const party = await db.prepare("INSERT INTO parties (name,shop_name,active) VALUES (?,?,0) RETURNING id").bind(`กิจกรรม ${today} ${Date.now()}`, shopName).first<any>();
-      const activity = await db.prepare("INSERT INTO party_activities (party_id,activity_date,image_key,image_hash,status,submitted_by_member_id,created_at,kind) VALUES (?,?,?,?,'pending',?,?,?) RETURNING id").bind(party.id, today, key, hash, member.id, now(), kind).first<any>();
-      await db.batch(ids.map((id: number) => db.prepare("INSERT INTO party_activity_members (party_activity_id,member_id) VALUES (?,?)").bind(activity.id, id)));
+      // One statement, so a failure can never leave an activity without its
+      // members (which would sit in the review queue crediting nobody).
+      const activity = await db.prepare(
+        `WITH p AS (INSERT INTO parties (name,shop_name,active) VALUES (?,?,0) RETURNING id),
+          a AS (INSERT INTO party_activities (party_id,activity_date,image_key,image_hash,status,submitted_by_member_id,created_at,kind)
+                SELECT p.id,?,?,?,'pending',?,?,? FROM p RETURNING id),
+          m AS (INSERT INTO party_activity_members (party_activity_id,member_id) SELECT a.id,x FROM a, unnest(?::bigint[]) AS x)
+        SELECT id FROM a`
+      ).bind(`กิจกรรม ${today} ${Date.now()}`, shopName, today, key, hash, member.id, now(), kind, ids).first<any>();
       const names = await db.prepare("SELECT display_name FROM members WHERE id = ANY(?::bigint[]) ORDER BY display_name").bind(ids).all<any>();
       await notifyEvidence({
         title: `${member.display_name} ส่งหลักฐาน${KIND_LABEL[kind]}`,
@@ -109,7 +120,7 @@ export async function POST(r: Request) {
       });
     } else throw Error("ประเภทไม่ถูกต้อง");
 
-    return Response.json({ ok: true });
+    return Response.json({ ok: true, ...(notice && { notice }) });
   } catch (e) {
     if (key) await storage.delete(key);
     return Response.json({ error: e instanceof Error ? e.message : "อัปโหลดไม่สำเร็จ" }, { status: 400 });
