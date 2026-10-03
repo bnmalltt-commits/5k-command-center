@@ -939,140 +939,152 @@ function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
   const [period, setPeriod] = useState("day");
   const p = summary.periods.find((x: any) => x.id === period) || summary.periods[0];
   const names = memberNames(data);
+  const isDay = p.id === "day";
   const label = SUMMARY_PERIODS.find((x) => x.id === p.id)!.label;
   const net = Object.values(p.points as Record<string, number>).reduce((a, b) => a + b, 0);
   const count = (status: string) => p.evidence.airdrop[status] + p.evidence.shop[status] + p.evidence.loop[status];
   // Rounds that haven't started yet today don't count against anyone: "due"
   // leaves them out (the server works it out per round).
   const started = (round: string) => round <= summary.clock;
-  const sentAll = p.rounds.filter((r: any) => p.id !== "day" || started(r.round)).reduce((s: number, r: any) => s + r.sent, 0);
-  const possibleAll = p.rounds.reduce((s: number, r: any) => s + r.due, 0);
-  const sentPct = possibleAll ? Math.round(Math.min(1, sentAll / possibleAll) * 100) : null;
+  const sentAll = p.rounds.filter((r: any) => !isDay || started(r.round)).reduce((s: number, r: any) => s + r.sent, 0);
+  const dueAll = p.rounds.reduce((s: number, r: any) => s + r.due, 0);
+  const sentPct = dueAll ? Math.round(Math.min(1, sentAll / dueAll) * 100) : null;
   const ranks = competitionRanks(p.top);
   const t = summary.teamNow;
   const perDay = data.team?.perDay ?? 9;
+  const sources = POINT_CATEGORIES.filter(([id]) => p.points[id] && id !== "penalty" && id !== "refund")
+    .map(([id, name]) => `${name} ${signed(p.points[id])}`)
+    .join(" · ");
+  const rate = (value: number) => (value >= 80 ? "good" : value >= 50 ? "warn" : "bad");
+  // One fact per line: what it is on the left, the number on the right,
+  // green when it's good news and red when someone needs to act.
+  const facts: { label: string; value: string; tone?: string; sub?: string; meter?: [number, number] }[] = [
+    {
+      label: "ส่งแอร์ดรอปแล้ว",
+      value: sentPct === null ? "—" : `${sentPct}%`,
+      tone: sentPct === null ? undefined : rate(sentPct),
+      sub: dueAll ? `${sentAll} จาก ${dueAll} ครั้งที่ถึงรอบแล้ว` : "ยังไม่ถึงรอบแรกของวัน",
+      meter: dueAll ? [sentAll, dueAll] : undefined,
+    },
+    ...(t.on && isDay
+      ? [
+          {
+            label: `ทำคะแนนทีมครบ ${perDay} แล้ว`,
+            value: `${t.done}/${t.subject} คน`,
+            tone: rate(t.subject ? (t.done / t.subject) * 100 : 0),
+            sub: `งัดร้าน +${data.team?.points.shop ?? 3} · ลูป +${data.team?.points.loop ?? 1} · ไม่ครบโดนหักตอนเที่ยงคืน`,
+            meter: [t.done, t.subject] as [number, number],
+          },
+          {
+            label: "เมื่อวานโดนหักคะแนนทีม",
+            value: `${t.dockedYesterday} คน`,
+            tone: t.dockedYesterday ? "bad" : "good",
+          },
+        ]
+      : t.on
+        ? [
+            {
+              label: `โดนหักคะแนนทีม${label}`,
+              value: `${p.team.docked} คน`,
+              tone: p.team.docked ? "bad" : "good",
+              sub: `หักรวม ${-p.points.penalty} แต้ม · ทำชดได้คืน ${p.points.refund} แต้ม`,
+            },
+          ]
+        : []),
+    ...(t.on
+      ? [
+          {
+            label: "ตอนนี้ค้างคะแนนทีม",
+            value: `${t.owing} คน`,
+            tone: t.owing ? "bad" : "good",
+            sub: t.owing ? `ค้างรวม ${t.owingTotal} คะแนน · ทำชดแล้วได้แต้มคืน` : undefined,
+          },
+        ]
+      : []),
+    {
+      label: `แต้มที่แก๊งได้${label}`,
+      value: signed(net),
+      tone: net < 0 ? "bad" : undefined,
+      sub: sources || "ยังไม่มีแต้ม",
+    },
+    {
+      label: "หลักฐานตรวจผ่าน",
+      value: `${count("approved")} รายการ`,
+      sub: count("pending") || count("rejected") ? `รอตรวจ ${count("pending")} · ไม่ผ่าน ${count("rejected")}` : undefined,
+    },
+    { label: "ลา", value: `${p.leave} ครั้ง` },
+    {
+      label: "ขาด (ไม่ส่งอะไรเลยทั้งวัน)",
+      value: `${p.absent} ครั้ง`,
+      tone: p.absent ? "bad" : undefined,
+      sub: isDay ? "ของวันนี้จะนับหลังเที่ยงคืน" : undefined,
+    },
+  ];
   return (
     <div className="space-y-4 p-4">
       <div className="sum-toolbar">
         <Chips value={p.id} onChange={setPeriod} options={SUMMARY_PERIODS} />
         <span className="sum-range">
-          {p.id === "day" ? `วันนี้ ${dayLabel(p.to)} · ถึง ${summary.clock} น.` : `${dayLabel(p.from)} – ${dayLabel(p.to)}`}
+          {isDay ? `${dayLabel(p.to)} · ถึง ${summary.clock} น.` : `${dayLabel(p.from)} – ${dayLabel(p.to)}`}
         </span>
       </div>
-      <div className="sum-stats">
-        <div className={`sum-stat tilt ${net < 0 ? "is-bad" : ""}`}>
-          <span>แต้มรวมทั้งแก๊ง</span>
-          <b>{signed(net)}</b>
-          <small>{p.points.penalty < 0 ? `รวมโดนหักทีม ${p.points.penalty}` : "ยังไม่มีใครโดนหัก"}</small>
-        </div>
-        <div className="sum-stat tilt">
-          <span>หลักฐานผ่าน</span>
-          <b>{count("approved")}</b>
-          <small>
-            รอตรวจ {count("pending")} · ไม่ผ่าน {count("rejected")}
-          </small>
-        </div>
-        <div className={`sum-stat tilt ${sentPct !== null && sentPct >= 80 ? "is-good" : ""}`}>
-          <span>ส่งแอร์ดรอป</span>
-          <b>{sentPct === null ? "—" : `${sentPct}%`}</b>
-          <small>{possibleAll ? `${sentAll} จาก ${possibleAll} ครั้งที่ต้องส่ง` : "ยังไม่ถึงรอบแรกของวัน"}</small>
-        </div>
-        <div className={`sum-stat tilt ${p.absent > 0 ? "is-bad" : ""}`}>
-          <span>ลา / ขาด</span>
-          <b>
-            {p.leave} / {p.absent}
-          </b>
-          <small>{p.id === "day" ? "ขาด = ไม่ส่งอะไรเลยทั้งวัน (บันทึกหลังเที่ยงคืน)" : "ขาด = ไม่ส่งอะไรเลยทั้งวัน"}</small>
-        </div>
-      </div>
-
-      <section>
-        <h3 className="sum-title">แอร์ดรอปแต่ละรอบ</h3>
-        <div className="sum-rounds">
-          {p.rounds.map((r: any) => {
-            // Today: out of everyone expected. Week/month: out of what was due.
-            const of = p.id === "day" ? r.possible : r.due;
-            const pct = of ? Math.round(Math.min(1, r.sent / of) * 100) : 0;
-            return (
-              <div key={r.round} className="sum-round tilt">
-                <span className="sum-round__time">รอบ {r.round}</span>
-                <b>
-                  {r.sent}
-                  <small>/{of}</small>
-                </b>
-                <Meter value={r.sent} max={of} label={`รอบ ${r.round} ส่งแล้ว ${r.sent} จาก ${of}`} />
-                <span className="sum-round__note">
-                  {p.id === "day" && !started(r.round) && r.sent === 0 ? "ยังไม่ถึงรอบ" : `ส่งแล้ว ${pct}%`}
+      <div className="sum-cols">
+        <section className="sum-card">
+          <h3 className="sum-title">สรุป{label}</h3>
+          <ul className="sum-facts">
+            {facts.map((fact) => (
+              <li key={fact.label} className={`sum-fact ${fact.tone ? `is-${fact.tone}` : ""}`}>
+                <span className="sum-fact__text">
+                  <span className="sum-fact__label">{fact.label}</span>
+                  {fact.sub && <span className="sum-fact__sub">{fact.sub}</span>}
                 </span>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {t.on && (
-        <section>
-          <h3 className="sum-title">คะแนนทีม · ขั้นต่ำวันละ {perDay} คะแนน</h3>
-          <div className="sum-team">
-            <Ring value={t.done} max={t.subject} size={76} />
-            <div className="sum-team__facts">
-              <p>
-                ทำครบวันนี้แล้ว <b>{t.done}</b> จาก {t.subject} คน
-              </p>
-              <p className={t.dockedYesterday ? "is-bad" : ""}>
-                เมื่อวานโดนหัก <b>{t.dockedYesterday}</b> คน
-              </p>
-              <p className={t.owing ? "is-bad" : ""}>
-                ตอนนี้ค้างอยู่ <b>{t.owing}</b> คน · รวม <b>{t.owingTotal}</b> คะแนน
-              </p>
-              {p.id !== "day" && (
-                <p>
-                  {label}: โดนหักรวม <b>{-p.points.penalty}</b> แต้ม ({p.team.docked} คน) · ทำชดได้คืน <b>{p.points.refund}</b> แต้ม
-                </p>
-              )}
-            </div>
-          </div>
+                <b className="sum-fact__value">{fact.value}</b>
+                {fact.meter && <Meter value={fact.meter[0]} max={fact.meter[1]} label={fact.label} />}
+              </li>
+            ))}
+          </ul>
         </section>
-      )}
-
-      <div className="sum-split">
-        <section>
-          <h3 className="sum-title">แต้มแยกตามที่มา</h3>
-          {POINT_CATEGORIES.some(([id]) => p.points[id]) ? (
-            <div className="points-split">
-              {POINT_CATEGORIES.filter(([id]) => p.points[id]).map(([id, name]) => (
-                <div key={id} className={`points-split__cell tilt ${p.points[id] < 0 ? "is-minus" : ""}`}>
-                  <span>{name}</span>
-                  <b>{signed(p.points[id])}</b>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="sum-empty">ยังไม่มีแต้ม{label}</p>
-          )}
-        </section>
-        <section>
-          <h3 className="sum-title">Top 5 {label}</h3>
-          {p.top.length ? (
-            <ol className="sum-top">
-              {p.top.map((m: any, i: number) => (
-                <li key={m.id}>
-                  <span className={`rank-num rank-num--${ranks[i]}`}>{ranks[i]}</span>
-                  <span className="name-with-avatar min-w-0">
-                    <Avatar url={data.avatars?.[m.id]} name={names.get(m.id) || "?"} size={24} />
-                    <span className="truncate">
-                      {names.get(m.id) || "สมาชิก"}
-                      {String(m.id) === String(data.me.id) ? " · คุณ" : ""}
+        <div className="space-y-4">
+          <section className="sum-card">
+            <h3 className="sum-title">ส่งแอร์ดรอปแต่ละรอบ</h3>
+            <ul className="sum-bars">
+              {p.rounds.map((r: any) => {
+                // Today: out of everyone expected. Week/month: out of what was due.
+                const of = isDay ? r.possible : r.due;
+                const waiting = isDay && !started(r.round) && r.sent === 0;
+                return (
+                  <li key={r.round} className={waiting ? "is-waiting" : ""}>
+                    <span className="sum-bars__round">{r.round}</span>
+                    <Meter value={r.sent} max={of} label={`รอบ ${r.round} ส่งแล้ว ${r.sent} จาก ${of}`} />
+                    <span className="sum-bars__count">{waiting ? "ยังไม่ถึง" : `${r.sent}/${of}`}</span>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+          <section className="sum-card">
+            <h3 className="sum-title">ได้แต้มเยอะสุด{label}</h3>
+            {p.top.length ? (
+              <ol className="sum-top">
+                {p.top.map((m: any, i: number) => (
+                  <li key={m.id}>
+                    <span className={`rank-num rank-num--${ranks[i]}`}>{ranks[i]}</span>
+                    <span className="name-with-avatar min-w-0">
+                      <Avatar url={data.avatars?.[m.id]} name={names.get(m.id) || "?"} size={26} />
+                      <span className="truncate">
+                        {names.get(m.id) || "สมาชิก"}
+                        {String(m.id) === String(data.me.id) ? " · คุณ" : ""}
+                      </span>
                     </span>
-                  </span>
-                  <span className="rank-score">{m.score}</span>
-                </li>
-              ))}
-            </ol>
-          ) : (
-            <p className="sum-empty">ยังไม่มีใครได้แต้ม{label}</p>
-          )}
-        </section>
+                    <span className="rank-score">{m.score}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="sum-empty">ยังไม่มีใครได้แต้ม{label}</p>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );
@@ -1196,7 +1208,9 @@ function MonthlyResults({ data, summary }: { data: Data; summary: any }) {
 }
 
 function AdminTodo({ data, summary, onGo }: { data: Data; summary: any; onGo: (view: string) => void }) {
+  const [open, setOpen] = useState<string | null>(null);
   const admin = summary.admin;
+  const names = memberNames(data);
   const pending = admin.pending.airdrop + admin.pending.party;
   const waited = admin.pending.oldest ? Math.max(0, Date.now() - Date.parse(admin.pending.oldest)) : 0;
   const waitedLabel = waited >= 3600_000 ? `${Math.floor(waited / 3600_000)} ชม.` : `${Math.max(1, Math.floor(waited / 60_000))} นาที`;
@@ -1205,66 +1219,114 @@ function AdminTodo({ data, summary, onGo }: { data: Data; summary: any; onGo: (v
   const owingOf = new Map<string, number>(admin.owing.map((r: any) => [r.id, r.n]));
   const reasonOf = new Map<string, string>(admin.leaveToday.map((r: any) => [r.id, r.reason]));
   const rejected = new Set<string>(admin.round.rejected);
-  const tasks: { id: string; title: string; ids: string[]; count?: number; hint: string; note?: (id: string) => string | undefined; action?: [string, string] }[] = [
+  type Task = {
+    id: string;
+    title: string;
+    ids: string[];
+    count?: number;
+    unit: string;
+    hint?: string;
+    note?: (id: string) => string | undefined;
+    action?: [string, string];
+    calm?: boolean;
+  };
+  // Most urgent first. Anything at zero drops into one "เรียบร้อย" line.
+  const tasks: Task[] = [
     {
       id: "pending",
       title: "หลักฐานรอตรวจ",
       ids: [],
       count: pending,
-      hint: pending ? `แอร์ดรอป ${admin.pending.airdrop} · ทีม ${admin.pending.party} · รอนานสุด ${waitedLabel}` : "ตรวจครบแล้ว",
+      unit: "รายการ",
+      hint: pending ? `แอร์ดรอป ${admin.pending.airdrop} · ทีม ${admin.pending.party} · รอนานสุด ${waitedLabel}` : undefined,
       action: pending ? ["ไปตรวจ", "admin"] : undefined,
     },
     {
       id: "round",
-      title: `ยังไม่ส่งรอบ ${admin.round.round} (${admin.round.date === summary.date ? "วันนี้" : "เมื่อวาน"})`,
+      title: `ยังไม่ส่งรอบ ${admin.round.round} ${admin.round.date === summary.date ? "วันนี้" : "เมื่อวาน"}`,
       ids: [...admin.round.rejected, ...admin.round.missing],
-      hint: "รอบล่าสุดที่เริ่มแล้ว · ไม่นับคนที่ลา",
+      unit: "คน",
       note: (id) => (rejected.has(id) ? "ไม่ผ่าน รอส่งใหม่" : undefined),
     },
     ...(summary.teamNow.on
       ? [
           {
             id: "needed",
-            title: `ยังไม่ครบ ${data.team?.perDay ?? 9} คะแนนทีมวันนี้`,
+            title: `คะแนนทีมวันนี้ยังไม่ครบ ${data.team?.perDay ?? 9}`,
             ids: admin.neededToday.map((r: any) => r.id),
+            unit: "คน",
             hint: "ขาดเท่าไหร่ โดนหักเท่านั้นตอนเที่ยงคืน",
             note: (id: string) => `ขาด ${needOf.get(id)}`,
           },
           {
             id: "owing",
-            title: "ค้างคะแนนทีม (สะสม)",
+            title: "ค้างคะแนนทีมจากวันก่อน",
             ids: admin.owing.map((r: any) => r.id),
-            hint: admin.owing.length ? `รวม ${owingTotal} คะแนน · ทำชดแล้วได้แต้มคืน` : "ไม่มีใครค้าง",
+            unit: "คน",
+            hint: `ค้างรวม ${owingTotal} คะแนน · ทำชดแล้วได้แต้มคืน`,
             note: (id: string) => `ค้าง ${owingOf.get(id)}`,
           },
         ]
       : []),
-    { id: "noTeam", title: "ยังไม่มีทีม", ids: admin.noTeam, hint: "ไม่มีทีม = ส่งงัดร้าน/ลูปไม่ได้ · ทีมคนเดียวก็ได้" },
-    { id: "noDiscord", title: "ยังไม่ผูก Discord", ids: admin.noDiscord, hint: "ออกจากระบบแล้วจะเข้าบัญชีไม่ได้ และไม่ได้รับแท็กเตือน" },
-    { id: "absent", title: "ขาดเมื่อวาน (ไม่ส่งอะไรเลย)", ids: admin.absentYesterday, hint: "บันทึกผิดลบได้ที่ จัดการแก๊ง → การลา" },
-    { id: "leave", title: "ลาวันนี้", ids: admin.leaveToday.map((r: any) => r.id), hint: "ไม่ต้องส่งแอร์ดรอปวันนี้", note: (id) => reasonOf.get(id) || undefined },
+    { id: "noTeam", title: "ยังไม่มีทีม", ids: admin.noTeam, unit: "คน", hint: "ส่งงัดร้าน/ลูปไม่ได้ · ทีมคนเดียวก็ได้" },
+    { id: "absent", title: "ขาดเมื่อวาน (ไม่ส่งอะไรเลย)", ids: admin.absentYesterday, unit: "คน", hint: "บันทึกผิด ลบได้ที่ จัดการแก๊ง → การลา" },
+    { id: "noDiscord", title: "ยังไม่ผูก Discord", ids: admin.noDiscord, unit: "คน", hint: "ออกจากระบบแล้วจะเข้าไม่ได้ และไม่ได้รับแท็กเตือน" },
+    { id: "leave", title: "ลาวันนี้", ids: admin.leaveToday.map((r: any) => r.id), unit: "คน", note: (id) => reasonOf.get(id) || undefined, calm: true },
   ];
+  const size = (task: Task) => task.count ?? task.ids.length;
+  const todo = tasks.filter((task) => size(task) > 0);
+  const clear = tasks.filter((task) => size(task) === 0);
+  // A few names right in the row, so the list reads without opening anything.
+  const preview = (ids: string[]) => {
+    const list = (part: string[]) => part.map((id) => names.get(id) || "สมาชิก").join(", ");
+    return ids.length > 5 ? `${list(ids.slice(0, 4))} และอีก ${ids.length - 4} คน` : list(ids);
+  };
   return (
-    <div className="todo-grid p-4">
-      {tasks.map((task) => {
-        const n = task.count ?? task.ids.length;
-        const calm = task.id === "leave";
-        return (
-          <section key={task.id} className={`todo ${n > 0 && !calm ? "is-hot" : ""}`}>
-            <div className="todo__head">
-              <h3 className="todo__title">{task.title}</h3>
-              <span className={`todo__count ${n === 0 ? "is-zero" : calm ? "is-calm" : ""}`}>{n === 0 ? "ไม่มี" : `${n}${task.id === "pending" ? " รายการ" : " คน"}`}</span>
+    <div className="space-y-3 p-4">
+      {todo.length === 0 && <p className="todo-clear">ไม่มีอะไรต้องตาม ทุกอย่างเรียบร้อย</p>}
+      <ul className="todo-list">
+        {todo.map((task) => {
+          const isOpen = open === task.id;
+          return (
+            <li key={task.id} className={`todo-row ${task.calm ? "is-calm" : "is-hot"}`}>
+              <button
+                type="button"
+                className="todo-row__head"
+                onClick={() => setOpen(isOpen ? null : task.id)}
+                aria-expanded={task.ids.length ? isOpen : undefined}
+                disabled={!task.ids.length}
+              >
+                <span className="todo-row__count">
+                  <b>{size(task)}</b>
+                  <small>{task.unit}</small>
+                </span>
+                <span className="todo-row__text">
+                  <span className="todo-row__title">{task.title}</span>
+                  <span className="todo-row__hint">{task.ids.length ? preview(task.ids) : task.hint}</span>
+                  {task.ids.length > 0 && task.hint && <span className="todo-row__hint todo-row__hint--soft">{task.hint}</span>}
+                </span>
+                {task.ids.length > 0 && <ChevronRight className="todo-row__chev" aria-hidden="true" />}
+              </button>
               {task.action && (
-                <button type="button" onClick={() => onGo(task.action![1])} className="ui-btn ui-btn--primary ui-btn--sm todo__action">
+                <button type="button" onClick={() => onGo(task.action![1])} className="ui-btn ui-btn--primary todo-row__action">
                   {task.action[0]}
                 </button>
               )}
-            </div>
-            <p className="todo__hint">{task.hint}</p>
-            {task.ids.length > 0 && <WhoList data={data} ids={task.ids} note={task.note} />}
-          </section>
-        );
-      })}
+              {isOpen && (
+                <div className="todo-row__names">
+                  <WhoList data={data} ids={task.ids} note={task.note} />
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {clear.length > 0 && (
+        <p className="todo-done">
+          <Check className="h-4 w-4" aria-hidden="true" />
+          เรียบร้อย: {clear.map((task) => task.title).join(" · ")}
+        </p>
+      )}
     </div>
   );
 }
