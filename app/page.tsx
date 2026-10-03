@@ -919,22 +919,6 @@ const competitionRanks = (rows: { score: number }[]) => {
 };
 const memberNames = (data: Data) => new Map<string, string>(data.members.map((m: any) => [String(m.id), m.display_name]));
 
-// A wrap of small avatar + name chips, with an optional note per person.
-function WhoList({ data, ids, note }: { data: Data; ids: string[]; note?: (id: string) => string | undefined }) {
-  const names = memberNames(data);
-  return (
-    <div className="who-list">
-      {ids.map((id) => (
-        <span key={id} className="who-chip">
-          <Avatar url={data.avatars?.[id]} name={names.get(id) || "?"} size={20} />
-          {names.get(id) || "สมาชิก"}
-          {note?.(id) && <em>{note(id)}</em>}
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
   const [period, setPeriod] = useState("day");
   const p = summary.periods.find((x: any) => x.id === period) || summary.periods[0];
@@ -1207,126 +1191,152 @@ function MonthlyResults({ data, summary }: { data: Data; summary: any }) {
   );
 }
 
+// Admin to-dos as one table: a row per member who needs chasing, a column
+// per thing to chase, so each person shows up once with everything they owe.
 function AdminTodo({ data, summary, onGo }: { data: Data; summary: any; onGo: (view: string) => void }) {
-  const [open, setOpen] = useState<string | null>(null);
+  const [filter, setFilter] = useState("all");
   const admin = summary.admin;
-  const names = memberNames(data);
   const pending = admin.pending.airdrop + admin.pending.party;
   const waited = admin.pending.oldest ? Math.max(0, Date.now() - Date.parse(admin.pending.oldest)) : 0;
   const waitedLabel = waited >= 3600_000 ? `${Math.floor(waited / 3600_000)} ชม.` : `${Math.max(1, Math.floor(waited / 60_000))} นาที`;
-  const owingTotal = admin.owing.reduce((s: number, r: any) => s + r.n, 0);
-  const needOf = new Map<string, number>(admin.neededToday.map((r: any) => [r.id, r.n]));
-  const owingOf = new Map<string, number>(admin.owing.map((r: any) => [r.id, r.n]));
-  const reasonOf = new Map<string, string>(admin.leaveToday.map((r: any) => [r.id, r.reason]));
+  const roundMissing = new Set<string>([...admin.round.missing, ...admin.round.rejected]);
   const rejected = new Set<string>(admin.round.rejected);
-  type Task = {
-    id: string;
-    title: string;
-    ids: string[];
-    count?: number;
-    unit: string;
-    hint?: string;
-    note?: (id: string) => string | undefined;
-    action?: [string, string];
-    calm?: boolean;
-  };
-  // Most urgent first. Anything at zero drops into one "เรียบร้อย" line.
-  const tasks: Task[] = [
-    {
-      id: "pending",
-      title: "หลักฐานรอตรวจ",
-      ids: [],
-      count: pending,
-      unit: "รายการ",
-      hint: pending ? `แอร์ดรอป ${admin.pending.airdrop} · ทีม ${admin.pending.party} · รอนานสุด ${waitedLabel}` : undefined,
-      action: pending ? ["ไปตรวจ", "admin"] : undefined,
-    },
+  const short = new Map<string, number>(admin.neededToday.map((r: any) => [r.id, r.n]));
+  const owing = new Map<string, number>(admin.owing.map((r: any) => [r.id, r.n]));
+  const noTeam = new Set<string>(admin.noTeam);
+  const absent = new Set<string>(admin.absentYesterday);
+  const noDiscord = new Set<string>(admin.noDiscord);
+  const onLeave = new Map<string, string>(admin.leaveToday.map((r: any) => [r.id, r.reason]));
+  const roundDay = admin.round.date === summary.date ? "วันนี้" : "เมื่อวาน";
+  // Each column: its header, its filter chip, and what to show when the
+  // member has that problem (null = fine).
+  const columns: { id: string; head: string; sub?: string; chip: string; problem: (id: string) => string | null }[] = [
     {
       id: "round",
-      title: `ยังไม่ส่งรอบ ${admin.round.round} ${admin.round.date === summary.date ? "วันนี้" : "เมื่อวาน"}`,
-      ids: [...admin.round.rejected, ...admin.round.missing],
-      unit: "คน",
-      note: (id) => (rejected.has(id) ? "ไม่ผ่าน รอส่งใหม่" : undefined),
+      head: `รอบ ${admin.round.round}`,
+      sub: roundDay,
+      chip: `ยังไม่ส่งรอบ ${admin.round.round}`,
+      problem: (id) => (roundMissing.has(id) ? (rejected.has(id) ? "ไม่ผ่าน" : "ไม่ส่ง") : null),
     },
     ...(summary.teamNow.on
       ? [
           {
-            id: "needed",
-            title: `คะแนนทีมวันนี้ยังไม่ครบ ${data.team?.perDay ?? 9}`,
-            ids: admin.neededToday.map((r: any) => r.id),
-            unit: "คน",
-            hint: "ขาดเท่าไหร่ โดนหักเท่านั้นตอนเที่ยงคืน",
-            note: (id: string) => `ขาด ${needOf.get(id)}`,
+            id: "short",
+            head: "ทีมวันนี้",
+            sub: `ขั้นต่ำ ${data.team?.perDay ?? 9}`,
+            chip: "ทีมวันนี้ไม่ครบ",
+            problem: (id: string) => (short.has(id) ? `ขาด ${short.get(id)}` : null),
           },
           {
             id: "owing",
-            title: "ค้างคะแนนทีมจากวันก่อน",
-            ids: admin.owing.map((r: any) => r.id),
-            unit: "คน",
-            hint: `ค้างรวม ${owingTotal} คะแนน · ทำชดแล้วได้แต้มคืน`,
-            note: (id: string) => `ค้าง ${owingOf.get(id)}`,
+            head: "ค้างทีม",
+            sub: "จากวันก่อน",
+            chip: "ค้างคะแนนทีม",
+            problem: (id: string) => (owing.has(id) ? `${owing.get(id)}` : null),
           },
         ]
       : []),
-    { id: "noTeam", title: "ยังไม่มีทีม", ids: admin.noTeam, unit: "คน", hint: "ส่งงัดร้าน/ลูปไม่ได้ · ทีมคนเดียวก็ได้" },
-    { id: "absent", title: "ขาดเมื่อวาน (ไม่ส่งอะไรเลย)", ids: admin.absentYesterday, unit: "คน", hint: "บันทึกผิด ลบได้ที่ จัดการแก๊ง → การลา" },
-    { id: "noDiscord", title: "ยังไม่ผูก Discord", ids: admin.noDiscord, unit: "คน", hint: "ออกจากระบบแล้วจะเข้าไม่ได้ และไม่ได้รับแท็กเตือน" },
-    { id: "leave", title: "ลาวันนี้", ids: admin.leaveToday.map((r: any) => r.id), unit: "คน", note: (id) => reasonOf.get(id) || undefined, calm: true },
+    { id: "noTeam", head: "ทีม", chip: "ไม่มีทีม", problem: (id) => (noTeam.has(id) ? "ไม่มี" : null) },
+    { id: "absent", head: "เมื่อวาน", chip: "ขาดเมื่อวาน", problem: (id) => (absent.has(id) ? "ขาด" : null) },
+    { id: "noDiscord", head: "Discord", chip: "ไม่ผูก Discord", problem: (id) => (noDiscord.has(id) ? "ไม่ผูก" : null) },
   ];
-  const size = (task: Task) => task.count ?? task.ids.length;
-  const todo = tasks.filter((task) => size(task) > 0);
-  const clear = tasks.filter((task) => size(task) === 0);
-  // A few names right in the row, so the list reads without opening anything.
-  const preview = (ids: string[]) => {
-    const list = (part: string[]) => part.map((id) => names.get(id) || "สมาชิก").join(", ");
-    return ids.length > 5 ? `${list(ids.slice(0, 4))} และอีก ${ids.length - 4} คน` : list(ids);
-  };
+  const rows = data.members
+    .map((member: any) => {
+      const id = String(member.id);
+      const problems = columns.map((column) => column.problem(id));
+      return { id, name: member.display_name as string, problems, n: problems.filter(Boolean).length };
+    })
+    .filter((row) => row.n > 0)
+    // Most to chase first.
+    .sort((a, b) => b.n - a.n || a.name.localeCompare(b.name));
+  const counts = columns.map((_, i) => rows.filter((row) => row.problems[i]).length);
+  const focus = columns.findIndex((column) => column.id === filter);
+  const shown = focus < 0 ? rows : rows.filter((row) => row.problems[focus]);
+  const fine = data.members.length - rows.length;
   return (
     <div className="space-y-3 p-4">
-      {todo.length === 0 && <p className="todo-clear">ไม่มีอะไรต้องตาม ทุกอย่างเรียบร้อย</p>}
-      <ul className="todo-list">
-        {todo.map((task) => {
-          const isOpen = open === task.id;
-          return (
-            <li key={task.id} className={`todo-row ${task.calm ? "is-calm" : "is-hot"}`}>
-              <button
-                type="button"
-                className="todo-row__head"
-                onClick={() => setOpen(isOpen ? null : task.id)}
-                aria-expanded={task.ids.length ? isOpen : undefined}
-                disabled={!task.ids.length}
-              >
-                <span className="todo-row__count">
-                  <b>{size(task)}</b>
-                  <small>{task.unit}</small>
-                </span>
-                <span className="todo-row__text">
-                  <span className="todo-row__title">{task.title}</span>
-                  <span className="todo-row__hint">{task.ids.length ? preview(task.ids) : task.hint}</span>
-                  {task.ids.length > 0 && task.hint && <span className="todo-row__hint todo-row__hint--soft">{task.hint}</span>}
-                </span>
-                {task.ids.length > 0 && <ChevronRight className="todo-row__chev" aria-hidden="true" />}
-              </button>
-              {task.action && (
-                <button type="button" onClick={() => onGo(task.action![1])} className="ui-btn ui-btn--primary todo-row__action">
-                  {task.action[0]}
-                </button>
-              )}
-              {isOpen && (
-                <div className="todo-row__names">
-                  <WhoList data={data} ids={task.ids} note={task.note} />
-                </div>
-              )}
-            </li>
-          );
-        })}
-      </ul>
-      {clear.length > 0 && (
-        <p className="todo-done">
+      {pending > 0 && (
+        <div className="todo-alert">
+          <span>
+            <b>{pending}</b> หลักฐานรอตรวจ · รอนานสุด {waitedLabel}
+          </span>
+          <button type="button" onClick={() => onGo("admin")} className="ui-btn ui-btn--primary ui-btn--sm">
+            ไปตรวจ
+          </button>
+        </div>
+      )}
+      <div className="todo-head">
+        <h3 className="sum-title">ต้องตาม {rows.length} คน</h3>
+        <Chips
+          value={focus < 0 ? "all" : filter}
+          onChange={setFilter}
+          options={[
+            { id: "all", label: `ทั้งหมด ${rows.length}` },
+            ...columns.map((column, i) => ({ id: column.id, label: `${column.chip} ${counts[i]}` })).filter((_, i) => counts[i] > 0),
+          ]}
+        />
+      </div>
+      {shown.length ? (
+        <div className="todo-table-wrap">
+          <table className="todo-table">
+            <thead>
+              <tr>
+                <th scope="col">ชื่อ</th>
+                {columns.map((column, i) => (
+                  <th key={column.id} scope="col" className={i === focus ? "is-focus" : ""}>
+                    {column.head}
+                    {column.sub && <small>{column.sub}</small>}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((row) => (
+                <tr key={row.id}>
+                  <th scope="row">
+                    <span className="name-with-avatar">
+                      <Avatar url={data.avatars?.[row.id]} name={row.name} size={26} />
+                      <span className="truncate">{row.name}</span>
+                      {onLeave.has(row.id) && (
+                        <span className="todo-tag" title={onLeave.get(row.id)}>
+                          ลาวันนี้
+                        </span>
+                      )}
+                    </span>
+                  </th>
+                  {row.problems.map((problem, i) => (
+                    <td key={columns[i].id} className={i === focus ? "is-focus" : ""}>
+                      {problem ? (
+                        <span className="todo-bad">{problem}</span>
+                      ) : (
+                        <>
+                          <Check className="todo-ok" aria-hidden="true" />
+                          <span className="sr-only">เรียบร้อย</span>
+                        </>
+                      )}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="todo-clear">
           <Check className="h-4 w-4" aria-hidden="true" />
-          เรียบร้อย: {clear.map((task) => task.title).join(" · ")}
+          ไม่มีใครต้องตาม ทุกคนเรียบร้อย
         </p>
       )}
+      <p className="todo-done">
+        <Check className="h-4 w-4" aria-hidden="true" />
+        เรียบร้อยทุกเรื่อง {fine} คน
+        {pending === 0 ? " · ไม่มีหลักฐานรอตรวจ" : ""}
+        {onLeave.size ? ` · ลาวันนี้ ${onLeave.size} คน` : ""}
+      </p>
+      <p className="todo-legend">
+        ทีมวันนี้ = ขาดเท่าไหร่ โดนหักเท่านั้นตอนเที่ยงคืน · ค้างทีม = ทำชดแล้วได้แต้มคืน · รอบที่ยังไม่ส่ง ไม่นับคนที่ลา ·
+        ขาดเมื่อวานบันทึกผิด ลบได้ที่ จัดการแก๊ง → การลา
+      </p>
     </div>
   );
 }
