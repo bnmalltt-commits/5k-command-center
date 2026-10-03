@@ -12,6 +12,7 @@ import {
   CalendarOff,
   Check,
   ChevronRight,
+  Clock,
   Crosshair,
   Crown,
   History,
@@ -23,6 +24,7 @@ import {
   Trophy,
   Upload,
   Users,
+  X,
 } from "lucide-react";
 import { PartyCommandCenter } from "./party-command-center";
 import { Picker, shrinkImage } from "./picker";
@@ -89,14 +91,14 @@ function ClaimScreen({
     }
   };
   return (
-    <main className="login-stage grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
-      <section className="command-panel hud-login w-full max-w-md p-7 text-center">
+    <main className="login-stage">
+      <section className="auth-card">
         <div className="flex justify-center">
-          <Avatar url={claim.avatar} name={claim.discordName} size={64} />
+          <Avatar url={claim.avatar} name={claim.discordName} size={72} />
         </div>
-        <p className="label mt-4">FIRST LOGIN</p>
-        <h1 className="mt-1 text-2xl font-black">สวัสดี {claim.discordName}</h1>
-        <p className="mt-3 text-sm text-[var(--ui-text-3)]">
+        <p className="ui-eyebrow mt-4">ครั้งแรกที่เข้าใช้</p>
+        <h1 className="auth-title">สวัสดี {claim.discordName}</h1>
+        <p className="auth-lead">
           เลือกชื่อของคุณในแก๊ง ทำครั้งเดียว ครั้งหน้ากดเข้าด้วย Discord ได้เลย
           <br />
           เลือกชื่อคนอื่นไม่ได้นะ แอดมินเห็นทุกครั้งที่มีคนผูกชื่อ
@@ -104,7 +106,7 @@ function ClaimScreen({
         {picked ? (
           <div className="mt-6 space-y-3">
             <p className="text-lg font-bold">ฉันคือ “{picked.display_name}”</p>
-            <button disabled={busy} onClick={() => submit({ memberId: picked.id })} className="red-action hud-clip w-full">
+            <button disabled={busy} onClick={() => submit({ memberId: picked.id })} className="ui-btn ui-btn--primary ui-btn--block ui-btn--lg">
               {busy ? "กำลังบันทึก…" : "ยืนยัน ใช่ชื่อนี้"}
             </button>
             <button disabled={busy} onClick={() => setPicked(null)} className="ui-btn ui-btn--ghost w-full">
@@ -118,7 +120,7 @@ function ClaimScreen({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="ค้นหาชื่อของคุณ"
-              className="hud-clip mt-6 w-full border border-white/15 bg-black/30 px-4 py-3"
+              className="ui-input mt-6"
             />
             <div className="claim-list mt-3">
               {shown.length ? (
@@ -163,7 +165,7 @@ function ClaimScreen({
           </>
         )}
         {error && <p className="mt-4 text-sm text-[var(--ui-text)]">{error}</p>}
-        <button type="button" onClick={onCancel} className="mt-5 text-xs text-[var(--ui-text-3)] underline">
+        <button type="button" onClick={onCancel} className="text-link mt-5">
           ยกเลิก
         </button>
       </section>
@@ -269,7 +271,12 @@ function ViewLoading() {
 // photo is gone (approved evidence is deleted) or fails to load.
 function Thumb({ imageKey, tone }: { imageKey?: string | null; tone: "green" | "amber" | "red" | "idle" }) {
   const [broken, setBroken] = useState(false);
-  if (!imageKey || broken) return <Dot tone={tone} />;
+  if (!imageKey || broken)
+    return (
+      <span className={`thumb thumb--icon thumb--${tone}`} aria-hidden="true">
+        {tone === "green" ? <Check /> : tone === "red" ? <X /> : <Clock />}
+      </span>
+    );
   return (
     <img
       src={`/api/image/${imageKey}`}
@@ -309,12 +316,48 @@ function Celebration({ message, onDone }: { message: string; onDone: () => void 
   );
 }
 function Status({ value }: { value: string }) {
+  const tone = value === "approved" ? "approved" : value === "rejected" ? "rejected" : "pending";
+  return <span className={`status-pill status-pill--${tone}`}>{labels[value] || value}</span>;
+}
+
+// A calendar-style day badge for rows that are about one date.
+function DateBadge({ date, today }: { date: string; today?: string }) {
+  const day = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(day.getTime())) return null;
   return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-bold ${value === "approved" ? "bg-emerald-500/15 text-[var(--ui-green)]" : value === "rejected" ? "bg-red-500/15 text-[var(--ui-red-light)]" : "bg-amber-400/15 text-[var(--ui-amber)]"}`}
-    >
-      {labels[value] || value}
+    <span className={`date-badge ${date === today ? "is-today" : ""}`} title={date}>
+      <b>{day.getUTCDate()}</b>
+      <small>{day.toLocaleDateString("th-TH", { month: "short", timeZone: "UTC" })}</small>
     </span>
+  );
+}
+
+// Podium medal: gold, silver or bronze by rank, with a ribbon.
+const MEDAL_COLORS: Record<number, [string, string, string]> = {
+  1: ["#ffe58a", "#f2b318", "#a8740a"],
+  2: ["#f4f7fa", "#b5c0cb", "#6f7b87"],
+  3: ["#f5b47a", "#c97632", "#7d4416"],
+};
+function Medal({ rank, className }: { rank: number; className?: string }) {
+  const [light, mid, dark] = MEDAL_COLORS[rank] || MEDAL_COLORS[3];
+  const id = `medal-${rank}`;
+  return (
+    <svg viewBox="0 0 36 40" className={className} role="img" aria-label={`อันดับ ${rank}`}>
+      <defs>
+        <linearGradient id={id} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor={light} />
+          <stop offset=".55" stopColor={mid} />
+          <stop offset="1" stopColor={dark} />
+        </linearGradient>
+      </defs>
+      <path d="M10 0h7l-3 12H7z" fill="#c8132a" />
+      <path d="M19 0h7l3 12h-7z" fill="#ff4655" />
+      <circle cx="18" cy="24" r="14" fill={`url(#${id})`} stroke={dark} strokeWidth="1.2" />
+      <circle cx="18" cy="24" r="10" fill="none" stroke="#fff" strokeOpacity=".35" />
+      <text x="18" y="29" textAnchor="middle" fontSize="13" fontWeight="700" fill="#1a1205" style={{ fontFamily: "var(--font-display)" }}>
+        {rank}
+      </text>
+    </svg>
   );
 }
 
@@ -362,23 +405,23 @@ function MissionCard({
   };
   return (
     <section className="mission">
+      <div className="mission__art" aria-hidden="true">
+        <img src="/art/airdrop.svg" alt="" />
+      </div>
       <header className="mission__head">
-        <div>
-          <p className="ui-eyebrow">ภารกิจวันนี้ · {data.date}</p>
+        <span className="mission__count">
+          <Ring value={approved} max={ROUNDS.length} size={80} />
+        </span>
+        <div className="min-w-0">
+          <p className="ui-eyebrow">แอร์ดรอป · {data.date}</p>
           <h2 className="mission__title">
             {done ? "ครบทุกรอบแล้ว" : `เหลืออีก ${ROUNDS.length - approved} รอบ`}
           </h2>
-        </div>
-        <div className="mission__count">
-          <b>{approved}</b>
-          <span>/{ROUNDS.length}</span>
+          <p className="mission__lead">
+            ส่งรูปหลักฐานทุกรอบ · ผ่านแล้วได้รอบละ +{data.team?.points.airdrop ?? 5}
+          </p>
         </div>
       </header>
-      <div className="mission__bar" aria-hidden="true">
-        {ROUNDS.map((r) => (
-          <span key={r} className={`mission__seg is-${stateOf(r).tone}`} />
-        ))}
-      </div>
       <div className="mission__grid">
         {ROUNDS.map((r) => {
           const state = stateOf(r);
@@ -619,8 +662,8 @@ function SquadRanking({
             if (!member) return <div key={index} className="podium__slot podium__slot--empty" />;
             return (
               <div key={member.id} className={`podium__slot podium__slot--${index + 1} tilt`}>
-                <span className="podium__medal">{ranks[index]}</span>
-                <Avatar url={avatars[String(member.id)]} name={member.display_name} size={index === 0 ? 64 : 52} />
+                <Medal rank={ranks[index]} className="podium__medal" />
+                <Avatar url={avatars[String(member.id)]} name={member.display_name} size={index === 0 ? 76 : 60} />
                 <span className="podium__name">
                   {member.display_name}
                   {member.id === highlightId ? " · คุณ" : ""}
@@ -632,8 +675,38 @@ function SquadRanking({
           })}
         </div>
       )}
-      {rows.length ? (
-        rows.map((member: any, index: number) => (!compact && index < 3) ? null : (
+      {rows.length && !compact ? (
+        rows.length > 3 && (
+          <ol className="rank-list">
+            {rows.map((member: any, index: number) => {
+              if (index < 3) return null;
+              const top = Number(rows[0]?.score || 0);
+              const pct = top > 0 ? Math.max(2, Math.min(100, (Number(member.score || 0) / top) * 100)) : 0;
+              const isMe = String(member.id) === String(highlightId);
+              return (
+                <li key={member.id} className={`rank-list__item ${isMe ? "is-me" : ""}`}>
+                  <span className={`rank-num rank-num--${ranks[index]}`}>{ranks[index]}</span>
+                  <span className="rank-list__main">
+                    <span className="name-with-avatar">
+                      <Avatar url={avatars[String(member.id)]} name={member.display_name} size={30} />
+                      <span className="truncate">
+                        {member.display_name}
+                        {isMe ? " · คุณ" : ""}
+                      </span>
+                      {member.online ? <Dot tone="green" /> : null}
+                    </span>
+                    <span className="rank-list__bar" aria-hidden="true">
+                      <span style={{ width: `${pct}%` }} />
+                    </span>
+                  </span>
+                  <span className="rank-score">{Number(member.score || 0)}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )
+      ) : rows.length ? (
+        rows.map((member: any, index: number) => (
           <Row
             key={member.id}
             inset={false}
@@ -722,39 +795,46 @@ function LeaveRoom({
         {!isAdmin && !data.me.discordLinked ? (
           <DiscordGate what="แจ้งลา" />
         ) : (
-        <form onSubmit={submit} className="space-y-2.5">
+        <form onSubmit={submit} className="form-grid--leave">
           {isAdmin && (
-            <select
-              value={memberId}
-              onChange={(e) => setMemberId(Number(e.target.value))}
-              className="ui-input"
-            >
-              {data.members.map((member: any) => (
-                <option key={member.id} value={member.id}>
-                  {member.id === data.me.id ? "ตัวเอง" : member.display_name}
-                </option>
-              ))}
-            </select>
+            <label className="ui-field">
+              <span>ลาให้ใคร</span>
+              <select
+                value={memberId}
+                onChange={(e) => setMemberId(Number(e.target.value))}
+                className="ui-input"
+              >
+                {data.members.map((member: any) => (
+                  <option key={member.id} value={member.id}>
+                    {member.id === data.me.id ? "ตัวเอง" : member.display_name}
+                  </option>
+                ))}
+              </select>
+            </label>
           )}
-          <input
-            type="date"
-            value={leaveDate}
-            onChange={(e) => setLeaveDate(e.target.value)}
-            required
-            className="ui-input"
-          />
-          <div className="flex gap-2">
+          <label className="ui-field">
+            <span>วันที่ลา</span>
+            <input
+              type="date"
+              value={leaveDate}
+              onChange={(e) => setLeaveDate(e.target.value)}
+              required
+              className="ui-input"
+            />
+          </label>
+          <label className="ui-field ui-field--grow">
+            <span>เหตุผล</span>
             <input
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="เหตุผลการลา"
+              placeholder="เช่น ติดงาน ไปต่างจังหวัด"
               required
-              className="ui-input min-w-0 flex-1"
+              className="ui-input"
             />
-            <button disabled={busy} className="ui-btn ui-btn--primary">
-              แจ้งลา
-            </button>
-          </div>
+          </label>
+          <button disabled={busy} className="ui-btn ui-btn--primary">
+            แจ้งลา
+          </button>
         </form>
         )}
       </Panel>
@@ -780,12 +860,15 @@ function LeaveRoom({
               <Row
                 key={item.id}
                 inset={false}
+                leading={<DateBadge date={item.leave_date} today={data.date} />}
                 title={item.display_name}
-                subtitle={`${item.leave_date} · ${item.reason}`}
+                subtitle={`${item.reason} · บันทึกโดย ${item.created_by_name}`}
                 trailing={
-                  <span className="text-xs text-[var(--ui-text-3)]">
-                    โดย {item.created_by_name}
-                  </span>
+                  String(item.reason).startsWith("ขาด") ? (
+                    <span className="status-pill status-pill--rejected">ขาด</span>
+                  ) : (
+                    <span className="status-pill status-pill--quiet">ลา</span>
+                  )
                 }
               />
             ))}
@@ -850,8 +933,12 @@ function MyPoints({ data }: { data: Data }) {
   const days = [...byDay.keys()].sort().reverse();
   const mine = data.team?.mine;
   return (
-    <Panel label="MY POINTS" title="แต้มของฉัน" subtitle={`${monthLabel(month)} · รวม ${signed(total)} แต้ม`} flush>
-      <div className="space-y-3 p-4">
+    <Panel label="MY POINTS" title={monthLabel(month)} subtitle={month === thisMonth ? "เดือนนี้ · นับถึงวันนี้" : "ทั้งเดือน"} flush>
+      <div className="space-y-4 p-5">
+        <div className="points-total">
+          <b className={total < 0 ? "text-[var(--ui-red-light)]" : ""}>{signed(total)}</b>
+          <span>แต้มรวม{month === thisMonth ? "เดือนนี้" : ""}</span>
+        </div>
         {months.length > 1 && (
           <select value={month} onChange={(event) => setMonth(event.target.value)} className="ui-input" aria-label="เลือกเดือน">
             {months.map((value) => (
@@ -886,12 +973,13 @@ function MyPoints({ data }: { data: Data }) {
             <Row
               key={day}
               inset={false}
-              title={day}
-              subtitle={POINT_CATEGORIES.filter(([id]) => parts.has(id))
+              leading={<DateBadge date={day} today={data.date} />}
+              title={POINT_CATEGORIES.filter(([id]) => parts.has(id))
                 .map(([id, label]) => `${label} ${signed(parts.get(id)!)}`)
                 .join(" · ")}
+              subtitle={day === data.date ? "วันนี้" : day}
               trailing={
-                <b className={dayTotal < 0 ? "text-[var(--ui-red-light)]" : "text-[var(--ui-green)]"}>{signed(dayTotal)}</b>
+                <b className={`rank-score ${dayTotal < 0 ? "text-[var(--ui-red-light)]" : "text-[var(--ui-green)]"}`}>{signed(dayTotal)}</b>
               }
             />
           );
@@ -1348,8 +1436,8 @@ function GangSummary({ data, onGo }: { data: Data; onGo: (view: string) => void 
   const showAdmin = data.me.role === "admin" && Boolean(summary.admin);
   const shownTab = tab === "admin" && !showAdmin ? "overview" : tab;
   return (
-    <Panel label="SUMMARY" title="สรุป" subtitle={`อัปเดต ${summary.clock} น. · ${dayLabel(summary.date)}`} flush>
-      <div className="px-4 pt-3">
+    <Panel label="SUMMARY" flush>
+      <div className="px-4 pt-4">
         <Segmented
           label="สรุป"
           value={shownTab}
@@ -1875,12 +1963,7 @@ function AdminCommandCenter({
 
   return (
     <>
-      <Panel
-        label="SQUAD COMMAND"
-        title="จัดการแก๊ง"
-        subtitle={`${activeMembers.length} สมาชิกใช้งาน`}
-        flush
-      >
+      <Panel label="SQUAD COMMAND" flush>
         <div className="space-y-3 p-4">
           <Segmented
             label="จัดการแก๊ง"
@@ -1890,7 +1973,7 @@ function AdminCommandCenter({
               setQuery("");
             }}
             options={[
-              { id: "verify", label: "รอตรวจ", count: data.pending.length },
+              { id: "verify", label: "รอตรวจ", count: data.pending.length || undefined },
               { id: "attendance", label: "เช็กชื่อ", count: attCounts.missing },
               { id: "members", label: "สมาชิก", count: activeMembers.length },
               { id: "parties", label: "ปาร์ตี้", count: data.adminParties.length },
@@ -2115,6 +2198,7 @@ function AdminCommandCenter({
               <Row
                 key={member.id}
                 inset={false}
+                leading={<Avatar url={data.avatars?.[String(member.id)]} name={member.display_name} size={34} />}
                 title={member.display_name}
                 subtitle={[
                   adminSubtitle(member),
@@ -2306,6 +2390,7 @@ function AdminCommandCenter({
               <Row
                 key={leave.id}
                 inset={false}
+                leading={<DateBadge date={leave.leave_date} today={data.date} />}
                 title={`${leave.display_name} · ${leave.leave_date}`}
                 subtitle={`${leave.reason} · บันทึกโดย ${leave.created_by_name}`}
                 trailing={
@@ -2339,6 +2424,7 @@ function AdminCommandCenter({
               <Row
                 key={r.member.id}
                 inset={false}
+                leading={<Avatar url={data.avatars?.[String(r.member.id)]} name={r.member.display_name} size={34} />}
                 title={r.member.display_name}
                 subtitle={`${r.leave ? "ลา" : `ส่งแล้ว ${r.sent}/${ROUNDS.length} รอบ`} · ทีม ${r.teamPoints}/${data.team?.perDay ?? 9}${r.teamDebt > 0 ? ` · ค้าง ${r.teamDebt} แต้ม` : ""}`}
                 trailing={
@@ -2382,6 +2468,7 @@ function AdminCommandCenter({
               <Row
                 key={member.id}
                 inset={false}
+                leading={<Avatar url={data.avatars?.[String(member.id)]} name={member.display_name} size={34} />}
                 title={member.display_name}
                 subtitle={
                   member.role === "admin" && !member.discord_linked
@@ -2546,22 +2633,8 @@ export default function Home() {
       if (!el) {
         el = document.createElement("div");
         el.id = id;
+        el.className = "loading-pill";
         el.setAttribute("role", "status");
-        Object.assign(el.style, {
-          position: "fixed",
-          left: "50%",
-          top: "calc(env(safe-area-inset-top, 0px) + 12px)",
-          transform: "translateX(-50%)",
-          pointerEvents: "none",
-          zIndex: "100",
-          padding: "12px 16px",
-          borderRadius: "10px",
-          background: "#18090c",
-          border: "1px solid rgba(248,113,113,.5)",
-          color: "#fee2e2",
-          fontSize: "14px",
-          boxShadow: "0 8px 24px rgba(0,0,0,.4)",
-        });
         document.body.appendChild(el);
       }
       el.textContent = loading ? "กำลังโหลดข้อมูล…" : "กำลังบันทึกข้อมูล…";
@@ -2868,18 +2941,15 @@ export default function Home() {
     );
   if (!data && authNeeded)
     return (
-      <main className="login-stage grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
-        <section className="command-panel hud-login w-full max-w-md p-7 text-center">
-          <div className="hud-login__ring">
-            <img
-              src="/5k-logo.png"
-              alt="5K Fivethousand"
-              className="mx-auto h-full w-full object-contain"
-            />
+      <main className="login-stage">
+        <section className="auth-card">
+          <div className="auth-emblem">
+            <img src="/art/emblem.svg" alt="" />
+            <img src="/art/5k-mark.png" alt="5K Fivethousand" className="auth-emblem__mark" />
           </div>
-          <p className="label mt-4">ACCESS TERMINAL</p>
-          <h1 className="mt-1 text-2xl font-black">เข้าสู่ระบบแก๊ง</h1>
-          <p className="mt-3 text-sm text-[var(--ui-text-3)]">
+          <p className="ui-eyebrow">5K FIVETHOUSAND · COMMAND CENTER</p>
+          <h1 className="auth-title">เข้าสู่ระบบแก๊ง</h1>
+          <p className="auth-lead">
             เข้าด้วยบัญชี Discord ของคุณ
             <br />
             ครั้งแรกจะให้เลือกชื่อของคุณในแก๊ง
@@ -2889,13 +2959,27 @@ export default function Home() {
             เข้าสู่ระบบด้วย Discord
           </a>
           {notice && <p className="mt-4 text-sm text-[var(--ui-text)]">{notice}</p>}
+          <div className="auth-steps" aria-hidden="true">
+            <span>
+              <Upload />
+              ส่งหลักฐาน
+            </span>
+            <span>
+              <Users />
+              ทำทีม
+            </span>
+            <span>
+              <Trophy />
+              ขึ้นอันดับ
+            </span>
+          </div>
         </section>
       </main>
     );
   if (!data && (loading || !notice))
     return (
       // The layout's outline while the first load is in flight.
-      <main className="ui-v2 command-shell min-h-screen bg-[#0d0d0d] text-white" aria-busy="true" aria-label="กำลังเปิดศูนย์บัญชาการ">
+      <main className="command-shell" aria-busy="true" aria-label="กำลังเปิดศูนย์บัญชาการ">
         <div className="skel-shell">
           <span className="skel skel-shell__side" />
           <div className="skel-shell__main">
@@ -2912,11 +2996,13 @@ export default function Home() {
     );
   if (!data)
     return (
-      <main className="grid min-h-screen place-items-center bg-[#0d0d0d] p-5 text-white">
-        <section className="command-panel max-w-md p-6 text-center">
-          <p>ยังเปิดข้อมูลไม่ได้</p>
-          <p className="mt-2 text-sm text-[var(--ui-text-3)]">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p>
-          <button onClick={() => load()} className="red-action mt-5">ลองใหม่</button>
+      <main className="login-stage">
+        <section className="auth-card">
+          <h1 className="auth-title">ยังเปิดข้อมูลไม่ได้</h1>
+          <p className="auth-lead">{notice || "ลองเชื่อมต่ออีกครั้ง"}</p>
+          <button onClick={() => load()} className="ui-btn ui-btn--primary ui-btn--block mt-6">
+            ลองใหม่
+          </button>
         </section>
       </main>
     );
@@ -2955,6 +3041,25 @@ export default function Home() {
     ] as [string, string, any, string][]
   ).filter(([id]) => id !== "admin" || data.me.role === "admin");
   const inMore = view === "more" || moreNav.some(([id]) => id === view);
+  // Each page's own heading in the top bar.
+  const today = new Date(`${data.date}T00:00:00Z`).toLocaleDateString("th-TH", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  });
+  const PAGE_META: Record<string, [string, string]> = {
+    airdrop: ["ภารกิจวันนี้", `สวัสดี ${data.me.name} · ${today}`],
+    party: ["ทีม", "จัดทีม ส่งหลักฐานงัดร้านและลูป"],
+    score: ["อันดับ", "ตารางคะแนนของแก๊ง"],
+    summary: ["สรุป", `ภาพรวมของแก๊ง · ${today}`],
+    leave: ["ห้องลา", "แจ้งลาล่วงหน้า และดูประวัติการลา"],
+    mine: ["แต้มของฉัน", "แต้มรายวัน แยกว่าได้จากอะไร โดนหักเท่าไหร่"],
+    log: ["ประวัติการส่ง", "หลักฐานที่ส่งทั้งหมดและผลตรวจ"],
+    admin: ["จัดการแก๊ง", "ตรวจหลักฐาน สมาชิก ทีม แต้ม และการลา"],
+    more: ["เพิ่มเติม", "ทุกเมนูของแก๊ง"],
+  };
+  const [pageTitle, pageSub] = PAGE_META[view] || PAGE_META.airdrop;
   const pendingCount = data.me.role === "admin" ? data.pendingCount || 0 : 0;
   const pendingBadge = pendingCount > 0 && (
     <span className="nav-badge" aria-label={`รอตรวจ ${pendingCount} รายการ`}>
@@ -2962,33 +3067,28 @@ export default function Home() {
     </span>
   );
   return (
-    <main className="ui-v2 command-shell min-h-screen bg-[#0d0d0d] text-white">
-      <div className="command-grid fixed inset-0 pointer-events-none opacity-30" />
-      <div className="command-desktop relative mx-auto max-w-[1600px] p-4 lg:p-7">
+    <main className="command-shell">
+      <div className="command-desktop">
         {/* No fixed width: the grid tracks on .command-desktop own the column
             widths, and a hard w-* here overflows its track and covers the
             content column. */}
-        <aside className="command-sidebar hidden lg:block">
+        <aside className="command-sidebar" aria-label="เมนู">
           <div className="side-brand">
-            <img
-              src="/5k-logo.png"
-              alt="5K Fivethousand"
-              className="h-28 w-full object-contain"
-            />
-            <div>
-              <p>FIVETHOUSAND</p>
-              <b>COMMAND MODE</b>
+            <img src="/art/5k-mark.png" alt="5K Fivethousand" className="side-brand__mark" />
+            <div className="side-brand__text">
+              <b>COMMAND</b>
+              <span>CENTER</span>
             </div>
           </div>
-          <nav className="mt-7 space-y-2">
+          <nav className="side-nav" aria-label="เมนูหลัก">
             {mainNav.map(([id, label, Icon]: any) => (
               <button
                 key={id}
                 onClick={() => setView(id)}
                 aria-current={view === id ? "page" : undefined}
-                className="hud-clip-sm side-nav__item"
+                className="side-nav__item"
               >
-                <Icon className="h-4 w-4" />
+                <Icon />
                 {label}
               </button>
             ))}
@@ -2998,41 +3098,40 @@ export default function Home() {
                 key={id}
                 onClick={() => setView(id)}
                 aria-current={view === id ? "page" : undefined}
-                className="hud-clip-sm side-nav__item"
+                className="side-nav__item"
               >
-                <Icon className="h-4 w-4" />
+                <Icon />
                 {label}
                 {id === "admin" && pendingBadge}
               </button>
             ))}
             {!data.me.discordLinked && (
-              <a href="/api/auth/discord?mode=link" className="hud-clip-sm side-nav__item">
+              <a href="/api/auth/discord?mode=link" className="side-nav__item side-nav__item--discord">
                 <DiscordMark />
                 เชื่อม Discord
               </a>
             )}
           </nav>
-          {/* Pinned to the bottom of the rail, apart from the destinations. */}
+          {/* Who's signed in, pinned to the bottom, with sign-out. */}
           <div className="side-foot">
-            <button onClick={logout} className="side-nav__item side-nav__item--quiet">
-              <LogOut className="h-4 w-4" />
-              ออกจากระบบ
-            </button>
+            <div className="side-user">
+              <Avatar url={data.avatars?.[String(data.me.id)]} name={data.me.name} size={36} />
+              <div className="side-user__text">
+                <b>{data.me.name}</b>
+                <span>{data.me.role === "admin" ? "แอดมิน" : "สมาชิก"}</span>
+              </div>
+              <button type="button" onClick={logout} className="icon-btn" aria-label="ออกจากระบบ" title="ออกจากระบบ">
+                <LogOut />
+              </button>
+            </div>
           </div>
         </aside>
         <section className="main-col min-w-0 flex-1">
           <header className="topbar">
-            <img
-              src="/5k-logo.png"
-              alt="5K"
-              className="topbar__logo lg:hidden"
-            />
-            <div className="min-w-0 flex-1">
-              <div className="topbar__meta">5K // COMMAND</div>
-              <div className="topbar__name name-with-avatar">
-                <Avatar url={data.avatars?.[String(data.me.id)]} name={data.me.name} size={22} />
-                {data.me.name}
-              </div>
+            <img src="/art/5k-mark.png" alt="5K" className="topbar__logo" />
+            <div className="topbar__heading">
+              <h1 className="topbar__title">{pageTitle}</h1>
+              <p className="topbar__sub">{pageSub}</p>
             </div>
             <div className={`topbar-stats ${view === "airdrop" ? "topbar-stats--home" : ""}`}>
               <button type="button" onClick={() => setView("mine")} className="topbar-stat">
@@ -3061,12 +3160,8 @@ export default function Home() {
                 </button>
               )}
             </div>
-            <button
-              onClick={() => load()}
-              aria-label="รีเฟรชข้อมูล"
-              className="topbar__icon"
-            >
-              <RefreshCw className="h-4 w-4" />
+            <button onClick={() => load()} aria-label="รีเฟรชข้อมูล" title="รีเฟรชข้อมูล" className="icon-btn">
+              <RefreshCw />
             </button>
           </header>
           {!data.me.discordLinked && !discordLater && (
@@ -3214,7 +3309,7 @@ export default function Home() {
             </div>
           )}
           {view === "more" && (
-            <Panel label="MENU" title="เพิ่มเติม" flush>
+            <Panel label="MENU" flush>
               {moreNav.map(([id, label, Icon, hint]) => (
                 <Row
                   key={id}
@@ -3418,7 +3513,7 @@ export default function Home() {
               <SubmissionLog data={data} />
             ))}
         </section>
-        <aside className="command-rail hidden xl:block space-y-5">
+        <aside className="command-rail" aria-label="สถานะแก๊ง">
           <Panel
             label="SQUAD STATUS"
             title="สถานะแก๊ง"
@@ -3461,7 +3556,7 @@ export default function Home() {
           )}
         </aside>
       </div>
-      <nav className="bottom-nav lg:hidden" aria-label="เมนูหลัก">
+      <nav className="bottom-nav" aria-label="เมนูหลัก">
         {[...mainNav, ["more", "เพิ่มเติม", LayoutGrid] as [string, string, any]].map(
           ([id, label, Icon]: any) => {
             const active = id === "more" ? inMore : view === id;

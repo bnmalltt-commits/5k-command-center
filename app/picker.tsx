@@ -86,17 +86,19 @@ export function Picker({ onChange, resetToken }: { onChange: (file: File | null)
   }, [resetToken]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center justify-center gap-3 rounded-lg border border-dashed border-white/20 bg-black/20 px-4 py-4 text-sm text-slate-300 hover:border-red-400">
+    <div className="picker">
+      <div className={`picker__drop ${preview ? "has-file" : ""}`}>
         {preview && (
           <img
             src={preview}
             alt="ตัวอย่างหลักฐาน"
-            className="h-14 w-14 rounded-md object-cover"
+            className="picker__preview"
           />
         )}
-        <label className="flex cursor-pointer items-center gap-2">
-          <Camera className="h-5 w-5 text-red-400" />
+        <label className="picker__label">
+          <span className="picker__icon">
+            <Camera />
+          </span>
           {filename}
           <input
             className="sr-only"
@@ -119,7 +121,7 @@ export function Picker({ onChange, resetToken }: { onChange: (file: File | null)
             }}
             aria-label="ลบรูปหลักฐาน"
             title="ลบรูปหลักฐาน"
-            className="rounded-md p-1.5 text-slate-400 hover:bg-white/10 hover:text-red-300"
+            className="picker__clear"
           >
             <X className="h-4 w-4" />
           </button>
@@ -150,7 +152,7 @@ export function Picker({ onChange, resetToken }: { onChange: (file: File | null)
             setFilename("กด Ctrl + V เพื่อวางรูป");
           }
         }}
-        className="picker-paste mx-auto flex items-center gap-2 text-xs text-slate-400 hover:text-red-300"
+        className="picker-paste"
       >
         <Clipboard className="h-4 w-4" />
         วางจากคลิปบอร์ด · Ctrl + V

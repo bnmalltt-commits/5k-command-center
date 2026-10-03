@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 300" role="img" aria-label="กล่องแอร์ดรอปกำลังร่อนลง">
+  <defs>
+    <radialGradient id="halo" cx="50%" cy="46%" r="52%">
+      <stop offset="0" stop-color="#ff4655" stop-opacity=".32"/>
+      <stop offset=".55" stop-color="#ff4655" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#ff4655" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="canopy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff6b76"/>
+      <stop offset=".55" stop-color="#ff3346"/>
+      <stop offset="1" stop-color="#b80f25"/>
+    </linearGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff4655" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#ff4655" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4a4a54"/>
+      <stop offset="1" stop-color="#34343c"/>
+    </linearGradient>
+  </defs>
+  <circle cx="190" cy="140" r="150" fill="url(#halo)"/>
+
+  <!-- Landing zone. -->
+  <g fill="none" stroke="#ff4655">
+    <ellipse cx="190" cy="266" rx="128" ry="24" stroke-opacity=".18"/>
+    <ellipse cx="190" cy="266" rx="88" ry="16" stroke-opacity=".32" stroke-dasharray="3 6"/>
+    <ellipse cx="190" cy="266" rx="46" ry="8.5" stroke-opacity=".6"/>
+  </g>
+  <ellipse cx="190" cy="266" rx="36" ry="6" fill="#000" fill-opacity=".55"/>
+  <path d="M168 226 L212 226 L236 266 L144 266 Z" fill="url(#beam)"/>
+  <g stroke="#ff4655" stroke-opacity=".7" stroke-width="2" stroke-linecap="round">
+    <path d="M66 266 h22"/>
+    <path d="M292 266 h22"/>
+  </g>
+
+  <!-- Parachute. -->
+  <path d="M90 92 C92 40 140 22 190 22 C240 22 288 40 290 92 Q270 81 250 92 Q230 81 210 92 Q190 81 170 92 Q150 81 130 92 Q110 81 90 92 Z" fill="url(#canopy)"/>
+  <path d="M190 22 C160 30 140 55 130 92 Q150 81 170 92 C175 60 182 38 190 22 Z" fill="#000" fill-opacity=".2"/>
+  <path d="M190 22 C198 38 205 60 210 92 Q230 81 250 92 C240 55 220 30 190 22 Z" fill="#000" fill-opacity=".2"/>
+  <path d="M190 22 C220 30 270 50 290 92 Q270 81 250 92 C240 55 220 30 190 22 Z" fill="#000" fill-opacity=".08"/>
+  <path d="M116 62 C134 38 164 28 190 27" fill="none" stroke="#fff" stroke-opacity=".42" stroke-width="2.2" stroke-linecap="round"/>
+  <g stroke="#f4f4f6" stroke-opacity=".55" stroke-width="1.2">
+    <path d="M90 92 L160 158"/>
+    <path d="M130 92 L166 156"/>
+    <path d="M170 92 L182 154"/>
+    <path d="M210 92 L198 154"/>
+    <path d="M250 92 L214 156"/>
+    <path d="M290 92 L220 158"/>
+  </g>
+
+  <!-- Supply crate (isometric), strapped twice across the lid. -->
+  <path d="M190 150 L226 168 L190 186 L154 168 Z" fill="url(#top)"/>
+  <path d="M154 168 L190 186 L190 226 L154 208 Z" fill="#26262d"/>
+  <path d="M190 186 L226 168 L226 208 L190 226 Z" fill="#18181d"/>
+  <path d="M166 174 L174 178 L210 160 L202 156 Z" fill="#ff4655"/>
+  <path d="M206 178 L214 174 L178 156 L170 160 Z" fill="#e3283b"/>
+  <path d="M166 174 L174 178 L174 218 L166 214 Z" fill="#ff4655"/>
+  <path d="M206 178 L214 174 L214 214 L206 218 Z" fill="#c21326"/>
+  <g fill="none" stroke="#ffffff" stroke-opacity=".14">
+    <path d="M154 168 L190 186 L226 168"/>
+    <path d="M190 186 V226"/>
+  </g>
+  <path d="M180 196 l6 3 v8 l-6 -3 Z" fill="#f4f4f6" fill-opacity=".5"/>
+
+  <!-- Sparks. -->
+  <g fill="#ff8a94">
+    <circle cx="70" cy="140" r="2"/>
+    <circle cx="312" cy="120" r="2.4"/>
+    <circle cx="288" cy="214" r="1.6"/>
+    <circle cx="96" cy="210" r="1.4"/>
+    <circle cx="330" cy="58" r="1.4"/>
+  </g>
+  <g stroke="#ffffff" stroke-opacity=".5" stroke-width="1.4" stroke-linecap="round">
+    <path d="M50 74 v8 M46 78 h8"/>
+    <path d="M318 168 v8 M314 172 h8"/>
+  </g>
+</svg>
