@@ -29,6 +29,9 @@ import {
 import { PartyCommandCenter } from "./party-command-center";
 import { bangkokHour, roundDate, LATE_ROUND_UNTIL_HOUR } from "@/lib/rounds";
 import { Picker, shrinkImage } from "./picker";
+import { playFx } from "./three/prefs";
+import { Podium3D } from "./three/podium";
+import { SceneToggle } from "./three/toggle";
 import {
   Chips,
   Avatar,
@@ -293,6 +296,8 @@ function Thumb({ imageKey, tone }: { imageKey?: string | null; tone: "green" | "
 // reached (all four rounds, the daily team score, a better rank).
 function Celebration({ message, onDone }: { message: string; onDone: () => void }) {
   useEffect(() => {
+    // 3D fireworks behind the message, when the 3D layer is moving.
+    playFx("celebrate");
     const timer = window.setTimeout(onDone, 3200);
     return () => window.clearTimeout(timer);
   }, [message]);
@@ -739,6 +744,7 @@ function SquadRanking({
       {!compact && rows.length > 0 && (
         // Top three on a podium: 2nd, 1st, 3rd from left to right.
         <div className="podium">
+          <Podium3D watch={rows.slice(0, 3).map((m: any) => `${m.id}:${m.score}`).join(",")} />
           {[1, 0, 2].map((index) => {
             const member = rows[index];
             if (!member) return <div key={index} className="podium__slot podium__slot--empty" />;
@@ -1305,6 +1311,7 @@ function MonthlyResults({ data, summary }: { data: Data; summary: any }) {
         {entry.ranking.length ? (
           <>
             <div className="podium">
+              <Podium3D watch={`${entry.month}|${entry.ranking.slice(0, 3).map((m: any) => `${m.id}:${m.score}`).join(",")}`} />
               {[1, 0, 2].map((index) => {
                 const member = entry.ranking[index];
                 if (!member) return <div key={index} className="podium__slot podium__slot--empty" />;
@@ -3119,6 +3126,7 @@ export default function Home() {
         x: any = await uploadResult(r);
       setNotice(x.error || x.notice || "ส่งเข้าคิวตรวจแล้ว");
       if (!x.error) {
+        playFx("airdrop");
         setImage(null);
         setPickerReset((value) => value + 1);
         await load();
@@ -3202,6 +3210,7 @@ export default function Home() {
             </span>
           </div>
         </section>
+        <SceneToggle className="scene-toggle--corner" />
       </main>
     );
   if (!data && (loading || !notice))
@@ -3333,6 +3342,7 @@ export default function Home() {
           </nav>
           {/* Who's signed in, pinned to the bottom, with sign-out. */}
           <div className="side-foot">
+            <SceneToggle />
             <div className="side-user">
               <Avatar url={data.avatars?.[String(data.me.id)]} name={data.me.name} size={36} />
               <div className="side-user__text">
@@ -3575,6 +3585,13 @@ export default function Home() {
                 title="ออกจากระบบ"
                 subtitle={`เข้าสู่ระบบในชื่อ ${data.me.name}`}
               />
+              <div className="more-scene">
+                <div>
+                  <b>ฉากหลัง 3D</b>
+                  <span>เคลื่อนไหวเต็มที่ · นิ่งไว้ประหยัดเครื่อง · หรือปิด</span>
+                </div>
+                <SceneToggle />
+              </div>
             </Panel>
           )}
           {notice && (

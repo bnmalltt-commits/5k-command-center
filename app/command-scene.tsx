@@ -1,23 +1,23 @@
 "use client";
 
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Grid, Sparkles, useTexture } from "@react-three/drei";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Grid, Sparkles, Stars, useTexture } from "@react-three/drei";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import type { SceneTier } from "./three/prefs";
 
-// The 3D arena behind the whole app (desktop only; see command-scene-loader):
-// a red neon floor grid running into the distance, and the 5K emblem — a dark
-// metal hexagon with the logo as a hologram on its face — floating inside
-// orbit rings, with embers drifting up. On the sign-in screen the emblem sits
-// big and centred above the card; inside the app it glides to the right and
-// steps back so it stays behind the content. The camera follows the mouse a
-// little for depth. Everything here is decoration: the UI sits on dark glass
-// on top of it, so text contrast doesn't depend on what the scene shows.
+// "Night Arena", the 3D world behind the whole app: a striped synthwave sun
+// setting between neon wireframe mountains, a red grid floor running towards
+// the viewer, stars and embers, and the 5K emblem floating in front. The UI
+// sits on dark glass above it, so text contrast never depends on the scene.
+//
+// tier "low" (phones, small machines) draws fewer particles at lower
+// resolution and 30 frames a second; calm draws one still frame.
 
 // "login", or the open page ("airdrop", "party", "score", ...), set by the
 // page on <html data-scene-mode>.
-function useSceneMode() {
-  const read = () => document.documentElement.dataset.sceneMode || "app";
+function usePageMode() {
+  const read = () => document.documentElement.dataset.sceneMode || "login";
   const [mode, setMode] = useState(read);
   useEffect(() => {
     const observer = new MutationObserver(() => setMode(read()));
@@ -27,27 +27,208 @@ function useSceneMode() {
   return mode;
 }
 
+// A soft round glow, drawn once into a texture (no image files to load).
+function glowTexture(inner: string, outer: string) {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gradient.addColorStop(0, inner);
+  gradient.addColorStop(1, outer);
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, 256, 256);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
+// Sky dome: black overhead, deep crimson towards the horizon with a thin
+// glowing band right at it.
+function Sky() {
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        side: THREE.BackSide,
+        depthWrite: false,
+        uniforms: {
+          top: { value: new THREE.Color("#040406") },
+          mid: { value: new THREE.Color("#16050c") },
+          horizon: { value: new THREE.Color("#4f0b19") },
+          glow: { value: new THREE.Color("#ff4655") },
+        },
+        vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+        fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 horizon; uniform vec3 glow; varying vec3 vDir;
+          void main(){
+            float h = vDir.y;
+            vec3 c = mix(horizon, mid, smoothstep(0.0, 0.1, h));
+            c = mix(c, top, smoothstep(0.1, 0.55, h));
+            c += glow * 0.32 * exp(-abs(h - 0.012) * 45.0);
+            c = mix(c, vec3(0.018, 0.01, 0.014), smoothstep(0.0, -0.04, h));
+            gl_FragColor = vec4(c, 1.0);
+            #include <colorspace_fragment>
+          }`,
+      }),
+    [],
+  );
+  return (
+    <mesh material={material} renderOrder={-2}>
+      <sphereGeometry args={[160, 32, 16]} />
+    </mesh>
+  );
+}
+
+// The setting sun: orange to red, its lower half cut into stripes whose gaps
+// widen towards the bottom and drift slowly down.
+function Sun({ animate }: { animate: boolean }) {
+  const material = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: {
+          topColor: { value: new THREE.Color("#ffc27a") },
+          midColor: { value: new THREE.Color("#ff4655") },
+          bottomColor: { value: new THREE.Color("#b80f25") },
+          time: { value: 0 },
+        },
+        vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
+        fragmentShader: `uniform vec3 topColor; uniform vec3 midColor; uniform vec3 bottomColor; uniform float time; varying vec2 vUv;
+          void main(){
+            vec2 p = vUv - 0.5;
+            float edge = smoothstep(0.5, 0.488, length(p));
+            float t = vUv.y;
+            vec3 c = mix(bottomColor, midColor, smoothstep(0.0, 0.55, t));
+            c = mix(c, topColor, smoothstep(0.55, 1.0, t));
+            float lower = 1.0 - smoothstep(0.5, 0.62, t);
+            float band = fract(t * 10.0 + time * 0.035);
+            float gap = mix(0.05, 0.6, clamp((0.58 - t) * 1.9, 0.0, 1.0));
+            float cut = lower * step(band, gap);
+            gl_FragColor = vec4(c * 1.05, edge * (1.0 - cut));
+            #include <colorspace_fragment>
+          }`,
+      }),
+    [],
+  );
+  const halo = useMemo(() => glowTexture("rgba(255,70,85,0.55)", "rgba(255,70,85,0)"), []);
+  useFrame((_, delta) => {
+    if (animate) material.uniforms.time.value += delta;
+  });
+  return (
+    <group position={[0, 12.5, -84]}>
+      <mesh renderOrder={-1}>
+        <planeGeometry args={[96, 96]} />
+        <meshBasicMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} />
+      </mesh>
+      <mesh material={material}>
+        <planeGeometry args={[38, 38]} />
+      </mesh>
+    </group>
+  );
+}
+
+// Neon wireframe mountains on both sides, flat in the middle so the sun shows
+// through the valley.
+function Mountains({ detail }: { detail: boolean }) {
+  const geometry = useMemo(() => {
+    const g = new THREE.PlaneGeometry(240, 64, detail ? 120 : 60, detail ? 32 : 16);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const valley = THREE.MathUtils.smoothstep(Math.abs(x), 9, 36);
+      const back = 1 - THREE.MathUtils.smoothstep(z, -12, 30);
+      const n =
+        Math.sin(x * 0.21) * Math.cos(z * 0.17) * 0.5 +
+        Math.sin(x * 0.07 + z * 0.11) * 0.8 +
+        Math.sin(x * 0.53 + 1.3) * Math.sin(z * 0.41) * 0.25;
+      pos.setY(i, Math.max(0, n + 1.15) * 6 * valley * back);
+    }
+    g.computeVertexNormals();
+    return g;
+  }, [detail]);
+  return (
+    <group position={[0, -1.74, -80]}>
+      <mesh geometry={geometry}>
+        <meshBasicMaterial color="#07040a" polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
+      </mesh>
+      <mesh geometry={geometry}>
+        <meshBasicMaterial color="#ff2e44" wireframe transparent opacity={0.42} fog={false} />
+      </mesh>
+    </group>
+  );
+}
+
+// The floor: an opaque dark ground (hides the bottom of the sun below the
+// horizon), the neon grid on it running towards the viewer, and the sun's
+// long reflection.
+function Floor({ animate }: { animate: boolean }) {
+  const grid = useRef<THREE.Group>(null);
+  const reflection = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 16;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d")!;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+    gradient.addColorStop(0, "rgba(255,120,90,0.9)");
+    gradient.addColorStop(0.5, "rgba(255,70,85,0.35)");
+    gradient.addColorStop(1, "rgba(255,70,85,0)");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 16, 256);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  }, []);
+  useFrame((_, delta) => {
+    if (animate && grid.current) grid.current.position.z = (grid.current.position.z + delta * 1.6) % 4;
+  });
+  return (
+    <>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.76, -60]}>
+        <planeGeometry args={[600, 400]} />
+        <meshBasicMaterial color="#050306" />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.71, -44]}>
+        <planeGeometry args={[18, 80]} />
+        <meshBasicMaterial map={reflection} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.5} />
+      </mesh>
+      <group ref={grid} position={[0, -1.7, 0]}>
+        <Grid
+          infiniteGrid
+          cellSize={1}
+          sectionSize={4}
+          cellThickness={0.6}
+          sectionThickness={1.25}
+          cellColor="#3d0810"
+          sectionColor="#ff2e44"
+          fadeDistance={90}
+          fadeStrength={1.4}
+        />
+      </group>
+    </>
+  );
+}
+
 // Where the emblem floats on each page, so moving between pages feels like
-// moving through the arena. Inside the app it keeps to the edges, far back and
-// at half glow, so it never sits bright behind a list someone is reading; only
-// the sign-in screen shows it big and at full glow.
+// moving through the arena. Inside the app it keeps to the edges at half glow
+// so it never sits bright behind a list someone is reading; the sign-in
+// screen shows it big, centred in front of the sun.
 const pose = (x: number, y: number, z: number, scale: number, glow = 0.5) => ({ position: new THREE.Vector3(x, y, z), scale, glow });
 const POSES: Record<string, { position: THREE.Vector3; scale: number; glow: number }> = {
-  login: pose(0, 1.25, 0, 1.25, 1),
-  airdrop: pose(3.4, -0.55, -3.2, 0.85),
-  party: pose(-3.4, -0.45, -3.2, 0.85),
-  score: pose(0, 1.95, -4, 0.95),
-  mine: pose(3.4, 0.7, -3.4, 0.85),
-  leave: pose(-3.3, 0.9, -3.4, 0.8),
-  log: pose(3.1, 1.4, -3.6, 0.85),
-  admin: pose(3.4, -0.75, -3.6, 0.85),
-  more: pose(-3.1, -0.5, -3.2, 0.85),
-  summary: pose(-3.3, 1.25, -3.6, 0.85),
+  login: pose(0, 2.1, -2, 0.7, 1),
+  airdrop: pose(3.5, -0.4, -3.2, 0.85),
+  party: pose(-3.5, -0.35, -3.2, 0.85),
+  score: pose(0, 2.3, -4.5, 0.9),
+  summary: pose(-3.4, 1.3, -3.6, 0.85),
+  mine: pose(3.5, 0.8, -3.4, 0.85),
+  leave: pose(-3.4, 1.0, -3.4, 0.8),
+  log: pose(3.2, 1.5, -3.6, 0.85),
+  admin: pose(3.5, -0.6, -3.6, 0.85),
+  more: pose(-3.2, -0.4, -3.2, 0.85),
 };
-// Base opacity of each glowing part, scaled by the pose's glow.
 const RIM = 1, LOGO = 1, RING_A = 0.85, RING_B = 0.7, RING_C = 0.6;
 
-function Emblem({ mode }: { mode: string }) {
+function Emblem({ mode, animate }: { mode: string; animate: boolean }) {
   const rig = useRef<THREE.Group>(null);
   const badge = useRef<THREE.Group>(null);
   const ringA = useRef<THREE.Mesh>(null);
@@ -59,7 +240,8 @@ function Emblem({ mode }: { mode: string }) {
   const ringBMat = useRef<THREE.MeshBasicMaterial>(null);
   const ringCMat = useRef<THREE.MeshBasicMaterial>(null);
   const light = useRef<THREE.PointLight>(null);
-  const glow = useRef(POSES.airdrop.glow);
+  const start = POSES[mode] || POSES.airdrop;
+  const glow = useRef(start.glow);
   const logo = useTexture("/5k-logo.png");
   logo.colorSpace = THREE.SRGBColorSpace;
   const target = useRef(new THREE.Vector3()).current;
@@ -71,21 +253,20 @@ function Emblem({ mode }: { mode: string }) {
       firstMode.current = false;
       return;
     }
-    spin.current += Math.PI * 2;
-  }, [mode]);
+    if (animate) spin.current += Math.PI * 2;
+  }, [mode, animate]);
 
   useFrame(({ clock }, delta) => {
-    const t = clock.getElapsedTime();
+    const t = animate ? clock.getElapsedTime() : 0;
     const pose = POSES[mode] || POSES.airdrop;
     spin.current *= Math.pow(0.04, delta);
-    // Glide between poses (frame-rate independent easing).
-    const ease = 1 - Math.pow(0.02, delta);
+    // Glide between poses (frame-rate independent); a still scene snaps.
+    const ease = animate ? 1 - Math.pow(0.02, delta) : 1;
     if (rig.current) {
       target.copy(pose.position);
       target.y += Math.sin(t * 1.1) * 0.06;
       rig.current.position.lerp(target, ease);
-      const s = THREE.MathUtils.lerp(rig.current.scale.x, pose.scale, ease);
-      rig.current.scale.setScalar(s);
+      rig.current.scale.setScalar(THREE.MathUtils.lerp(rig.current.scale.x, pose.scale, ease));
     }
     glow.current = THREE.MathUtils.lerp(glow.current, pose.glow, ease);
     const g = glow.current;
@@ -112,7 +293,7 @@ function Emblem({ mode }: { mode: string }) {
   });
 
   return (
-    <group ref={rig} position={POSES.airdrop.position.toArray()} scale={POSES.airdrop.scale}>
+    <group ref={rig} position={start.position.toArray()} scale={start.scale}>
       <pointLight ref={light} color="#ff2a3d" intensity={9} distance={7} position={[0, 0, 1.4]} />
       <pointLight color="#ff9aa5" intensity={2} distance={4} position={[-1, 1, 1]} />
       <group ref={badge}>
@@ -156,45 +337,74 @@ function Emblem({ mode }: { mode: string }) {
   );
 }
 
-// Neon grid floor that slowly runs towards the viewer.
-function Floor() {
-  const floor = useRef<THREE.Group>(null);
-  useFrame((_, delta) => {
-    if (floor.current) floor.current.position.z = (floor.current.position.z + delta * 0.4) % 2;
-  });
-  return (
-    <group ref={floor} position={[0, -1.7, 0]}>
-      <Grid
-        infiniteGrid
-        cellSize={0.5}
-        sectionSize={2}
-        cellThickness={0.55}
-        sectionThickness={1.1}
-        cellColor="#4a0910"
-        sectionColor="#ff2a3d"
-        fadeDistance={24}
-        fadeStrength={1.7}
-      />
-    </group>
-  );
-}
-
-// The camera drifts with the mouse for a little parallax.
-function CameraRig() {
-  useFrame(({ camera, pointer }, delta) => {
+// Camera: on the sign-in screen it first flies in from high above the arena
+// (the sign-in card waits for it via <html data-flyin>); afterwards it drifts
+// a little with the mouse.
+const REST = new THREE.Vector3(0, 0.9, 7);
+const FLY_FROM = new THREE.Vector3(0, 11, 46);
+const LOOK = new THREE.Vector3(0, 1.1, -12);
+function CameraRig({ animate, flyIn }: { animate: boolean; flyIn: boolean }) {
+  const flight = useRef<{ start: number | null; done: boolean }>({ start: null, done: !flyIn });
+  const aim = useRef(new THREE.Vector3()).current;
+  const look = useRef(LOOK.clone()).current;
+  useEffect(() => {
+    if (!flyIn) return;
+    document.documentElement.dataset.flyin = "1";
+    // Never leave the sign-in card hidden, even if frames stop arriving.
+    const safety = window.setTimeout(() => {
+      document.documentElement.dataset.flyin = "0";
+    }, 4500);
+    return () => {
+      window.clearTimeout(safety);
+      document.documentElement.dataset.flyin = "0";
+    };
+  }, [flyIn]);
+  useFrame(({ camera, pointer, clock }, delta) => {
+    const f = flight.current;
+    if (!f.done) {
+      if (f.start === null) f.start = clock.getElapsedTime();
+      const p = Math.min(1, (clock.getElapsedTime() - f.start) / 3.2);
+      const eased = 1 - Math.pow(1 - p, 3);
+      camera.position.lerpVectors(FLY_FROM, REST, eased);
+      look.set(0, THREE.MathUtils.lerp(-6, LOOK.y, eased), LOOK.z);
+      camera.lookAt(look);
+      if (p >= 1) {
+        f.done = true;
+        document.documentElement.dataset.flyin = "0";
+      }
+      return;
+    }
+    if (!animate) {
+      camera.position.copy(REST);
+      camera.lookAt(LOOK);
+      return;
+    }
     const ease = 1 - Math.pow(0.05, delta);
-    camera.position.x = THREE.MathUtils.lerp(camera.position.x, pointer.x * 0.45, ease);
-    camera.position.y = THREE.MathUtils.lerp(camera.position.y, 0.55 + pointer.y * 0.2, ease);
-    camera.lookAt(0, 0.25, 0);
+    aim.set(pointer.x * 0.5, REST.y + pointer.y * 0.22, REST.z);
+    camera.position.lerp(aim, ease);
+    camera.lookAt(LOOK);
   });
   return null;
 }
 
-export default function CommandScene() {
-  // Pause the render loop while the tab is backgrounded — no point spending
-  // GPU/battery animating a decorative scene no one can see.
+// Low tier: draw on demand at 30 frames a second instead of every display frame.
+function Ticker({ fps }: { fps: number }) {
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => {
+    const timer = window.setInterval(() => invalidate(), 1000 / fps);
+    return () => window.clearInterval(timer);
+  }, [fps, invalidate]);
+  return null;
+}
+
+export default function CommandScene({ tier, calm }: { tier: SceneTier; calm: boolean }) {
+  // Pause entirely while the tab is in the background.
   const [tabVisible, setTabVisible] = useState(true);
-  const mode = useSceneMode();
+  const mode = usePageMode();
+  const high = tier === "high";
+  const animate = !calm;
+  // Fly in only when the scene opens on the sign-in screen.
+  const [flyIn] = useState(() => animate && (document.documentElement.dataset.sceneMode || "login") === "login");
 
   useEffect(() => {
     const onVisibility = () => setTabVisible(!document.hidden);
@@ -202,23 +412,41 @@ export default function CommandScene() {
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
+  const frameloop = !tabVisible ? "never" : calm || !high ? "demand" : "always";
   return (
     <div className="command-scene" aria-hidden="true">
       <Canvas
-        dpr={[1, 1.5]}
-        camera={{ position: [0, 0.55, 6.5], fov: 45 }}
-        gl={{ alpha: true, antialias: true }}
-        frameloop={tabVisible ? "always" : "never"}
+        dpr={high ? [1, 1.75] : [0.75, 1]}
+        camera={{ position: (flyIn ? FLY_FROM : REST).toArray(), fov: 45, near: 0.1, far: 400 }}
+        gl={{ alpha: false, antialias: high, powerPreference: high ? "high-performance" : "low-power" }}
+        frameloop={frameloop}
+        onCreated={({ gl }) => gl.setClearColor("#07040a")}
       >
-        <fog attach="fog" args={["#07080b", 6, 20]} />
+        <fog attach="fog" args={["#07040a", 24, 150]} />
         <ambientLight intensity={0.25} />
-        <CameraRig />
-        <Floor />
+        {!calm && !high && tabVisible && <Ticker fps={30} />}
+        <CameraRig animate={animate} flyIn={flyIn} />
+        <Sky />
+        <Stars radius={110} depth={40} count={high ? 1800 : 600} factor={3.2} saturation={0} fade speed={animate ? 0.5 : 0} />
+        <Sun animate={animate} />
+        <Mountains detail={high} />
+        <Floor animate={animate} />
         {/* The logo texture loads asynchronously. */}
         <Suspense fallback={null}>
-          <Emblem mode={mode} />
+          <Emblem mode={mode} animate={animate} />
         </Suspense>
-        <Sparkles count={70} scale={[14, 6, 6]} position={[0, 0.8, -1]} size={1.6} speed={0.35} noise={1.2} color="#ff4d5e" opacity={0.45} />
+        {animate && (
+          <Sparkles
+            count={high ? 90 : 36}
+            scale={[18, 7, 10]}
+            position={[0, 1.2, -3]}
+            size={high ? 2.2 : 1.8}
+            speed={0.35}
+            noise={1.2}
+            color="#ff6a5c"
+            opacity={0.55}
+          />
+        )}
       </Canvas>
     </div>
   );
