@@ -339,8 +339,11 @@ export function CalendarBlock({ date }: { date: string }) {
   const face = useDisposable(
     () =>
       canvasTexture(256, 208, (ctx) => {
-        const day = String(Number(date.slice(8, 10)) || "");
-        const month = new Intl.DateTimeFormat("th-TH", { month: "short", timeZone: "UTC" }).format(new Date(`${date}T00:00:00Z`));
+        // A missing or malformed date draws a blank page instead of throwing.
+        const when = new Date(`${date}T00:00:00Z`);
+        const valid = !Number.isNaN(when.getTime());
+        const day = valid ? String(when.getUTCDate()) : "";
+        const month = valid ? new Intl.DateTimeFormat("th-TH", { month: "short", timeZone: "UTC" }).format(when) : "";
         ctx.fillStyle = "#f4f4f6";
         ctx.fillRect(0, 0, 256, 208);
         ctx.fillStyle = "#1a1a1f";

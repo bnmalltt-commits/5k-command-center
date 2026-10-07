@@ -1023,8 +1023,8 @@ html[data-flyin="1"] .login-stage .auth-card { opacity: 0; transform: translateY
 /* One transparent canvas draws every 3D icon, each clipped to its own box.
    It sits over the content but under the phone bar (40) and dialogs (60+). */
 .widget-layer { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
-.w3d { flex-shrink: 0; pointer-events: none; }
-.w3d__view { width: 100%; height: 100%; }
+.w3d { display: block; flex-shrink: 0; pointer-events: none; }
+.w3d__view { display: block; width: 100%; height: 100%; }
 .side-brand__badge { width: 54px; height: 54px; }
 .topbar__icon { width: 58px; height: 58px; margin: -6px 0; }
 .topbar:has(.topbar__icon) .topbar__logo { display: none; }

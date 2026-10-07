@@ -34,9 +34,10 @@ export function Widget3D({
   const mode = useWidgets3D();
   if (!mode) return <>{fallback}</>;
   return (
-    <div className={`w3d ${className}`} aria-hidden="true">
+    // A span, since some sit inside buttons (the home tiles).
+    <span className={`w3d ${className}`} aria-hidden="true">
       <WidgetView kind={kind} args={args} calm={mode === "calm"} />
-    </div>
+    </span>
   );
 }
 

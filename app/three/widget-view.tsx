@@ -107,7 +107,7 @@ function Stage({ kind, args, calm }: { kind: WidgetKind; args: WidgetArgs; calm:
 
 export default function WidgetView({ kind, args, calm }: { kind: WidgetKind; args: WidgetArgs; calm: boolean }) {
   return (
-    <View className="w3d__view">
+    <View as="span" className="w3d__view">
       <Stage kind={kind} args={args} calm={calm} />
     </View>
   );
