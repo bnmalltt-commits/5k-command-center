@@ -229,6 +229,7 @@ export default function PodiumScene({ calm, watch }: { calm: boolean; watch: str
   return (
     <div ref={host} className="podium__gl" aria-hidden="true">
       <Canvas
+        style={{ pointerEvents: "none" }}
         orthographic
         camera={{ zoom: 1, position: [0, 0, 500], near: 1, far: 1200 }}
         dpr={low ? 1 : [1, 2]}

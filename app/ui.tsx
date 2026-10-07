@@ -88,17 +88,23 @@ export function Dot({ tone }: { tone: "green" | "amber" | "red" | "idle" }) {
   return <span className={`ui-dot ui-dot--${tone}`} aria-hidden="true" />;
 }
 
+// Rendered 3D art for empty lists (public/art/gen/empty/*.webp).
+export type EmptyArt = "crate" | "team" | "calendar" | "trophy" | "check";
+
 export function EmptyState({
   title,
   hint,
   action,
+  art,
 }: {
   title: string;
   hint?: string;
   action?: ReactNode;
+  art?: EmptyArt;
 }) {
   return (
     <div className="ui-empty">
+      {art && <img src={`/art/gen/empty/${art}.webp`} alt="" className="ui-empty__art" width={132} height={132} loading="lazy" />}
       <p className="ui-empty__title">{title}</p>
       {hint && <p className="ui-empty__hint">{hint}</p>}
       {action && <div className="ui-empty__action">{action}</div>}

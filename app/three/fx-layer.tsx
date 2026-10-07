@@ -1,9 +1,9 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { RoundedBox } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { Crate, Parachute, useStudioEnv } from "./models";
 import { onFx, sceneTier, type FxKind } from "./prefs";
 
 // One-off 3D moments over the page, each in its own short-lived transparent
@@ -16,6 +16,7 @@ const easeOut = (p: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
 const clamp01 = (p: number) => Math.min(1, Math.max(0, p));
 
 type Anchor = { x: number; y: number } | null;
+const CRATE_PX = 70;
 
 export default function FxLayer() {
   const [fx, setFx] = useState<{ kind: FxKind; id: number; anchor: Anchor } | null>(null);
@@ -44,11 +45,11 @@ export default function FxLayer() {
   return (
     <div className="fx-layer" aria-hidden="true">
       {fx.kind === "airdrop" ? (
-        <Canvas key={fx.id} orthographic camera={{ zoom: 1, position: [0, 0, 600], near: 1, far: 2000 }} dpr={low ? 1 : [1, 1.75]} gl={{ alpha: true, antialias: !low }}>
+        <Canvas key={fx.id} orthographic camera={{ zoom: 1, position: [0, 0, 600], near: 1, far: 2000 }} dpr={low ? 1 : [1, 1.75]} gl={{ alpha: true, antialias: !low }} style={{ pointerEvents: "none" }}>
           <AirdropDrop anchor={fx.anchor} low={low} />
         </Canvas>
       ) : (
-        <Canvas key={fx.id} camera={{ position: [0, 0.6, 10], fov: 50 }} dpr={low ? 1 : [1, 1.75]} gl={{ alpha: true, antialias: !low }}>
+        <Canvas key={fx.id} camera={{ position: [0, 0.6, 10], fov: 50 }} dpr={low ? 1 : [1, 1.75]} gl={{ alpha: true, antialias: !low }} style={{ pointerEvents: "none" }}>
           <Fireworks low={low} />
         </Canvas>
       )}
@@ -57,24 +58,6 @@ export default function FxLayer() {
 }
 
 // ---------- Airdrop: crate on a parachute, landing on the mission card ----------
-
-const CANOPY_PANELS = 12;
-function canopyGeometry() {
-  const g = new THREE.SphereGeometry(72, 36, 10, 0, Math.PI * 2, 0, Math.PI / 2.35);
-  const pos = g.attributes.position;
-  const colors = new Float32Array(pos.count * 3);
-  const a = new THREE.Color("#ff3d4f");
-  const b = new THREE.Color("#a90f22");
-  for (let i = 0; i < pos.count; i++) {
-    const angle = Math.atan2(pos.getZ(i), pos.getX(i)) + Math.PI;
-    const panel = Math.floor((angle / (Math.PI * 2)) * CANOPY_PANELS);
-    const c = panel % 2 ? a : b;
-    colors.set([c.r, c.g, c.b], i * 3);
-  }
-  g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-  g.computeVertexNormals();
-  return g;
-}
 
 function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
   const size = useThree((state) => state.size);
@@ -91,27 +74,6 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
   // Wall-clock time since the moment started, so a slow device skips frames
   // instead of running late past the layer closing.
   const started = useRef(performance.now());
-  const canopy = useMemo(canopyGeometry, []);
-  // Cords from the canopy rim down to the crate's top corners.
-  const cords = useMemo(() => {
-    const rimY = 116 + 72 * Math.cos(Math.PI / 2.35);
-    const rimR = 72 * Math.sin(Math.PI / 2.35);
-    const points: number[] = [];
-    const corners = [
-      [-34, 36, -34],
-      [34, 36, -34],
-      [34, 36, 34],
-      [-34, 36, 34],
-    ];
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const corner = corners[i % 4];
-      points.push(Math.cos(a) * rimR, rimY, Math.sin(a) * rimR, corner[0], corner[1], corner[2]);
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute("position", new THREE.Float32BufferAttribute(points, 3));
-    return g;
-  }, []);
   const sparkCount = low ? 40 : 90;
   const sparkData = useMemo(() => {
     const velocity = new Float32Array(sparkCount * 3);
@@ -125,6 +87,7 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
     return { velocity, geometry: g };
   }, [sparkCount]);
 
+  useStudioEnv();
   const LAND = 1.15, OPEN = 1.35;
   useFrame(() => {
     const t = (performance.now() - started.current) / 1000;
@@ -142,7 +105,7 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
     if (chute.current) {
       const c = clamp01((t - LAND) / 0.4);
       chute.current.scale.set(1 - c * 0.4, Math.max(0.001, 1 - c), 1 - c * 0.4);
-      chute.current.position.x = c * 70;
+      chute.current.position.x = c;
       chute.current.visible = c < 1;
     }
     if (ring.current) {
@@ -153,7 +116,8 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
     }
     if (lid.current) {
       const o = clamp01((t - OPEN) / 0.7);
-      lid.current.position.set(o * 40, 36 + easeOut(o) * 190, 0);
+      // In crate units (the crate is drawn 70px wide), from its hinge.
+      lid.current.position.set(o * 0.57, 0.41 + easeOut(o) * 2.7, -0.54);
       lid.current.rotation.set(o * 0.9, 0, -o * 1.4);
       lid.current.visible = o < 1;
     }
@@ -187,36 +151,13 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
       <directionalLight position={[120, 400, 300]} intensity={2.2} />
       <pointLight position={[0, 0, 160]} color="#ff4655" intensity={2.5} distance={600} decay={0} />
       <group ref={drop}>
-        {/* Parachute: alternating red panels with white cords. */}
-        <group ref={chute}>
-          <mesh geometry={canopy} position={[0, 116, 0]}>
-            <meshStandardMaterial vertexColors flatShading side={THREE.DoubleSide} roughness={0.6} />
-          </mesh>
-          <lineSegments geometry={cords}>
-            <lineBasicMaterial color="#f4f4f6" transparent opacity={0.65} />
-          </lineSegments>
-        </group>
-        {/* The crate, turned to the same isometric angle as the site's art. */}
-        <group rotation={[0.42, Math.PI / 4, 0]}>
-          <RoundedBox args={[70, 58, 70]} radius={6} smoothness={3} position={[0, -6, 0]}>
-            <meshStandardMaterial color="#26262d" metalness={0.55} roughness={0.45} />
-          </RoundedBox>
-          <mesh position={[0, -6, 0]}>
-            <boxGeometry args={[12, 59, 71]} />
-            <meshStandardMaterial color="#ff4655" emissive="#8f0d1d" emissiveIntensity={0.6} roughness={0.5} />
-          </mesh>
-          <mesh position={[0, -6, 0]}>
-            <boxGeometry args={[71, 59, 12]} />
-            <meshStandardMaterial color="#e3283b" emissive="#8f0d1d" emissiveIntensity={0.6} roughness={0.5} />
-          </mesh>
-          <group ref={lid} position={[0, 36, 0]}>
-            <RoundedBox args={[76, 12, 76]} radius={4} smoothness={3}>
-              <meshStandardMaterial color="#34343c" metalness={0.55} roughness={0.4} />
-            </RoundedBox>
-            <mesh>
-              <boxGeometry args={[12, 13, 77]} />
-              <meshStandardMaterial color="#ff4655" emissive="#8f0d1d" emissiveIntensity={0.6} />
-            </mesh>
+        <group scale={CRATE_PX}>
+          <group ref={chute}>
+            <Parachute />
+          </group>
+          {/* The crate, turned to the same isometric angle as the site's art. */}
+          <group rotation={[0.42, Math.PI / 4, 0]}>
+            <Crate lidRef={lid} />
           </group>
         </group>
         {/* The light pouring out of the open crate. */}
@@ -228,7 +169,7 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
           <pointsMaterial color="#ffb08a" size={5} sizeAttenuation={false} transparent blending={THREE.AdditiveBlending} depthWrite={false} />
         </points>
         {/* Landing ring on the card. */}
-        <mesh ref={ring} position={[0, -44, -10]} rotation={[-1.2, 0, 0]} visible={false}>
+        <mesh ref={ring} position={[0, -36, -10]} rotation={[-1.2, 0, 0]} visible={false}>
           <ringGeometry args={[0.86, 1, 64]} />
           <meshBasicMaterial color="#ff4655" transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} />
         </mesh>

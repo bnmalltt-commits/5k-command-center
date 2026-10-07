@@ -493,6 +493,19 @@ body > main { position: relative; z-index: 1; background-color: transparent !imp
   background: url("/art/radar.svg") center / contain no-repeat;
   opacity: 0.9;
 }
+/* With rendered art, the art replaces the radar mark. Its black ground melts
+   into the dark panel (lighten) and its edges fade out. */
+.ui-empty:has(.ui-empty__art)::before { display: none; }
+.ui-empty__art {
+  display: block;
+  width: 132px;
+  height: 132px;
+  margin: -12px auto 6px;
+  mix-blend-mode: lighten;
+  -webkit-mask-image: radial-gradient(closest-side, #000 72%, transparent);
+  mask-image: radial-gradient(closest-side, #000 72%, transparent);
+  animation: drift 6s ease-in-out infinite;
+}
 .ui-empty__title { margin: 0; color: var(--ui-text); font-size: 15px; font-weight: 600; }
 .ui-empty__hint { margin: 4px 0 0; color: var(--ui-text-3); font-size: 13.5px; }
 .ui-empty__action { margin-top: 14px; }
@@ -1004,6 +1017,57 @@ html[data-flyin="1"] .login-stage .auth-card { opacity: 0; transform: translateY
 .more-scene b { display: block; color: var(--ui-text); font-size: 14.5px; font-weight: 600; }
 .more-scene span { color: var(--ui-text-3); font-size: 12.5px; }
 .more-scene .scene-toggle { flex: 0 1 260px; }
+
+/* ---- 3D pieces in the page ------------------------------------------------- */
+
+/* One transparent canvas draws every 3D icon, each clipped to its own box.
+   It sits over the content but under the phone bar (40) and dialogs (60+). */
+.widget-layer { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
+.w3d { flex-shrink: 0; pointer-events: none; }
+.w3d__view { width: 100%; height: 100%; }
+.side-brand__badge { width: 54px; height: 54px; }
+.topbar__icon { width: 58px; height: 58px; margin: -6px 0; }
+.topbar:has(.topbar__icon) .topbar__logo { display: none; }
+/* The crate keeps to the corner the heading leaves free (the 3D draws over
+   the card, so it must never share space with text or the round tiles). */
+.mission__art.mission__art--3d { top: 4px; right: 4px; width: 190px; height: 150px; opacity: 1; -webkit-mask-image: none; mask-image: none; animation: none; }
+@container (max-width: 640px) {
+  .mission__art.mission__art--3d { top: 4px; right: 4px; width: 112px; height: 104px; }
+  .mission:has(.mission__art--3d) .mission__head { max-width: calc(100% - 96px); }
+}
+@container (max-width: 420px) {
+  .mission__art.mission__art--3d { top: 2px; right: 2px; width: 86px; height: 84px; }
+  .mission:has(.mission__art--3d) .mission__head { max-width: calc(100% - 70px); }
+}
+/* Tile icons only where the tiles are wide enough to share with one. */
+.hud-tile__3d { display: none; position: absolute; right: 10px; bottom: 10px; width: 66px; height: 66px; }
+@container (min-width: 780px) {
+  .hud-tile__3d { display: block; }
+  .hud-tile:has(> .hud-tile__3d) { padding-right: 84px; }
+}
+@container (min-width: 500px) and (max-width: 559.98px) {
+  .hud-tile__3d { display: block; }
+  .hud-tile:has(> .hud-tile__3d) { padding-right: 84px; }
+}
+.sum-award { position: relative; }
+.sum-award__3d { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; }
+.sum-award:has(> .sum-award__3d) { padding-right: 54px; }
+.squad-hero { width: 100%; height: 150px; margin-top: 6px; }
+.squad-hero--create { margin: -10px 0 10px; }
+.points-chart {
+  overflow: hidden;
+  border: 1px solid var(--ui-line);
+  border-radius: 14px;
+  background: radial-gradient(80% 100% at 50% 100%, rgba(255, 70, 85, 0.12), transparent 70%), rgba(0, 0, 0, 0.28);
+}
+.points-chart__gl { width: 100%; height: 170px; }
+.points-chart__axis { display: flex; justify-content: space-between; gap: 8px; padding: 4px 14px 10px; color: var(--ui-text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+@media (max-width: 1023.98px) {
+  .topbar__icon { width: 46px; height: 46px; margin: 0; }
+}
+@media (max-width: 639px) {
+  .points-chart__gl { height: 140px; }
+}
 
 /* ---- 3D moments ------------------------------------------------------------ */
 

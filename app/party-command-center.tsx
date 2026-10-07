@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Check, Crown, Lock, Plus, Repeat, Store, X } from "lucide-react";
 import { Picker } from "./picker";
+import { Widget3D } from "./three/widget";
 import {
   ConfirmDialog,
   Dot,
@@ -111,6 +112,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
             }
             flush
           >
+            <Widget3D kind="squad" args={{ filled: party.members.length, wide: true }} className="squad-hero" />
             {/* Five seats: who's in, who leads, who's online, what's free. */}
             <div className="squad">
               {party.members.map((member: any) => {
@@ -318,7 +320,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                 )}
               </>
             ) : (
-              <EmptyState title="ยังไม่มีประวัติหลักฐานทีม" hint="ส่งหลักฐานงัดร้านหรือลูปจากด้านบนเพื่อเริ่มเก็บคะแนน" />
+              <EmptyState art="crate" title="ยังไม่มีประวัติหลักฐานทีม" hint="ส่งหลักฐานงัดร้านหรือลูปจากด้านบนเพื่อเริ่มเก็บคะแนน" />
             )}
           </Panel>
         </>
@@ -330,6 +332,8 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
           title="สร้างทีมของคุณ"
           subtitle="ต้องมีทีมก่อนถึงจะส่งงัดร้าน/ลูปได้ · ทีมคนเดียวก็ได้"
         >
+          {/* The seats fill as friends are picked: you plus each invitee. */}
+          <Widget3D kind="squad" args={{ filled: 1 + inviteeIds.length, wide: true }} className="squad-hero squad-hero--create" />
           <form
             className="space-y-6"
             onSubmit={(event) => {
@@ -423,7 +427,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
               />
             ))
           ) : (
-            <EmptyState title="ยังไม่มีทีมที่เปิดรับ" hint="สร้างทีมของคุณเองได้จากแท็บแรก" />
+            <EmptyState art="team" title="ยังไม่มีทีมที่เปิดรับ" hint="สร้างทีมของคุณเองได้จากแท็บแรก" />
           )}
         </Panel>
       )}
@@ -457,7 +461,7 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
               />
             ))
           ) : (
-            <EmptyState title="ยังไม่มีคำเชิญ" hint="เมื่อมีคนชวนเข้าทีม คำเชิญจะขึ้นที่นี่" />
+            <EmptyState art="team" title="ยังไม่มีคำเชิญ" hint="เมื่อมีคนชวนเข้าทีม คำเชิญจะขึ้นที่นี่" />
           )}
         </Panel>
       )}

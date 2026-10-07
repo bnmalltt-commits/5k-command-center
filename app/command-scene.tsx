@@ -416,6 +416,7 @@ export default function CommandScene({ tier, calm }: { tier: SceneTier; calm: bo
   return (
     <div className="command-scene" aria-hidden="true">
       <Canvas
+        style={{ pointerEvents: "none" }}
         dpr={high ? [1, 1.75] : [0.75, 1]}
         camera={{ position: (flyIn ? FLY_FROM : REST).toArray(), fov: 45, near: 0.1, far: 400 }}
         gl={{ alpha: false, antialias: high, powerPreference: high ? "high-performance" : "low-power" }}

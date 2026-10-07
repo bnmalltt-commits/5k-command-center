@@ -32,6 +32,7 @@ import { Picker, shrinkImage } from "./picker";
 import { playFx } from "./three/prefs";
 import { Podium3D } from "./three/podium";
 import { SceneToggle } from "./three/toggle";
+import { Widget3D, WidgetStage, useWidgets3D } from "./three/widget";
 import {
   Chips,
   Avatar,
@@ -411,9 +412,16 @@ function MissionCard({
   };
   return (
     <section className="mission">
-      <div className="mission__art" aria-hidden="true">
-        <img src="/art/airdrop.svg" alt="" />
-      </div>
+      <Widget3D
+        kind="crate"
+        args={{ done }}
+        className="mission__art mission__art--3d"
+        fallback={
+          <div className="mission__art" aria-hidden="true">
+            <img src="/art/airdrop.svg" alt="" />
+          </div>
+        }
+      />
       <header className="mission__head">
         <span className="mission__count">
           <Ring value={approved} max={ROUNDS.length} size={80} />
@@ -554,7 +562,7 @@ function AirdropHistory({ data }: { data: Data }) {
           )}
         </>
       ) : (
-        <EmptyState title="ยังไม่มีประวัติแอร์ดรอป" hint="ส่งหลักฐานรอบแรกจากการ์ดภารกิจด้านบน" />
+        <EmptyState art="crate" title="ยังไม่มีประวัติแอร์ดรอป" hint="ส่งหลักฐานรอบแรกจากการ์ดภารกิจด้านบน" />
       )}
     </Panel>
   );
@@ -821,6 +829,7 @@ function SquadRanking({
         ))
       ) : (
         <EmptyState
+          art="trophy"
           title={
             compact
               ? "ยังไม่มีใครได้แต้มเดือนนี้"
@@ -975,6 +984,7 @@ function LeaveRoom({
           </>
         ) : (
           <EmptyState
+            art={data.leaveRequests.length ? undefined : "calendar"}
             title={
               data.leaveRequests.length
                 ? "ไม่พบรายการที่ค้นหา"
@@ -1021,6 +1031,17 @@ function MyPoints({ data }: { data: Data }) {
   const total = inMonth.reduce((sum: number, r: any) => sum + r.points, 0);
   const days = [...byDay.keys()].sort().reverse();
   const mine = data.team?.mine;
+  // The month as a row of 3D bars, one per day; days still to come are stubs.
+  const show3d = useWidgets3D();
+  const [year, mon] = month.split("-").map(Number);
+  const monthDays = new Date(Date.UTC(year, mon, 0)).getUTCDate();
+  const todayIndex = month === thisMonth ? Number(data.date.slice(8, 10)) - 1 : -1;
+  const perDay = Array.from({ length: monthDays }, (_, i) => {
+    if (todayIndex >= 0 && i > todayIndex) return null;
+    const parts = byDay.get(`${month}-${String(i + 1).padStart(2, "0")}`);
+    return parts ? [...parts.values()].reduce((a, b) => a + b, 0) : 0;
+  });
+  const best = Math.max(0, ...perDay.map((v) => v || 0));
   return (
     <Panel label="MY POINTS" title={monthLabel(month)} subtitle={month === thisMonth ? "เดือนนี้ · นับถึงวันนี้" : "ทั้งเดือน"} flush>
       <div className="space-y-4 p-5">
@@ -1046,6 +1067,21 @@ function MyPoints({ data }: { data: Data }) {
             </div>
           ))}
         </div>
+        {show3d && inMonth.length > 0 && (
+          <div className="points-chart">
+            <Widget3D
+              key={month}
+              kind="bars"
+              args={{ values: perDay, today: todayIndex }}
+              className="points-chart__gl"
+            />
+            <div className="points-chart__axis">
+              <span>วันที่ 1</span>
+              <span>วันที่ดีที่สุด {signed(best)}</span>
+              <span>วันที่ {monthDays}</span>
+            </div>
+          </div>
+        )}
         {month === thisMonth && mine && (
           <p className="text-sm text-[var(--ui-text-2)]">
             คะแนนทีมวันนี้ {mine.today}/{data.team?.perDay ?? 9}
@@ -1074,7 +1110,7 @@ function MyPoints({ data }: { data: Data }) {
           );
         })
       ) : (
-        <EmptyState title="ยังไม่มีแต้มในเดือนนี้" hint="ส่งหลักฐานแอร์ดรอปหรือหลักฐานทีม แต้มจะขึ้นที่นี่หลังตรวจผ่าน" />
+        <EmptyState art="crate" title="ยังไม่มีแต้มในเดือนนี้" hint="ส่งหลักฐานแอร์ดรอปหรือหลักฐานทีม แต้มจะขึ้นที่นี่หลังตรวจผ่าน" />
       )}
     </Panel>
   );
@@ -1255,6 +1291,7 @@ function SummaryAward({ data, icon: Icon, label, winner, unit }: { data: Data; i
   const names = memberNames(data);
   return (
     <div className="sum-award tilt">
+      {winner && <Widget3D kind="trophy" args={{ tone: "gold" }} className="sum-award__3d" />}
       <span className="sum-award__label">
         <Icon className="h-4 w-4" aria-hidden="true" />
         {label}
@@ -1286,7 +1323,7 @@ function MonthlyResults({ data, summary }: { data: Data; summary: any }) {
   // Opens on the last finished month: that's the one with final results.
   const [month, setMonth] = useState(() => (months.find((m) => m.complete) || months[0])?.month);
   const entry = months.find((m) => m.month === month) || months[0];
-  if (!entry) return <EmptyState title="ยังไม่มีผลรายเดือน" />;
+  if (!entry) return <EmptyState art="trophy" title="ยังไม่มีผลรายเดือน" />;
   const names = memberNames(data);
   const ranks = competitionRanks(entry.ranking);
   const a = entry.awards;
@@ -1343,7 +1380,7 @@ function MonthlyResults({ data, summary }: { data: Data; summary: any }) {
             )}
           </>
         ) : (
-          <EmptyState title="ยังไม่มีใครได้แต้มเดือนนี้" />
+          <EmptyState art="trophy" title="ยังไม่มีใครได้แต้มเดือนนี้" />
         )}
         <div className="sum-awards">
           <SummaryAward data={data} icon={Crosshair} label="ส่งแอร์ดรอปผ่านเยอะสุด" winner={a.airdrop} unit="รอบ" />
@@ -1790,6 +1827,7 @@ function SubmissionLog({ data }: { data: Data }) {
         </>
       ) : (
         <EmptyState
+          art={data.submissionLog.length ? undefined : "crate"}
           title={
             data.submissionLog.length
               ? "ไม่พบรายการที่ค้นหา"
@@ -2432,7 +2470,7 @@ function AdminCommandCenter({
           ) : data.pending.length ? (
             noMatch
           ) : (
-            <EmptyState title="ไม่มีรายการรอตรวจในตอนนี้" hint="คิวตรวจว่างแล้ว" />
+            <EmptyState art="check" title="ไม่มีรายการรอตรวจในตอนนี้" hint="คิวตรวจว่างแล้ว" />
           ))}
 
         {tab === "members" &&
@@ -2579,7 +2617,7 @@ function AdminCommandCenter({
           ) : data.adminParties.length ? (
             noMatch
           ) : (
-            <EmptyState title="ไม่มีปาร์ตี้ที่กำลังใช้งาน" />
+            <EmptyState art="team" title="ไม่มีปาร์ตี้ที่กำลังใช้งาน" />
           ))}
 
         {tab === "points" &&
@@ -2624,7 +2662,7 @@ function AdminCommandCenter({
           ) : data.ledger.length ? (
             noMatch
           ) : (
-            <EmptyState title="ยังไม่มีประวัติแต้ม" />
+            <EmptyState art="trophy" title="ยังไม่มีประวัติแต้ม" />
           ))}
 
         {tab === "leave" &&
@@ -2658,7 +2696,7 @@ function AdminCommandCenter({
           ) : data.adminLeaves.length ? (
             noMatch
           ) : (
-            <EmptyState title="ยังไม่มีรายการลา" hint="สมาชิกแจ้งลาได้จากหน้าห้องลา" />
+            <EmptyState art="calendar" title="ยังไม่มีรายการลา" hint="สมาชิกแจ้งลาได้จากหน้าห้องลา" />
           ))}
 
         {tab === "attendance" &&
@@ -2686,6 +2724,7 @@ function AdminCommandCenter({
             noMatch
           ) : (
             <EmptyState
+              art={attFilter === "missing" ? "check" : undefined}
               title={
                 attFilter === "missing"
                   ? "ทุกคนส่งครบหรือแจ้งลาแล้ว"
@@ -3288,6 +3327,21 @@ export default function Home() {
     more: ["เพิ่มเติม", "ทุกเมนูของแก๊ง"],
   };
   const [pageTitle, pageSub] = PAGE_META[view] || PAGE_META.airdrop;
+  // Each page's own 3D icon beside its heading.
+  const rankTone = (rank?: number | null) =>
+    rank === 1 ? "gold" : rank === 2 ? "silver" : rank === 3 ? "bronze" : rank && rank <= 10 ? "red" : "steel";
+  const PAGE_ICONS: Record<string, { kind: Parameters<typeof Widget3D>[0]["kind"]; args?: Parameters<typeof Widget3D>[0]["args"] }> = {
+    airdrop: { kind: "crate", args: { chute: false } },
+    party: { kind: "squad", args: { filled: data.myParty?.members?.length || 0 } },
+    score: { kind: "trophy", args: { tone: rankTone(data.me.monthRank) } },
+    summary: { kind: "trophy", args: { tone: "gold" } },
+    leave: { kind: "calendar", args: { date: data.date } },
+    mine: { kind: "coins" },
+    log: { kind: "clipboard" },
+    admin: { kind: "shield" },
+    more: { kind: "badge" },
+  };
+  const pageIcon = PAGE_ICONS[view] || PAGE_ICONS.airdrop;
   const pendingCount = data.me.role === "admin" ? data.pendingCount || 0 : 0;
   const pendingBadge = pendingCount > 0 && (
     <span className="nav-badge" aria-label={`รอตรวจ ${pendingCount} รายการ`}>
@@ -3296,13 +3350,18 @@ export default function Home() {
   );
   return (
     <main className="command-shell">
+      <WidgetStage />
       <div className="command-desktop">
         {/* No fixed width: the grid tracks on .command-desktop own the column
             widths, and a hard w-* here overflows its track and covers the
             content column. */}
         <aside className="command-sidebar" aria-label="เมนู">
           <div className="side-brand">
-            <img src="/art/5k-mark.png" alt="5K Fivethousand" className="side-brand__mark" />
+            <Widget3D
+              kind="badge"
+              className="side-brand__badge"
+              fallback={<img src="/art/5k-mark.png" alt="5K Fivethousand" className="side-brand__mark" />}
+            />
             <div className="side-brand__text">
               <b>COMMAND</b>
               <span>CENTER</span>
@@ -3358,6 +3417,7 @@ export default function Home() {
         <section className="main-col min-w-0 flex-1">
           <header className="topbar">
             <img src="/art/5k-mark.png" alt="5K" className="topbar__logo" />
+            <Widget3D key={view} kind={pageIcon.kind} args={pageIcon.args} className="topbar__icon" />
             <div className="topbar__heading">
               <h1 className="topbar__title">{pageTitle}</h1>
               <p className="topbar__sub">{pageSub}</p>
@@ -3493,6 +3553,7 @@ export default function Home() {
                 onClick={() => setView("score")}
                 className="hud-tile tilt"
               >
+                <Widget3D kind="trophy" args={{ tone: rankTone(data.me.monthRank) }} className="hud-tile__3d" />
                 <span className="ui-eyebrow">อันดับเดือนนี้</span>
                 {data.me.monthRank ? (
                   <b
@@ -3524,6 +3585,7 @@ export default function Home() {
                 onClick={() => setView("party")}
                 className="hud-tile tilt"
               >
+                <Widget3D kind="squad" args={{ filled: data.myParty?.members?.length || 0 }} className="hud-tile__3d" />
                 <span className="ui-eyebrow">ทีมของคุณ</span>
                 <b className="hud-tile__value hud-tile__value--text">
                   {data.myParty?.name || "＋ สร้างทีม"}
