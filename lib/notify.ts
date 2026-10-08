@@ -168,12 +168,18 @@ export async function notifyEvidence({
 export async function notifyApproval({
   kind,
   approvedBy,
+  label,
+  points,
   month,
   people,
   loadImage,
 }: {
   kind: string;
   approvedBy: string;
+  // What the evidence itself is worth (e.g. "งัดร้าน", 3). Anything gained on
+  // top is team-quota penalty paid back by these team points.
+  label: string;
+  points: number;
   // Totals are this month's points (they reset each month), e.g. "ตุลาคม 2569".
   month: string;
   people: { name: string; before: number; after: number; discordId?: string | null }[];
@@ -186,7 +192,10 @@ export async function notifyApproval({
   try {
     const gain = (p: { before: number; after: number }) => {
       const d = p.after - p.before;
-      return `${d >= 0 ? "+" : ""}${d} แต้ม`;
+      const refund = d - points;
+      const total = `${d >= 0 ? "+" : ""}${d} แต้ม`;
+      // Spell out a refund so "+6" for a +3 shop raid isn't a mystery.
+      return refund > 0 ? `${total} (${label} +${points} · ได้แต้มที่โดนหักคืน +${refund})` : total;
     };
     const lines: Line[] =
       people.length === 1

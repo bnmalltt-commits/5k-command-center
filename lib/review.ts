@@ -70,6 +70,8 @@ export async function approveEvidence(admin: { id: unknown; display_name: string
         ? `${kindLabel} · ${updated.activity_date} · ${sentAt(updated.created_at)}`
         : `แอร์ดรอปรอบ ${updated.round_time} · ${updated.activity_date} · ${sentAt(updated.created_at)}`,
       approvedBy: admin.display_name,
+      label: kindLabel,
+      points,
       month: new Date(`${month}-01T00:00:00Z`).toLocaleDateString("th-TH", { month: "long", year: "numeric", timeZone: "UTC" }),
       // Only people this approval actually credited.
       people: await (async () => {
