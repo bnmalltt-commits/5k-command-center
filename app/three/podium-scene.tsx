@@ -2,14 +2,14 @@
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Lightformer, RoundedBox } from "@react-three/drei";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { sceneTier } from "./prefs";
 
 // Pillars and medals for the top three, drawn in an orthographic camera
 // whose units are CSS pixels of the .podium box, so every 3D piece sits
 // exactly where its hidden HTML twin is laid out.
-type Spot = { order: number; rank: number; delay: number; x: number; y: number; w: number; h: number; medal: { x: number; y: number; size: number } | null };
+type Spot = { order: number; rank: number; delay: number; x: number; y: number; w: number; h: number; medal: { x: number; y: number; size: number } | null; avatar: { x: number; y: number; size: number; src: string } | null };
 
 const METAL: Record<number, { color: string; glow: string; text: string }> = {
   1: { color: "#f5c542", glow: "#ffe17a", text: "#4a3200" },
@@ -56,8 +56,19 @@ function measure(root: HTMLElement): Spot[] {
       const mr = medalEl.getBoundingClientRect();
       medal = { x: s.x + mr.left - sr.left + mr.width / 2, y: s.y + mr.top - sr.top + mr.height / 2, size: Math.max(mr.width, mr.height) };
     }
+    // The profile picture becomes a 3D medallion (only real images: a
+    // letter placeholder stays as it is).
+    const img = slot.querySelector<HTMLImageElement>("img.avatar");
+    let avatar: Spot["avatar"] = null;
+    if (img?.currentSrc || img?.src) {
+      const s = offsetWithin(slot, root);
+      const sr = slot.getBoundingClientRect();
+      const ar = img.getBoundingClientRect();
+      avatar = { x: s.x + ar.left - sr.left + ar.width / 2, y: s.y + ar.top - sr.top + ar.height / 2, size: ar.width, src: img.currentSrc || img.src };
+    }
     return [{
       order,
+      avatar,
       rank: Number(base.dataset.rank || order),
       delay: order === 2 ? 0 : order === 1 ? 0.12 : 0.24,
       x: at.x,
@@ -193,6 +204,60 @@ function Coin({ spot, calm }: { spot: Spot; calm: boolean }) {
   );
 }
 
+// A profile picture as a metal-rimmed disc that sways; the HTML picture is
+// hidden only once the image has loaded into 3D (onReady).
+function AvatarCard({ spot, calm, onReady }: { spot: Spot; calm: boolean; onReady: (order: number, ok: boolean) => void }) {
+  const size = useThree((state) => state.size);
+  const card = useRef<THREE.Group>(null);
+  const [face, setFace] = useState<THREE.Texture | null>(null);
+  const a = spot.avatar!;
+  useEffect(() => {
+    let alive = true;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    loader.load(
+      a.src,
+      (texture) => {
+        if (!alive) return texture.dispose();
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.center.set(0.5, 0.5);
+        texture.rotation = Math.PI / 2;
+        setFace(texture);
+        onReady(spot.order, true);
+      },
+      undefined,
+      () => alive && onReady(spot.order, false),
+    );
+    return () => {
+      alive = false;
+      onReady(spot.order, false);
+    };
+  }, [a.src, spot.order, onReady]);
+  useEffect(() => () => face?.dispose(), [face]);
+  useFrame(({ clock }) => {
+    if (card.current) card.current.rotation.y = calm ? 0 : Math.sin(clock.elapsedTime * 0.9 + spot.order) * 0.45;
+  });
+  if (!face) return null;
+  const r = a.size / 2;
+  const m = metal(spot.rank);
+  return (
+    <group position={[a.x - size.width / 2, size.height / 2 - a.y, 60]}>
+      <group ref={card}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[r, r, Math.max(4, r * 0.16), 48]} />
+          <meshStandardMaterial attach="material-0" color={m.color} metalness={1} roughness={0.25} />
+          <meshBasicMaterial attach="material-1" map={face} toneMapped={false} />
+          <meshStandardMaterial attach="material-2" color={m.color} metalness={1} roughness={0.25} />
+        </mesh>
+        <mesh>
+          <torusGeometry args={[r + 1.5, Math.max(1.6, r * 0.07), 12, 64]} />
+          <meshStandardMaterial color={m.color} metalness={1} roughness={0.2} emissive={m.glow} emissiveIntensity={spot.rank === 1 ? 0.35 : 0.1} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
 export default function PodiumScene({ calm, watch }: { calm: boolean; watch: string }) {
   const host = useRef<HTMLDivElement>(null);
   const [spots, setSpots] = useState<Spot[]>([]);
@@ -217,6 +282,16 @@ export default function PodiumScene({ calm, watch }: { calm: boolean; watch: str
       seen.disconnect();
     };
   }, [watch]);
+
+  const [faces, setFaces] = useState<Record<number, boolean>>({});
+  const onFace = useCallback((order: number, ok: boolean) => setFaces((f) => (f[order] === ok ? f : { ...f, [order]: ok })), []);
+  useEffect(() => {
+    const root = host.current?.parentElement;
+    if (!root) return;
+    const names = Object.entries(faces).filter(([, ok]) => ok).map(([order]) => `podium--face-${order}`);
+    root.classList.add(...names);
+    return () => root.classList.remove(...names);
+  }, [faces]);
 
   // Hide the HTML pillars and medals only once the 3D ones are drawn.
   useEffect(() => {
@@ -247,6 +322,7 @@ export default function PodiumScene({ calm, watch }: { calm: boolean; watch: str
           <group key={`${watch}-${spot.order}`}>
             <Pillar spot={spot} calm={calm} />
             {spot.medal && <Coin spot={spot} calm={calm} />}
+            {spot.avatar && <AvatarCard key={spot.avatar.src} spot={spot} calm={calm} onReady={onFace} />}
           </group>
         ))}
       </Canvas>

@@ -5,6 +5,7 @@ import { Grid, Sparkles, Stars, useTexture } from "@react-three/drei";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { SceneTier } from "./three/prefs";
+import { pointer, trackPointer } from "./three/pointer";
 
 // "Night Arena", the 3D world behind the whole app: a striped synthwave sun
 // setting between neon wireframe mountains, a red grid floor running towards
@@ -42,9 +43,44 @@ function glowTexture(inner: string, outer: string) {
   return texture;
 }
 
+// The arena follows the gang's clock (Bangkok time): a golden afternoon
+// sun, the red evening of the rounds, magenta night, violet small hours.
+// In the half hour before a round (17:00, 20:00, 23:00, 01:00) the grid runs
+// faster and the sun pulses, as a nudge to get ready.
+type Palette = { sunTop: string; sunMid: string; sunBottom: string; skyMid: string; horizon: string };
+const PALETTES: Record<string, Palette> = {
+  day: { sunTop: "#ffe08a", sunMid: "#ff8a3d", sunBottom: "#e0442b", skyMid: "#1a0b0c", horizon: "#5a1a12" },
+  dusk: { sunTop: "#ffc27a", sunMid: "#ff4655", sunBottom: "#b80f25", skyMid: "#16050c", horizon: "#4f0b19" },
+  night: { sunTop: "#ff9ab0", sunMid: "#e0245c", sunBottom: "#7a0c3a", skyMid: "#12040f", horizon: "#3d0a2a" },
+  late: { sunTop: "#ffa8e0", sunMid: "#b02a8a", sunBottom: "#4a0c4a", skyMid: "#0c0512", horizon: "#2a0a2e" },
+};
+const ROUND_MINUTES = [17 * 60, 20 * 60, 23 * 60, 25 * 60]; // 01:00 is after midnight
+function arenaClock(at = new Date()) {
+  const [h, m] = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .format(at)
+    .split(":")
+    .map(Number);
+  const phase = h >= 5 && h < 16 ? "day" : h >= 16 && h < 20 ? "dusk" : h >= 20 ? "night" : "late";
+  // Minutes on a clock that runs past midnight until 05:00, so 01:00 is 25:00.
+  const now = (h < 5 ? h + 24 : h) * 60 + m;
+  const next = ROUND_MINUTES.find((round) => round >= now);
+  const until = next === undefined ? Infinity : next - now;
+  return { palette: PALETTES[phase], urgency: until <= 30 ? 1 - until / 30 : 0 };
+}
+function useArenaClock() {
+  const [clock, setClock] = useState(arenaClock);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(arenaClock()), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return clock;
+}
+// Ease a colour uniform towards a target (instantly when the scene is still).
+const towards = (uniform: { value: THREE.Color }, hex: string, k: number) => uniform.value.lerp(new THREE.Color(hex), k);
+
 // Sky dome: black overhead, deep crimson towards the horizon with a thin
 // glowing band right at it.
-function Sky() {
+function Sky({ palette, animate }: { palette: Palette; animate: boolean }) {
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -70,6 +106,14 @@ function Sky() {
       }),
     [],
   );
+  // A still scene only draws on request: redraw when the hour's colours change.
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => invalidate(), [palette, invalidate]);
+  useFrame((_, delta) => {
+    const k = animate ? 1 - Math.pow(0.3, delta) : 1;
+    towards(material.uniforms.mid, palette.skyMid, k);
+    towards(material.uniforms.horizon, palette.horizon, k);
+  });
   return (
     <mesh material={material} renderOrder={-2}>
       <sphereGeometry args={[160, 32, 16]} />
@@ -79,7 +123,7 @@ function Sky() {
 
 // The setting sun: orange to red, its lower half cut into stripes whose gaps
 // widen towards the bottom and drift slowly down.
-function Sun({ animate }: { animate: boolean }) {
+function Sun({ animate, palette, urgency }: { animate: boolean; palette: Palette; urgency: number }) {
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
@@ -110,12 +154,19 @@ function Sun({ animate }: { animate: boolean }) {
     [],
   );
   const halo = useMemo(() => glowTexture("rgba(255,70,85,0.55)", "rgba(255,70,85,0)"), []);
-  useFrame((_, delta) => {
-    if (animate) material.uniforms.time.value += delta;
+  const haloRef = useRef<THREE.Mesh>(null);
+  useFrame(({ clock }, delta) => {
+    if (animate) material.uniforms.time.value += delta * (1 + urgency * 3);
+    const k = animate ? 1 - Math.pow(0.3, delta) : 1;
+    towards(material.uniforms.topColor, palette.sunTop, k);
+    towards(material.uniforms.midColor, palette.sunMid, k);
+    towards(material.uniforms.bottomColor, palette.sunBottom, k);
+    // A heartbeat in the halo as a round gets close.
+    if (haloRef.current) haloRef.current.scale.setScalar(1 + (animate ? urgency * 0.12 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 5)) : 0));
   });
   return (
     <group position={[0, 12.5, -84]}>
-      <mesh renderOrder={-1}>
+      <mesh ref={haloRef} renderOrder={-1}>
         <planeGeometry args={[96, 96]} />
         <meshBasicMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} />
       </mesh>
@@ -162,8 +213,11 @@ function Mountains({ detail }: { detail: boolean }) {
 // The floor: an opaque dark ground (hides the bottom of the sun below the
 // horizon), the neon grid on it running towards the viewer, and the sun's
 // long reflection.
-function Floor({ animate }: { animate: boolean }) {
+function Floor({ animate, urgency }: { animate: boolean; urgency: number }) {
   const grid = useRef<THREE.Group>(null);
+  // A pool of red light on the floor that follows the mouse.
+  const spot = useRef<THREE.Mesh>(null);
+  const spotGlow = useMemo(() => glowTexture("rgba(255,70,85,0.5)", "rgba(255,70,85,0)"), []);
   const reflection = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 16;
@@ -180,7 +234,17 @@ function Floor({ animate }: { animate: boolean }) {
     return texture;
   }, []);
   useFrame((_, delta) => {
-    if (animate && grid.current) grid.current.position.z = (grid.current.position.z + delta * 1.6) % 4;
+    if (animate && grid.current) grid.current.position.z = (grid.current.position.z + delta * 1.6 * (1 + urgency * 2.5)) % 4;
+    if (spot.current) {
+      const k = 1 - Math.pow(0.02, delta);
+      spot.current.position.x = THREE.MathUtils.lerp(spot.current.position.x, pointer.x * 7, k);
+      spot.current.position.z = THREE.MathUtils.lerp(spot.current.position.z, 1.5 - (pointer.y + 1) * 5, k);
+      (spot.current.material as THREE.MeshBasicMaterial).opacity = THREE.MathUtils.lerp(
+        (spot.current.material as THREE.MeshBasicMaterial).opacity,
+        animate && pointer.active ? 0.9 : 0,
+        k,
+      );
+    }
   });
   return (
     <>
@@ -191,6 +255,10 @@ function Floor({ animate }: { animate: boolean }) {
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.71, -44]}>
         <planeGeometry args={[18, 80]} />
         <meshBasicMaterial map={reflection} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.5} />
+      </mesh>
+      <mesh ref={spot} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.69, -2]}>
+        <planeGeometry args={[9, 9]} />
+        <meshBasicMaterial map={spotGlow} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
       </mesh>
       <group ref={grid} position={[0, -1.7, 0]}>
         <Grid
@@ -242,8 +310,9 @@ function Emblem({ mode, animate }: { mode: string; animate: boolean }) {
   const light = useRef<THREE.PointLight>(null);
   const start = POSES[mode] || POSES.airdrop;
   const glow = useRef(start.glow);
-  const logo = useTexture("/5k-logo.png");
+  const logo = useTexture("/art/5k-chrome.png");
   logo.colorSpace = THREE.SRGBColorSpace;
+  logo.anisotropy = 8;
   const target = useRef(new THREE.Vector3()).current;
   // A full turn whenever the page changes, easing out.
   const spin = useRef(0);
@@ -307,18 +376,10 @@ function Emblem({ mode, animate }: { mode: string; animate: boolean }) {
           <torusGeometry args={[1.02, 0.035, 8, 6]} />
           <meshBasicMaterial ref={rimMat} color="#ff2a3d" transparent toneMapped={false} />
         </mesh>
-        {/* The logo as a hologram: additive, so its black background vanishes. */}
+        {/* The chrome 5K logo (its own transparent ground). */}
         <mesh position={[0, 0, 0.11]}>
-          <planeGeometry args={[1.32, 1.32]} />
-          <meshBasicMaterial
-            ref={logoMat}
-            map={logo}
-            transparent
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-            toneMapped={false}
-            color="#ffe1e5"
-          />
+          <planeGeometry args={[1.62, 0.7]} />
+          <meshBasicMaterial ref={logoMat} map={logo} transparent depthWrite={false} toneMapped={false} />
         </mesh>
       </group>
       <mesh ref={ringA}>
@@ -359,7 +420,8 @@ function CameraRig({ animate, flyIn }: { animate: boolean; flyIn: boolean }) {
       document.documentElement.dataset.flyin = "0";
     };
   }, [flyIn]);
-  useFrame(({ camera, pointer, clock }, delta) => {
+  useEffect(trackPointer, []);
+  useFrame(({ camera, clock }, delta) => {
     const f = flight.current;
     if (!f.done) {
       if (f.start === null) f.start = clock.getElapsedTime();
@@ -401,6 +463,7 @@ export default function CommandScene({ tier, calm }: { tier: SceneTier; calm: bo
   // Pause entirely while the tab is in the background.
   const [tabVisible, setTabVisible] = useState(true);
   const mode = usePageMode();
+  const { palette, urgency } = useArenaClock();
   const high = tier === "high";
   const animate = !calm;
   // Fly in only when the scene opens on the sign-in screen.
@@ -427,11 +490,11 @@ export default function CommandScene({ tier, calm }: { tier: SceneTier; calm: bo
         <ambientLight intensity={0.25} />
         {!calm && !high && tabVisible && <Ticker fps={30} />}
         <CameraRig animate={animate} flyIn={flyIn} />
-        <Sky />
+        <Sky palette={palette} animate={animate} />
         <Stars radius={110} depth={40} count={high ? 1800 : 600} factor={3.2} saturation={0} fade speed={animate ? 0.5 : 0} />
-        <Sun animate={animate} />
+        <Sun animate={animate} palette={palette} urgency={urgency} />
         <Mountains detail={high} />
-        <Floor animate={animate} />
+        <Floor animate={animate} urgency={urgency} />
         {/* The logo texture loads asynchronously. */}
         <Suspense fallback={null}>
           <Emblem mode={mode} animate={animate} />

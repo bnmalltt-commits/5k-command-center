@@ -1708,3 +1708,14 @@ html[data-scene="on"] { --ui-glass: rgba(15, 15, 18, 0.86); }
 .leave-day__list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
 .leave-day__list b { color: var(--ui-text); font-size: 14px; font-weight: 600; }
 .leave-day__reason { min-width: 0; flex: 1; color: var(--ui-text-3); font-size: 13px; }
+
+/* Cards lean towards the mouse while 3D is moving, even with reduced motion
+   set at the system level (that setting turns 3D motion on by choice here). */
+html[data-scene-motion="full"] .tilt.tilt { transform: perspective(800px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)) translateY(var(--lift, 0px)); }
+html[data-scene-motion="full"] .podium--3d .podium__slot.tilt { transform: none; }
+.podium--face-1 .podium__slot--1 .avatar,
+.podium--face-2 .podium__slot--2 .avatar,
+.podium--face-3 .podium__slot--3 .avatar { opacity: 0; }
+.trophy-cabinet { width: 100%; height: 190px; border: 1px solid var(--ui-line); border-radius: 14px; background: radial-gradient(70% 90% at 50% 100%, rgba(245, 197, 66, 0.12), transparent 70%), rgba(0, 0, 0, 0.3); }
+.scene-toggle__sound { display: inline-grid; place-items: center; width: 30px; min-height: 28px; margin-left: 2px; border: 0; border-left: 1px solid var(--ui-line); background: transparent; color: var(--ui-text-2); }
+.scene-toggle__sound svg { width: 15px; height: 15px; }

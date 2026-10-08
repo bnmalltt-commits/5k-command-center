@@ -414,7 +414,10 @@ function MissionCard({
     <section className="mission">
       <Widget3D
         kind="crate"
-        args={{ done }}
+        args={{
+          done,
+          drop: (["pending", "rejected", "approved"] as const).find((s) => s === selected?.status) || "idle",
+        }}
         className="mission__art mission__art--3d"
         fallback={
           <div className="mission__art" aria-hidden="true">
@@ -1352,8 +1355,15 @@ function MonthlyResults({ data, summary }: { data: Data; summary: any }) {
   const names = memberNames(data);
   const ranks = competitionRanks(entry.ranking);
   const a = entry.awards;
+  // Trophy cabinet: the winner of each finished month, newest on the right.
+  const cabinet = months
+    .filter((m) => m.complete && m.ranking.length)
+    .slice(0, 6)
+    .reverse()
+    .map((m) => ({ month: monthLabel(m.month), name: names.get(m.ranking[0].id) || "สมาชิก", score: Number(m.ranking[0].score) }));
   return (
     <div className="space-y-4 p-4">
+      {cabinet.length > 0 && <Widget3D kind="cabinet" args={{ cabinet }} className="trophy-cabinet" />}
       {months.length > 1 && (
         <select value={entry.month} onChange={(event) => setMonth(event.target.value)} className="ui-input" aria-label="เลือกเดือน">
           {months.map((m) => (
@@ -3032,13 +3042,15 @@ export default function Home() {
   // Cards marked .tilt lean a few degrees towards the mouse, with a soft glare
   // (desktop mice only, never for reduced motion).
   useEffect(() => {
-    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches || prefersLessMotion()) return;
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
+    // Reduced-motion screens get it only while the 3D layer is set to move.
+    const allowed = () => !prefersLessMotion() || document.documentElement.dataset.sceneMotion === "full";
     let active: HTMLElement | null = null;
     const reset = (el: HTMLElement) => {
       for (const name of ["--rx", "--ry", "--gx", "--gy"]) el.style.removeProperty(name);
     };
     const onMove = (event: PointerEvent) => {
-      const el = (event.target as Element | null)?.closest?.(".tilt") as HTMLElement | null;
+      const el = allowed() ? ((event.target as Element | null)?.closest?.(".tilt") as HTMLElement | null) : null;
       if (active && active !== el) reset(active);
       active = el;
       if (!el) return;
@@ -3063,17 +3075,20 @@ export default function Home() {
   }, []);
   // Celebrate milestones reached since the last refresh (never on first load,
   // so reopening the site doesn't replay them).
-  const milestones = useRef<{ rounds: number; team: number; rank: number | null } | null>(null);
+  const milestones = useRef<{ rounds: number; team: number; rank: number | null; score: number } | null>(null);
   useEffect(() => {
     if (!data) return;
     const now = {
       rounds: ROUNDS.filter((r) => mine.get(r)?.status === "approved").length,
       team: data.team?.mine?.today ?? 0,
       rank: data.me.monthRank,
+      score: Number(data.me.monthScore || 0),
     };
     const before = milestones.current;
     milestones.current = now;
     if (!before) return;
+    // Points went up since the last refresh (an approval landed): coins.
+    if (now.score > before.score) playFx("coins", now.score - before.score);
     const perDay = data.team?.perDay ?? 9;
     if (now.rounds === ROUNDS.length && before.rounds < ROUNDS.length)
       setCelebration("ส่งครบ 4 รอบวันนี้แล้ว!");

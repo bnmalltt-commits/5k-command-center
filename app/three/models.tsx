@@ -1,8 +1,8 @@
 "use client";
 
-import { RoundedBox, Sparkles, useTexture } from "@react-three/drei";
+import { Billboard, RoundedBox, Sparkles, useTexture } from "@react-three/drei";
 import { useFrame, useThree } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, type ReactNode, type Ref } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
@@ -103,19 +103,21 @@ export function Motion({
 
 // ---------- Supply crate and parachute ----------
 
-export function Crate({ open = 0, lidRef }: { open?: number; lidRef?: Ref<THREE.Group> }) {
+// `strap` swaps the red straps for another material (the mission crate
+// tints and pulses them to show a round's status).
+export function Crate({ open = 0, lidRef, strap }: { open?: number; lidRef?: Ref<THREE.Group>; strap?: THREE.Material }) {
   return (
     <group>
       <RoundedBox args={[1, 0.82, 1]} radius={0.08} smoothness={3}>
         <meshStandardMaterial color={DARK} metalness={0.6} roughness={0.42} />
       </RoundedBox>
-      <mesh>
+      <mesh material={strap}>
         <boxGeometry args={[0.17, 0.84, 1.016]} />
-        <meshStandardMaterial color={RED} emissive="#8f0d1d" emissiveIntensity={0.7} roughness={0.5} />
+        {!strap && <meshStandardMaterial color={RED} emissive="#8f0d1d" emissiveIntensity={0.7} roughness={0.5} />}
       </mesh>
-      <mesh>
+      <mesh material={strap}>
         <boxGeometry args={[1.016, 0.84, 0.17]} />
-        <meshStandardMaterial color="#e3283b" emissive="#8f0d1d" emissiveIntensity={0.7} roughness={0.5} />
+        {!strap && <meshStandardMaterial color="#e3283b" emissive="#8f0d1d" emissiveIntensity={0.7} roughness={0.5} />}
       </mesh>
       {/* The lid hinges on its back edge. */}
       <group ref={lidRef} position={[0, 0.41, -0.54]} rotation={[-open * 1.9, 0, 0]}>
@@ -123,9 +125,9 @@ export function Crate({ open = 0, lidRef }: { open?: number; lidRef?: Ref<THREE.
           <RoundedBox args={[1.08, 0.17, 1.08]} radius={0.05} smoothness={3}>
             <meshStandardMaterial color="#34343c" metalness={0.6} roughness={0.38} />
           </RoundedBox>
-          <mesh>
+          <mesh material={strap}>
             <boxGeometry args={[0.17, 0.18, 1.09]} />
-            <meshStandardMaterial color={RED} emissive="#8f0d1d" emissiveIntensity={0.7} />
+            {!strap && <meshStandardMaterial color={RED} emissive="#8f0d1d" emissiveIntensity={0.7} />}
           </mesh>
         </group>
       </group>
@@ -183,22 +185,46 @@ export function Parachute() {
   );
 }
 
-// The mission card's crate: swinging under its parachute while rounds are
-// left, landed and open in a beam of light once all four are approved.
-export function SupplyDrop({ calm, done, chute = true }: { calm: boolean; done: boolean; chute?: boolean }) {
+// The mission card's crate, showing the selected round:
+//   idle      — swinging under its parachute (nothing sent yet)
+//   pending   — still hanging, straps pulsing amber (waiting for review)
+//   rejected  — dropped hard and knocked askew, straps dull red
+//   approved  — landed, lid cracked open
+//   done      — all four rounds approved: wide open in a beam of light
+export type DropState = "idle" | "pending" | "rejected" | "approved" | "done";
+const STRAP: Record<DropState, { color: string; glow: string; level: number }> = {
+  idle: { color: RED, glow: "#8f0d1d", level: 0.7 },
+  pending: { color: "#ffb547", glow: "#ff9a1a", level: 1.2 },
+  rejected: { color: "#6b1420", glow: "#2a0308", level: 0.3 },
+  approved: { color: "#3ddc84", glow: "#14a352", level: 0.8 },
+  done: { color: RED, glow: "#8f0d1d", level: 0.7 },
+};
+export function SupplyDrop({ calm, state = "idle", chute = true }: { calm: boolean; state?: DropState; chute?: boolean }) {
   const swing = useRef<THREE.Group>(null);
   const beam = useRef<THREE.Mesh>(null);
-  useFrame((state) => {
-    const t = state.clock.elapsedTime;
-    if (swing.current) swing.current.rotation.z = calm || done ? 0 : Math.sin(t * 1.3) * 0.08;
+  const tone = STRAP[state];
+  const strap = useDisposable(
+    () => new THREE.MeshStandardMaterial({ color: tone.color, emissive: tone.glow, emissiveIntensity: tone.level, roughness: 0.5 }),
+    [state],
+  );
+  const hanging = chute && (state === "idle" || state === "pending");
+  const done = state === "done";
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (swing.current) {
+      swing.current.rotation.z = calm ? 0 : hanging ? Math.sin(t * 1.3) * 0.08 : state === "rejected" ? 0.22 : 0;
+    }
+    if (state === "pending" && !calm) strap.emissiveIntensity = 0.6 + (0.5 + 0.5 * Math.sin(t * 4)) * 1.2;
     if (beam.current) (beam.current.material as THREE.MeshBasicMaterial).opacity = calm ? 0.3 : 0.26 + Math.sin(t * 2.4) * 0.08;
   });
+  const open = done ? 1 : state === "approved" ? 0.45 : state === "rejected" ? 0.12 : 0;
   return (
-    <group ref={swing} position={[0, done || !chute ? 0 : -0.55, 0]}>
-      {chute && !done && <Parachute />}
+    <group ref={swing} position={[0, hanging ? -0.55 : 0, 0]}>
+      {hanging && <Parachute />}
       <group rotation={[0.38, Math.PI / 4, 0]}>
-        <Crate open={done ? 1 : 0} />
+        <Crate open={open} strap={strap} />
       </group>
+      {state === "approved" && !calm && <Sparkles count={10} scale={[0.9, 1, 0.9]} position={[0, 0.8, 0]} size={2.5} speed={0.4} color="#9dffc6" />}
       {done && (
         <>
           <mesh ref={beam} position={[0, 1.25, 0]}>
@@ -206,11 +232,13 @@ export function SupplyDrop({ calm, done, chute = true }: { calm: boolean; done: 
             <meshBasicMaterial color="#ff7a5c" transparent opacity={0.3} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
           </mesh>
           {!calm && <Sparkles count={24} scale={[1.2, 2.4, 1.2]} position={[0, 1.4, 0]} size={3} speed={0.6} color="#ffb08a" />}
-          <mesh position={[0, -0.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[0.9, 1.02, 6]} />
-            <meshBasicMaterial color={RED} toneMapped={false} side={THREE.DoubleSide} />
-          </mesh>
         </>
+      )}
+      {!hanging && (
+        <mesh position={[0, -0.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.9, 1.02, 6]} />
+          <meshBasicMaterial color={tone.color} toneMapped={false} side={THREE.DoubleSide} />
+        </mesh>
       )}
     </group>
   );
@@ -264,7 +292,75 @@ export function Trophy({ tone = "gold" }: { tone?: Tone }) {
 
 // ---------- Squad: five seats around a holo table ----------
 
-export function Squad({ filled, calm }: { filled: number; calm: boolean }) {
+// An image from another site (Discord avatars allow it) as a texture, or
+// null until it loads or if it can't.
+export function useRemoteTexture(url?: string | null) {
+  const [texture, setTexture] = useState<THREE.Texture | null>(null);
+  useEffect(() => {
+    if (!url) return;
+    let alive = true;
+    let loaded: THREE.Texture | null = null;
+    const loader = new THREE.TextureLoader();
+    loader.setCrossOrigin("anonymous");
+    loader.load(url, (t) => {
+      loaded = t;
+      if (!alive) return t.dispose();
+      t.colorSpace = THREE.SRGBColorSpace;
+      setTexture(t);
+    }, undefined, () => {});
+    return () => {
+      alive = false;
+      loaded?.dispose();
+      setTexture(null);
+    };
+  }, [url]);
+  return texture;
+}
+
+// Who sits in a seat: the team room marks the leader (gold), who is online
+// (green ring) and who has sent airdrop evidence today (a check overhead).
+export type SeatMember = { leader?: boolean; online?: boolean; sent?: boolean; avatar?: string | null };
+
+function SeatFigure({ member }: { member: SeatMember }) {
+  const face = useRemoteTexture(member.avatar);
+  const check = useCheckGeometry(0.05);
+  const body = member.leader ? METAL.gold : "#e9e9ee";
+  return (
+    <group position={[0, 0.2, 0]}>
+      <mesh position={[0, 0.2, 0]}>
+        <capsuleGeometry args={[0.1, 0.16, 4, 12]} />
+        <meshStandardMaterial color={body} metalness={member.leader ? 1 : 0.2} roughness={0.3} emissive={member.leader ? "#3a2a00" : "#2a0a0e"} />
+      </mesh>
+      {face ? (
+        // Their own picture as the head, always turned to the viewer.
+        <Billboard position={[0, 0.48, 0]}>
+          <mesh>
+            <circleGeometry args={[0.13, 32]} />
+            <meshBasicMaterial map={face} toneMapped={false} />
+          </mesh>
+          <mesh position={[0, 0, -0.005]}>
+            <ringGeometry args={[0.13, 0.155, 32]} />
+            <meshBasicMaterial color={member.leader ? METAL.gold : "#ffffff"} toneMapped={false} />
+          </mesh>
+        </Billboard>
+      ) : (
+        <mesh position={[0, 0.45, 0]}>
+          <sphereGeometry args={[0.085, 16, 12]} />
+          <meshStandardMaterial color={body} metalness={member.leader ? 1 : 0.2} roughness={0.3} />
+        </mesh>
+      )}
+      {member.sent && (
+        <Billboard position={[0, 0.78, 0]}>
+          <mesh geometry={check} scale={0.32}>
+            <meshBasicMaterial color="#3ddc84" toneMapped={false} />
+          </mesh>
+        </Billboard>
+      )}
+    </group>
+  );
+}
+
+export function Squad({ filled, calm, members }: { filled: number; calm: boolean; members?: SeatMember[] }) {
   const deck = useRef<THREE.Group>(null);
   const holo = useRef<THREE.Mesh>(null);
   useFrame((state) => {
@@ -294,7 +390,7 @@ export function Squad({ filled, calm }: { filled: number; calm: boolean }) {
       {Array.from({ length: 5 }, (_, i) => {
         const a = -Math.PI / 2 + (i / 5) * Math.PI * 2;
         const on = i < filled;
-        const leader = on && i === 0;
+        const member: SeatMember = members?.[i] ?? { leader: i === 0 };
         return (
           <group key={i} position={[Math.cos(a) * 1.15, 0, Math.sin(a) * 1.15]}>
             <mesh position={[0, 0.1, 0]}>
@@ -303,20 +399,9 @@ export function Squad({ filled, calm }: { filled: number; calm: boolean }) {
             </mesh>
             <mesh position={[0, 0.205, 0]} rotation={[-Math.PI / 2, 0, 0]}>
               <ringGeometry args={[0.2, 0.26, 6]} />
-              <meshBasicMaterial color={on ? RED : "#3a0a12"} toneMapped={false} side={THREE.DoubleSide} />
+              <meshBasicMaterial color={on ? (member.online ? "#3ddc84" : RED) : "#3a0a12"} toneMapped={false} side={THREE.DoubleSide} />
             </mesh>
-            {on && (
-              <group position={[0, 0.2, 0]}>
-                <mesh position={[0, 0.2, 0]}>
-                  <capsuleGeometry args={[0.1, 0.16, 4, 12]} />
-                  <meshStandardMaterial color={leader ? METAL.gold : "#e9e9ee"} metalness={leader ? 1 : 0.2} roughness={0.3} emissive={leader ? "#3a2a00" : "#2a0a0e"} />
-                </mesh>
-                <mesh position={[0, 0.45, 0]}>
-                  <sphereGeometry args={[0.085, 16, 12]} />
-                  <meshStandardMaterial color={leader ? METAL.gold : "#e9e9ee"} metalness={leader ? 1 : 0.2} roughness={0.3} />
-                </mesh>
-              </group>
-            )}
+            {on && <SeatFigure member={member} />}
           </group>
         );
       })}
@@ -568,6 +653,86 @@ export function Bars({ values, today, calm }: { values: (number | null)[]; today
           </group>
         );
       })}
+    </group>
+  );
+}
+
+// ---------- Trophy cabinet: each finished month's winner ----------
+
+export type CabinetItem = { month: string; name: string; score: number };
+
+function namePlate(item: CabinetItem) {
+  return canvasTexture(384, 128, (ctx) => {
+    ctx.fillStyle = "#16161b";
+    ctx.fillRect(0, 0, 384, 128);
+    ctx.strokeStyle = METAL.gold;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(4, 4, 376, 120);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillStyle = "#ffe17a";
+    ctx.font = `700 30px ${displayFont()}`;
+    ctx.fillText(item.month, 192, 36);
+    ctx.fillStyle = "#f4f4f6";
+    ctx.font = `700 34px ${displayFont()}`;
+    const name = item.name.length > 16 ? item.name.slice(0, 15) + "…" : item.name;
+    ctx.fillText(name, 192, 76);
+    ctx.fillStyle = "#a8a8b3";
+    ctx.font = `600 22px ${displayFont()}`;
+    ctx.fillText(`${item.score} แต้ม`, 192, 106);
+  });
+}
+
+function CabinetSlot({ item, x, calm, index }: { item: CabinetItem; x: number; calm: boolean; index: number }) {
+  const cup = useRef<THREE.Group>(null);
+  const plate = useDisposable(() => namePlate(item), [item.month, item.name, item.score]);
+  useFrame(({ clock }) => {
+    if (cup.current) cup.current.rotation.y = calm ? 0.4 : clock.elapsedTime * 0.6 + index;
+  });
+  return (
+    <group position={[x, 0, 0]}>
+      <group ref={cup} position={[0, 0.78, 0]} scale={0.62}>
+        <Trophy tone="gold" />
+      </group>
+      <mesh position={[0, 0.16, 0.42]} rotation={[-0.25, 0, 0]}>
+        <planeGeometry args={[1.2, 0.4]} />
+        <meshBasicMaterial map={plate} toneMapped={false} />
+      </mesh>
+    </group>
+  );
+}
+
+export function Cabinet({ items, calm }: { items: CabinetItem[]; calm: boolean }) {
+  const step = 1.45;
+  const width = Math.max(1, items.length) * step;
+  useFrame((state) => {
+    const cam = state.camera as THREE.PerspectiveCamera;
+    const tan = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const d = Math.max((width / 2 + 0.5) / (tan * (cam.aspect || 3)), 1.25 / tan);
+    cam.position.set(0, 0.95 + d * 0.12, d);
+    cam.lookAt(0, 0.75, 0);
+  });
+  return (
+    <group>
+      {/* Back wall with a red light strip, and the shelf. */}
+      <mesh position={[0, 1.0, -0.62]}>
+        <boxGeometry args={[width + 0.6, 2.2, 0.06]} />
+        <meshStandardMaterial color="#101014" metalness={0.4} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 2.06, -0.58]}>
+        <boxGeometry args={[width + 0.6, 0.03, 0.02]} />
+        <meshBasicMaterial color={RED} toneMapped={false} />
+      </mesh>
+      <RoundedBox args={[width + 0.6, 0.14, 1.3]} radius={0.04} smoothness={3} position={[0, -0.07, 0]}>
+        <meshStandardMaterial color="#1b1b20" metalness={0.7} roughness={0.35} />
+      </RoundedBox>
+      <mesh position={[0, -0.005, 0.66]}>
+        <boxGeometry args={[width + 0.6, 0.02, 0.02]} />
+        <meshBasicMaterial color={METAL.gold} toneMapped={false} />
+      </mesh>
+      {items.map((item, i) => (
+        <CabinetSlot key={item.month} item={item} index={i} calm={calm} x={(i - (items.length - 1) / 2) * step} />
+      ))}
     </group>
   );
 }

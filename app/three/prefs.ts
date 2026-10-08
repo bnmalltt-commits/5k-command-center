@@ -86,17 +86,50 @@ export function sceneTier(): SceneTier {
   return cachedTier || "low";
 }
 
-// One-off 3D moments, played by the overlay in fx-layer.tsx.
-export type FxKind = "airdrop" | "celebrate";
+// One-off 3D moments, played by the overlay in fx-layer.tsx. "coins" carries
+// the points just gained.
+export type FxKind = "airdrop" | "celebrate" | "coins";
+export type FxEvent = { kind: FxKind; amount?: number };
 const FX_EVENT = "fivek-fx";
 
-export function playFx(kind: FxKind) {
+export function playFx(kind: FxKind, amount?: number) {
   if (typeof window === "undefined" || getSceneMode() !== "full") return;
-  window.dispatchEvent(new CustomEvent(FX_EVENT, { detail: kind }));
+  window.dispatchEvent(new CustomEvent(FX_EVENT, { detail: { kind, amount } satisfies FxEvent }));
 }
 
-export function onFx(handler: (kind: FxKind) => void) {
-  const listener = (event: Event) => handler((event as CustomEvent).detail as FxKind);
+export function onFx(handler: (event: FxEvent) => void) {
+  const listener = (event: Event) => handler((event as CustomEvent).detail as FxEvent);
   window.addEventListener(FX_EVENT, listener);
   return () => window.removeEventListener(FX_EVENT, listener);
+}
+
+// Sound for the 3D moments: on unless switched off, remembered per browser.
+const SOUND_KEY = "fivek_sound";
+const SOUND_EVENT = "fivek-sound";
+export function getSoundOn() {
+  try {
+    return localStorage.getItem(SOUND_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
+export function setSoundOn(on: boolean) {
+  try {
+    localStorage.setItem(SOUND_KEY, on ? "on" : "off");
+  } catch {}
+  window.dispatchEvent(new Event(SOUND_EVENT));
+}
+export function useSoundOn() {
+  const [on, setOn] = useState(true);
+  useEffect(() => {
+    setOn(getSoundOn());
+    const onChange = () => setOn(getSoundOn());
+    window.addEventListener(SOUND_EVENT, onChange);
+    window.addEventListener("storage", onChange);
+    return () => {
+      window.removeEventListener(SOUND_EVENT, onChange);
+      window.removeEventListener("storage", onChange);
+    };
+  }, []);
+  return on;
 }

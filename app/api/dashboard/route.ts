@@ -27,11 +27,13 @@ function periodStarts(today: string) {
   return { day: today, week: monday };
 }
 
-async function partyDetails(party: any) {
+// sent_today: airdrop rounds sent today and not rejected (the 3D team room
+// marks those members).
+async function partyDetails(party: any, date: string) {
   if (!party) return null;
   const members = await db
-    .prepare("SELECT m.id,m.display_name,m.role,CASE WHEN m.last_seen_at IS NOT NULL AND m.last_seen_at>=? THEN 1 ELSE 0 END AS online,pm.joined_at FROM party_members pm JOIN members m ON m.id=pm.member_id WHERE pm.party_id=? AND m.active=1 ORDER BY online DESC,pm.id")
-    .bind(onlineSince(), party.id)
+    .prepare("SELECT m.id,m.display_name,m.role,CASE WHEN m.last_seen_at IS NOT NULL AND m.last_seen_at>=? THEN 1 ELSE 0 END AS online,pm.joined_at,(SELECT COUNT(*) FROM airdrop_submissions a WHERE a.member_id=m.id AND a.activity_date=? AND a.status<>'rejected') AS sent_today FROM party_members pm JOIN members m ON m.id=pm.member_id WHERE pm.party_id=? AND m.active=1 ORDER BY online DESC,pm.id")
+    .bind(onlineSince(), date, party.id)
     .all();
   return { ...party, members: members.results };
 }
@@ -97,7 +99,7 @@ export async function GET(request: Request) {
     ]);
     // Dependent on partyBase.id, so it can't join the batch above. It stays on
     // every request because myParty is core chrome (MissionControl reads it).
-    const party = await partyDetails(partyBase);
+    const party = await partyDetails(partyBase, date);
     // Core, not admin-view-only: the nav badge is read from every view.
     const pendingCount = me.role === "admin"
       ? Number((await db.prepare("SELECT (SELECT COUNT(*) FROM airdrop_submissions WHERE status='pending')+(SELECT COUNT(*) FROM party_activities WHERE status='pending') AS n").bind().first<any>())?.n || 0)

@@ -3,35 +3,42 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Crate, Parachute, useStudioEnv } from "./models";
+import { Crate, METAL, Parachute, displayFont, useStudioEnv } from "./models";
 import { onFx, sceneTier, type FxKind } from "./prefs";
+import { chime, pop, thud, whoosh } from "./sound";
 
 // One-off 3D moments over the page, each in its own short-lived transparent
 // canvas that unmounts when it ends:
 //   airdrop   — a supply crate parachutes onto the mission card, lands,
 //               and pops open in a beam of light with sparks.
 //   celebrate — fireworks and falling confetti.
-const DURATION: Record<FxKind, number> = { airdrop: 2800, celebrate: 3600 };
+//   coins     — gold coins rain into the month-points chip with "+N".
+const DURATION: Record<FxKind, number> = { airdrop: 2800, celebrate: 3600, coins: 2400 };
 const easeOut = (p: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
 const clamp01 = (p: number) => Math.min(1, Math.max(0, p));
 
 type Anchor = { x: number; y: number } | null;
 const CRATE_PX = 70;
 
+function anchorOf(selector: string, place: (r: DOMRect) => { x: number; y: number }): Anchor {
+  const el = document.querySelector(selector);
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return r.width ? place(r) : null;
+}
+
 export default function FxLayer() {
-  const [fx, setFx] = useState<{ kind: FxKind; id: number; anchor: Anchor } | null>(null);
+  const [fx, setFx] = useState<{ kind: FxKind; id: number; anchor: Anchor; amount: number } | null>(null);
   useEffect(
     () =>
-      onFx((kind) => {
-        let anchor: Anchor = null;
-        if (kind === "airdrop") {
-          const card = document.querySelector(".mission");
-          if (card) {
-            const r = card.getBoundingClientRect();
-            anchor = { x: r.left + r.width / 2, y: r.top + Math.min(r.height * 0.42, 220) };
-          }
-        }
-        setFx({ kind, id: Date.now(), anchor });
+      onFx(({ kind, amount = 0 }) => {
+        const anchor =
+          kind === "airdrop"
+            ? anchorOf(".mission", (r) => ({ x: r.left + r.width / 2, y: r.top + Math.min(r.height * 0.42, 220) }))
+            : kind === "coins"
+              ? anchorOf(".topbar-stat", (r) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))
+              : null;
+        setFx({ kind, id: Date.now(), anchor, amount });
       }),
     [],
   );
@@ -42,14 +49,20 @@ export default function FxLayer() {
   }, [fx]);
   if (!fx) return null;
   const low = sceneTier() === "low";
+  const flat = { key: fx.id, orthographic: true, camera: { zoom: 1, position: [0, 0, 600] as [number, number, number], near: 1, far: 2000 } };
+  const common = { dpr: (low ? 1 : [1, 1.75]) as number | [number, number], gl: { alpha: true, antialias: !low }, style: { pointerEvents: "none" as const } };
   return (
     <div className="fx-layer" aria-hidden="true">
       {fx.kind === "airdrop" ? (
-        <Canvas key={fx.id} orthographic camera={{ zoom: 1, position: [0, 0, 600], near: 1, far: 2000 }} dpr={low ? 1 : [1, 1.75]} gl={{ alpha: true, antialias: !low }} style={{ pointerEvents: "none" }}>
+        <Canvas {...flat} {...common}>
           <AirdropDrop anchor={fx.anchor} low={low} />
         </Canvas>
+      ) : fx.kind === "coins" ? (
+        <Canvas {...flat} {...common}>
+          <CoinRain anchor={fx.anchor} amount={fx.amount} low={low} />
+        </Canvas>
       ) : (
-        <Canvas key={fx.id} camera={{ position: [0, 0.6, 10], fov: 50 }} dpr={low ? 1 : [1, 1.75]} gl={{ alpha: true, antialias: !low }} style={{ pointerEvents: "none" }}>
+        <Canvas key={fx.id} camera={{ position: [0, 0.6, 10], fov: 50 }} {...common}>
           <Fireworks low={low} />
         </Canvas>
       )}
@@ -89,6 +102,11 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
 
   useStudioEnv();
   const LAND = 1.15, OPEN = 1.35;
+  useEffect(() => {
+    whoosh(0, LAND);
+    thud(LAND);
+    pop(OPEN, 1.4);
+  }, []);
   useFrame(() => {
     const t = (performance.now() - started.current) / 1000;
     if (drop.current) {
@@ -240,6 +258,9 @@ function Fireworks({ low }: { low: boolean }) {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }, [confettiCount]);
   const dummy = useMemo(() => new THREE.Object3D(), []);
+  useEffect(() => {
+    for (let b = 0; b < bursts; b++) pop(b * (low ? 0.45 : 0.32), 0.8 + (b % 3) * 0.25);
+  }, [bursts, low]);
 
   useFrame(() => {
     const t = (performance.now() - started.current) / 1000;
@@ -290,6 +311,91 @@ function Fireworks({ low }: { low: boolean }) {
         <planeGeometry args={[0.22, 0.11]} />
         <meshBasicMaterial side={THREE.DoubleSide} toneMapped={false} />
       </instancedMesh>
+    </>
+  );
+}
+
+// ---------- Coins: points just gained, raining into the points chip ----------
+
+function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low: boolean }) {
+  const size = useThree((state) => state.size);
+  const target = useMemo(
+    () => (anchor ? { x: anchor.x - size.width / 2, y: size.height / 2 - anchor.y } : { x: size.width / 2 - 120, y: size.height / 2 - 60 }),
+    [anchor, size.width, size.height],
+  );
+  const count = Math.min(low ? 8 : 14, Math.max(5, amount * 2));
+  const coins = useMemo(
+    () =>
+      Array.from({ length: count }, (_, i) => ({
+        x: target.x + (Math.random() * 2 - 1) * 260,
+        delay: i * 0.07,
+        spin: 6 + Math.random() * 6,
+      })),
+    [count, target.x],
+  );
+  const refs = useRef<(THREE.Group | null)[]>([]);
+  const label = useRef<THREE.Mesh>(null);
+  const started = useRef(performance.now());
+  const FALL = 0.85;
+  const text = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 128;
+    const c = canvas.getContext("2d")!;
+    c.font = `700 84px ${displayFont()}`;
+    c.textAlign = "center";
+    c.textBaseline = "middle";
+    c.lineWidth = 10;
+    c.strokeStyle = "rgba(20,10,0,0.85)";
+    c.strokeText(`+${amount}`, 128, 66);
+    c.fillStyle = "#ffe17a";
+    c.fillText(`+${amount}`, 128, 66);
+    const t = new THREE.CanvasTexture(canvas);
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }, [amount]);
+  useEffect(() => () => text.dispose(), [text]);
+  useEffect(() => {
+    coins.forEach((c, i) => chime(c.delay + FALL, i % 5));
+  }, [coins]);
+  useStudioEnv();
+  useFrame(() => {
+    const t = (performance.now() - started.current) / 1000;
+    refs.current.forEach((g, i) => {
+      if (!g) return;
+      const c = coins[i];
+      const p = clamp01((t - c.delay) / FALL);
+      g.visible = p > 0 && p < 1;
+      const e = p * p;
+      g.position.set(THREE.MathUtils.lerp(c.x, target.x, e), THREE.MathUtils.lerp(size.height / 2 + 60, target.y, e), 0);
+      g.rotation.set(0.4, t * c.spin, 0);
+      g.scale.setScalar(1 - Math.max(0, p - 0.8) * 3);
+    });
+    if (label.current) {
+      const l = clamp01((t - FALL) / 1.2);
+      label.current.visible = t > FALL * 0.8;
+      label.current.position.set(target.x, target.y + 34 + easeOut(l) * 40, 10);
+      (label.current.material as THREE.MeshBasicMaterial).opacity = 1 - clamp01((l - 0.6) / 0.4);
+    }
+  });
+  return (
+    <>
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[100, 300, 400]} intensity={2} />
+      {coins.map((_, i) => (
+        <group key={i} ref={(el) => { refs.current[i] = el; }} visible={false}>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[15, 15, 4, 32]} />
+            <meshStandardMaterial color={METAL.gold} metalness={1} roughness={0.22} />
+          </mesh>
+        </group>
+      ))}
+      {amount > 0 && (
+        <mesh ref={label} visible={false}>
+          <planeGeometry args={[128, 64]} />
+          <meshBasicMaterial map={text} transparent depthWrite={false} toneMapped={false} />
+        </mesh>
+      )}
     </>
   );
 }

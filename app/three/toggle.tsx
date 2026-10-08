@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { SCENE_MODES, setSceneMode, useSceneMode } from "./prefs";
+import { Volume2, VolumeX } from "lucide-react";
+import { SCENE_MODES, setSceneMode, setSoundOn, useSceneMode, useSoundOn } from "./prefs";
 
 // The 3D switch: moving / still / off, remembered per browser.
 export function SceneToggle({ className = "" }: { className?: string }) {
   const mode = useSceneMode();
+  const sound = useSoundOn();
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
   return (
@@ -23,6 +25,16 @@ export function SceneToggle({ className = "" }: { className?: string }) {
           {label}
         </button>
       ))}
+      <button
+        type="button"
+        className="scene-toggle__sound"
+        aria-pressed={sound}
+        aria-label={sound ? "ปิดเสียง" : "เปิดเสียง"}
+        title={sound ? "ปิดเสียง" : "เปิดเสียง"}
+        onClick={() => setSoundOn(!sound)}
+      >
+        {sound ? <Volume2 /> : <VolumeX />}
+      </button>
     </div>
   );
 }

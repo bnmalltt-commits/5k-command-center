@@ -112,7 +112,18 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
             }
             flush
           >
-            <Widget3D kind="squad" args={{ filled: party.members.length, wide: true }} className="squad-hero" />
+            <Widget3D kind="squad" args={{
+                wide: true,
+                // Leader first, so they take the gold seat.
+                seats: [...party.members]
+                  .sort((a: any, b: any) => Number(String(b.id) === String(party.owner_member_id)) - Number(String(a.id) === String(party.owner_member_id)))
+                  .map((m: any) => ({
+                    leader: String(m.id) === String(party.owner_member_id),
+                    online: !!Number(m.online),
+                    sent: Number(m.sent_today) > 0,
+                    avatar: data.avatars?.[String(m.id)] || null,
+                  })),
+              }} className="squad-hero" />
             {/* Five seats: who's in, who leads, who's online, what's free. */}
             <div className="squad">
               {party.members.map((member: any) => {
