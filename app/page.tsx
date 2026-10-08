@@ -881,7 +881,16 @@ function LeaveRoom({
           .includes(needle)
       : true,
   );
-  const visible = history.slice(0, shown);
+  // One block per day, newest first; "โหลดเพิ่ม" pages by days.
+  const byDay = new Map<string, any[]>();
+  for (const item of history) {
+    const day = String(item.leave_date);
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day)!.push(item);
+  }
+  const allDays = [...byDay.keys()].sort().reverse();
+  const visible = allDays.slice(0, shown);
+  const isAbsent = (item: any) => String(item.reason).startsWith("ขาด");
   return (
     <>
       <Panel
@@ -939,7 +948,7 @@ function LeaveRoom({
       <Panel
         label="LEAVE HISTORY"
         title="ประวัติการลา"
-        subtitle={`${history.length} รายการ`}
+        subtitle={`${allDays.length} วัน · ${history.length} รายการ`}
         flush
       >
         <div className="p-4">
@@ -954,30 +963,46 @@ function LeaveRoom({
         </div>
         {visible.length ? (
           <>
-            {visible.map((item: any) => (
-              <Row
-                key={item.id}
-                inset={false}
-                leading={<DateBadge date={item.leave_date} today={data.date} />}
-                title={item.display_name}
-                subtitle={`${item.reason} · บันทึกโดย ${item.created_by_name}`}
-                trailing={
-                  String(item.reason).startsWith("ขาด") ? (
-                    <span className="status-pill status-pill--rejected">ขาด</span>
-                  ) : (
-                    <span className="status-pill status-pill--quiet">ลา</span>
-                  )
-                }
-              />
-            ))}
-            {history.length > visible.length && (
+            {visible.map((day) => {
+              const items = byDay.get(day)!;
+              const absent = items.filter(isAbsent).length;
+              const onLeave = items.length - absent;
+              return (
+                <section key={day} className="leave-day">
+                  <DateBadge date={day} today={data.date} />
+                  <div className="leave-day__body">
+                    <p className="leave-day__head">
+                      {day === data.date ? "วันนี้ · " : ""}
+                      {[onLeave && `ลา ${onLeave} คน`, absent && `ขาด ${absent} คน`].filter(Boolean).join(" · ")}
+                    </p>
+                    <ul className="leave-day__list">
+                      {items.map((item: any) => (
+                        <li key={item.id}>
+                          <span className="name-with-avatar">
+                            <Avatar url={data.avatars?.[String(item.member_id)]} name={item.display_name} size={22} />
+                            <b>{item.display_name}</b>
+                          </span>
+                          <span className="leave-day__reason">
+                            {item.reason} · บันทึกโดย {item.created_by_name}
+                          </span>
+                          <span className={`status-pill ${isAbsent(item) ? "status-pill--rejected" : "status-pill--quiet"}`}>
+                            {isAbsent(item) ? "ขาด" : "ลา"}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </section>
+              );
+            })}
+            {allDays.length > visible.length && (
               <div className="p-3 text-center">
                 <button
                   type="button"
                   onClick={() => setShown((n) => n + PAGE_SIZE)}
                   className="ui-btn ui-btn--ghost ui-btn--sm"
                 >
-                  โหลดเพิ่ม {Math.min(PAGE_SIZE, history.length - visible.length)} รายการ
+                  โหลดเพิ่ม {Math.min(PAGE_SIZE, allDays.length - visible.length)} วัน
                 </button>
               </div>
             )}

@@ -1699,3 +1699,12 @@ html[data-scene="on"] { --ui-glass: rgba(15, 15, 18, 0.86); }
   .celebrate,
   .celebrate__msg { animation: none !important; }
 }
+
+/* Leave history: one block per day, everyone off that day listed inside. */
+.leave-day { display: flex; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--ui-line); }
+.leave-day__body { min-width: 0; flex: 1; }
+.leave-day__head { margin: 2px 0 8px; color: var(--ui-text); font-size: 14.5px; font-weight: 600; }
+.leave-day__list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.leave-day__list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.leave-day__list b { color: var(--ui-text); font-size: 14px; font-weight: 600; }
+.leave-day__reason { min-width: 0; flex: 1; color: var(--ui-text-3); font-size: 13px; }
