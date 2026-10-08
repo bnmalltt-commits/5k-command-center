@@ -232,8 +232,9 @@ export function HexBadge() {
         <meshStandardMaterial color={RED} emissive={RED_GLOW} emissiveIntensity={1.6} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
       <mesh position={[0, 0, 0.135]}>
-        <planeGeometry args={[1.9, 1.9]} />
-        <meshBasicMaterial map={logo} transparent toneMapped={false} />
+        <planeGeometry args={[1.7, 1.7]} />
+        {/* The logo image has a black ground: add it as light so only the mark shows. */}
+        <meshBasicMaterial map={logo} transparent blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
       </mesh>
     </group>
   );
