@@ -1,7 +1,11 @@
 "use client";
 
 import { PerspectiveCamera, View } from "@react-three/drei";
-import { Suspense } from "react";
+import { useFrame, useThree } from "@react-three/fiber";
+import { Suspense, useEffect, useRef, type ReactNode } from "react";
+import * as THREE from "three";
+import type { DragState } from "./drag";
+import { pointer, trackPointer } from "./pointer";
 import {
   Bars,
   Cabinet,
@@ -50,7 +54,47 @@ const SHOTS: Record<Exclude<WidgetKind, "bars" | "cabinet">, Shot> = {
   clipboard: { position: [0, 0.2, 4.7], look: [0, 0, 0], fov: 30 },
 };
 
-function Stage({ kind, args, calm }: { kind: WidgetKind; args: WidgetArgs; calm: boolean }) {
+// Turns its contents by the drag, easing back to rest once let go.
+function DragRig({ drag, children }: { drag?: DragState; children: ReactNode }) {
+  const group = useRef<THREE.Group>(null);
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => {
+    if (!drag) return;
+    drag.kick = () => invalidate();
+    return () => {
+      drag.kick = undefined;
+    };
+  }, [drag, invalidate]);
+  useFrame((_, delta) => {
+    const g = group.current;
+    if (!g || !drag) return;
+    if (!drag.held) {
+      const k = Math.pow(0.04, delta);
+      drag.yaw *= k;
+      drag.pitch *= k;
+      if (Math.abs(drag.yaw) + Math.abs(drag.pitch) > 0.002) invalidate();
+    }
+    g.rotation.set(drag.pitch, drag.yaw, 0);
+  });
+  return <group ref={group}>{children}</group>;
+}
+
+// The key light swings with the mouse, so every piece catches it as the
+// pointer moves across the page.
+function KeyLight() {
+  const light = useRef<THREE.DirectionalLight>(null);
+  useEffect(trackPointer, []);
+  useFrame((_, delta) => {
+    const l = light.current;
+    if (!l) return;
+    const k = 1 - Math.pow(0.05, delta);
+    l.position.x = THREE.MathUtils.lerp(l.position.x, 2.5 + pointer.x * 5, k);
+    l.position.y = THREE.MathUtils.lerp(l.position.y, 4 + pointer.y * 3, k);
+  });
+  return <directionalLight ref={light} position={[2.5, 4, 5]} intensity={1.8} />;
+}
+
+function Stage({ kind, args, calm, drag }: { kind: WidgetKind; args: WidgetArgs; calm: boolean; drag?: DragState }) {
   useStudioEnv();
   const shot: Shot | null =
     kind === "bars" || kind === "cabinet"
@@ -71,52 +115,54 @@ function Stage({ kind, args, calm }: { kind: WidgetKind; args: WidgetArgs; calm:
         onUpdate={(camera) => shot && camera.lookAt(...shot.look)}
       />
       <ambientLight intensity={0.35} />
-      <directionalLight position={[2.5, 4, 5]} intensity={1.8} />
+      {calm ? <directionalLight position={[2.5, 4, 5]} intensity={1.8} /> : <KeyLight />}
       <pointLight position={[-2.5, 1, 2]} color="#ff4655" intensity={9} distance={9} decay={2} />
-      {kind === "crate" && <SupplyDrop calm={calm} state={args.done ? "done" : args.drop || "idle"} chute={args.chute !== false} />}
-      {kind === "badge" && (
-        <Motion calm={calm} tilt={0.12} sway={0.6} bob={0.03}>
-          <Suspense fallback={null}>
-            <HexBadge />
-          </Suspense>
-        </Motion>
-      )}
-      {kind === "trophy" && (
-        <Motion calm={calm} turn tilt={0.05}>
-          <Trophy tone={args.tone} />
-        </Motion>
-      )}
-      {kind === "squad" && <Squad filled={args.seats?.length ?? args.filled ?? 0} members={args.seats} calm={calm} />}
-      {kind === "calendar" && (
-        <Motion calm={calm} yaw={-0.35} tilt={0.12}>
-          <CalendarBlock date={args.date || ""} />
-        </Motion>
-      )}
-      {kind === "coins" && (
-        <Motion calm={calm} tilt={0.1} sway={0.25}>
-          <CoinStack calm={calm} />
-        </Motion>
-      )}
-      {kind === "shield" && (
-        <Motion calm={calm} tilt={0.05} sway={0.45}>
-          <ShieldBadge />
-        </Motion>
-      )}
-      {kind === "clipboard" && (
-        <Motion calm={calm} tilt={0.1} yaw={-0.3}>
-          <Clipboard />
-        </Motion>
-      )}
-      {kind === "cabinet" && <Cabinet items={args.cabinet || []} calm={calm} />}
-      {kind === "bars" && <Bars values={args.values || []} today={args.today ?? -1} calm={calm} />}
+      <DragRig drag={drag}>
+        {kind === "crate" && <SupplyDrop calm={calm} state={args.done ? "done" : args.drop || "idle"} chute={args.chute !== false} />}
+        {kind === "badge" && (
+          <Motion calm={calm} tilt={0.12} sway={0.6} bob={0.03}>
+            <Suspense fallback={null}>
+              <HexBadge />
+            </Suspense>
+          </Motion>
+        )}
+        {kind === "trophy" && (
+          <Motion calm={calm} turn tilt={0.05}>
+            <Trophy tone={args.tone} />
+          </Motion>
+        )}
+        {kind === "squad" && <Squad filled={args.seats?.length ?? args.filled ?? 0} members={args.seats} calm={calm} />}
+        {kind === "calendar" && (
+          <Motion calm={calm} yaw={-0.35} tilt={0.12}>
+            <CalendarBlock date={args.date || ""} />
+          </Motion>
+        )}
+        {kind === "coins" && (
+          <Motion calm={calm} tilt={0.1} sway={0.25}>
+            <CoinStack calm={calm} />
+          </Motion>
+        )}
+        {kind === "shield" && (
+          <Motion calm={calm} tilt={0.05} sway={0.45}>
+            <ShieldBadge />
+          </Motion>
+        )}
+        {kind === "clipboard" && (
+          <Motion calm={calm} tilt={0.1} yaw={-0.3}>
+            <Clipboard />
+          </Motion>
+        )}
+        {kind === "cabinet" && <Cabinet items={args.cabinet || []} calm={calm} />}
+        {kind === "bars" && <Bars values={args.values || []} today={args.today ?? -1} calm={calm} />}
+      </DragRig>
     </>
   );
 }
 
-export default function WidgetView({ kind, args, calm }: { kind: WidgetKind; args: WidgetArgs; calm: boolean }) {
+export default function WidgetView({ kind, args, calm, drag }: { kind: WidgetKind; args: WidgetArgs; calm: boolean; drag?: DragState }) {
   return (
     <View as="span" className="w3d__view">
-      <Stage kind={kind} args={args} calm={calm} />
+      <Stage kind={kind} args={args} calm={calm} drag={drag} />
     </View>
   );
 }

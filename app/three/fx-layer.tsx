@@ -12,8 +12,9 @@ import { chime, pop, thud, whoosh } from "./sound";
 //   airdrop   — a supply crate parachutes onto the mission card, lands,
 //               and pops open in a beam of light with sparks.
 //   celebrate — fireworks and falling confetti.
-//   coins     — gold coins rain into the month-points chip with "+N".
-const DURATION: Record<FxKind, number> = { airdrop: 2800, celebrate: 3600, coins: 2400 };
+//   coins     — gold coins fly up from mid-screen into the month-points
+//               chip, which then shows "+N".
+const DURATION: Record<FxKind, number> = { airdrop: 2800, celebrate: 3600, coins: 2600 };
 const easeOut = (p: number) => 1 - Math.pow(1 - Math.min(1, Math.max(0, p)), 3);
 const clamp01 = (p: number) => Math.min(1, Math.max(0, p));
 
@@ -49,16 +50,16 @@ export default function FxLayer() {
   }, [fx]);
   if (!fx) return null;
   const low = sceneTier() === "low";
-  const flat = { key: fx.id, orthographic: true, camera: { zoom: 1, position: [0, 0, 600] as [number, number, number], near: 1, far: 2000 } };
+  const flat = { orthographic: true, camera: { zoom: 1, position: [0, 0, 600] as [number, number, number], near: 1, far: 2000 } };
   const common = { dpr: (low ? 1 : [1, 1.75]) as number | [number, number], gl: { alpha: true, antialias: !low }, style: { pointerEvents: "none" as const } };
   return (
     <div className="fx-layer" aria-hidden="true">
       {fx.kind === "airdrop" ? (
-        <Canvas {...flat} {...common}>
+        <Canvas key={fx.id} {...flat} {...common}>
           <AirdropDrop anchor={fx.anchor} low={low} />
         </Canvas>
       ) : fx.kind === "coins" ? (
-        <Canvas {...flat} {...common}>
+        <Canvas key={fx.id} {...flat} {...common}>
           <CoinRain anchor={fx.anchor} amount={fx.amount} low={low} />
         </Canvas>
       ) : (
@@ -315,7 +316,7 @@ function Fireworks({ low }: { low: boolean }) {
   );
 }
 
-// ---------- Coins: points just gained, raining into the points chip ----------
+// ---------- Coins: points just gained, collected into the points chip ----------
 
 function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low: boolean }) {
   const size = useThree((state) => state.size);
@@ -327,16 +328,18 @@ function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low
   const coins = useMemo(
     () =>
       Array.from({ length: count }, (_, i) => ({
-        x: target.x + (Math.random() * 2 - 1) * 260,
+        x: (Math.random() * 2 - 1) * Math.min(320, size.width * 0.35),
+        y: -size.height * 0.1 + (Math.random() * 2 - 1) * 90,
+        arc: 60 + Math.random() * 120,
         delay: i * 0.07,
         spin: 6 + Math.random() * 6,
       })),
-    [count, target.x],
+    [count, size.width, size.height],
   );
   const refs = useRef<(THREE.Group | null)[]>([]);
   const label = useRef<THREE.Mesh>(null);
   const started = useRef(performance.now());
-  const FALL = 0.85;
+  const FALL = 1;
   const text = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 256;
@@ -366,8 +369,13 @@ function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low
       const c = coins[i];
       const p = clamp01((t - c.delay) / FALL);
       g.visible = p > 0 && p < 1;
-      const e = p * p;
-      g.position.set(THREE.MathUtils.lerp(c.x, target.x, e), THREE.MathUtils.lerp(size.height / 2 + 60, target.y, e), 0);
+      // Pop out, then swoop into the chip along an arc.
+      const e = p * p * (3 - 2 * p);
+      g.position.set(
+        THREE.MathUtils.lerp(c.x, target.x, e),
+        THREE.MathUtils.lerp(c.y, target.y, e) + Math.sin(Math.PI * p) * c.arc,
+        0,
+      );
       g.rotation.set(0.4, t * c.spin, 0);
       g.scale.setScalar(1 - Math.max(0, p - 0.8) * 3);
     });
@@ -386,7 +394,8 @@ function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low
         <group key={i} ref={(el) => { refs.current[i] = el; }} visible={false}>
           <mesh rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[15, 15, 4, 32]} />
-            <meshStandardMaterial color={METAL.gold} metalness={1} roughness={0.22} />
+            {/* A little glow of its own, so a coin never reads as a dark disc. */}
+            <meshStandardMaterial color={METAL.gold} metalness={0.85} roughness={0.25} emissive="#8a5a00" emissiveIntensity={0.7} />
           </mesh>
         </group>
       ))}

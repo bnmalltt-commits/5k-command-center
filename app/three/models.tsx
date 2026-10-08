@@ -292,6 +292,11 @@ export function Trophy({ tone = "gold" }: { tone?: Tone }) {
 
 // ---------- Squad: five seats around a holo table ----------
 
+// The page already shows these pictures as plain <img>s; the browser would
+// hand a texture load that cached, non-CORS copy and refuse it. A distinct
+// URL (Discord takes ?size=) makes it a fresh CORS request.
+export const corsUrl = (url: string) => `${url}${url.includes("?") ? "&" : "?"}size=256`;
+
 // An image from another site (Discord avatars allow it) as a texture, or
 // null until it loads or if it can't.
 export function useRemoteTexture(url?: string | null) {
@@ -302,7 +307,7 @@ export function useRemoteTexture(url?: string | null) {
     let loaded: THREE.Texture | null = null;
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
-    loader.load(url, (t) => {
+    loader.load(corsUrl(url), (t) => {
       loaded = t;
       if (!alive) return t.dispose();
       t.colorSpace = THREE.SRGBColorSpace;

@@ -289,7 +289,9 @@ body > main { position: relative; z-index: 1; background-color: transparent !imp
   margin-bottom: 20px;
 }
 .topbar__logo { display: none; width: 52px; height: auto; flex-shrink: 0; }
-.topbar__heading { min-width: 0; flex: 1; }
+/* The heading keeps a readable width; extra stat chips wrap to a second row. */
+.topbar { flex-wrap: wrap; }
+.topbar__heading { min-width: min(220px, 60%); flex: 1 1 220px; }
 .topbar__title {
   margin: 0;
   color: var(--ui-text);
@@ -1719,3 +1721,6 @@ html[data-scene-motion="full"] .podium--3d .podium__slot.tilt { transform: none;
 .trophy-cabinet { width: 100%; height: 190px; border: 1px solid var(--ui-line); border-radius: 14px; background: radial-gradient(70% 90% at 50% 100%, rgba(245, 197, 66, 0.12), transparent 70%), rgba(0, 0, 0, 0.3); }
 .scene-toggle__sound { display: inline-grid; place-items: center; width: 30px; min-height: 28px; margin-left: 2px; border: 0; border-left: 1px solid var(--ui-line); background: transparent; color: var(--ui-text-2); }
 .scene-toggle__sound svg { width: 15px; height: 15px; }
+/* 3D pieces turn when dragged (sideways on touch screens, so scrolling still works). */
+.w3d--drag { pointer-events: auto; cursor: grab; touch-action: pan-y; }
+.w3d--drag:active { cursor: grabbing; }

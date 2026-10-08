@@ -4,6 +4,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Lightformer, RoundedBox } from "@react-three/drei";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import { corsUrl } from "./models";
 import { sceneTier } from "./prefs";
 
 // Pillars and medals for the top three, drawn in an orthographic camera
@@ -216,7 +217,7 @@ function AvatarCard({ spot, calm, onReady }: { spot: Spot; calm: boolean; onRead
     const loader = new THREE.TextureLoader();
     loader.setCrossOrigin("anonymous");
     loader.load(
-      a.src,
+      corsUrl(a.src),
       (texture) => {
         if (!alive) return texture.dispose();
         texture.colorSpace = THREE.SRGBColorSpace;

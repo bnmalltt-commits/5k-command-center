@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState, type ReactNode } from "react";
 import { sceneTier, useSceneMode, webglAvailable, type SceneTier } from "./prefs";
 import type { WidgetArgs, WidgetKind } from "./widget-view";
+import { useDragRotate } from "./drag";
 
 // The 3D code loads on its own, after the page, and only when 3D is on.
 const WidgetView = dynamic(() => import("./widget-view"), { ssr: false });
@@ -32,11 +33,18 @@ export function Widget3D({
   fallback?: ReactNode;
 }) {
   const mode = useWidgets3D();
+  const drag = useDragRotate();
   if (!mode) return <>{fallback}</>;
+  // Everything but the points chart can be turned by dragging it.
+  const draggable = kind !== "bars";
   return (
     // A span, since some sit inside buttons (the home tiles).
-    <span className={`w3d ${className}`} aria-hidden="true">
-      <WidgetView kind={kind} args={args} calm={mode === "calm"} />
+    <span
+      className={`w3d ${draggable ? "w3d--drag" : ""} ${className}`}
+      aria-hidden="true"
+      {...(draggable ? drag.handlers : {})}
+    >
+      <WidgetView kind={kind} args={args} calm={mode === "calm"} drag={draggable ? drag.state : undefined} />
     </span>
   );
 }
