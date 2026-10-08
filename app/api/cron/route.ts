@@ -239,8 +239,8 @@ async function teamSummary(nowMs: number) {
       ...nameLines("ยังไม่มีทีม (สร้างทีมก่อน ไม่งั้นโดนหักทุกคืน)", docked.filter((m: any) => !m.in_team).map((m: any) => m.display_name)),
       ...(docked.length
         ? [
-            ["ทำชดได้คืน", `งัดร้าน +${KIND_POINTS.shop} · ลูป +${KIND_POINTS.loop} วันไหนก็ได้`] as [string, unknown],
-            ["ดูยอดค้างของตัวเอง", "เว็บ → เพิ่มเติม → แต้มของฉัน"] as [string, unknown],
+            ["กติกา", `ขาดวันไหนหักวันนั้น ทำทีหลังไม่ได้คืน · งัดร้าน +${KIND_POINTS.shop} · ลูป +${KIND_POINTS.loop}`] as [string, unknown],
+            ["ดูแต้มที่โดนหัก", "เว็บ → เพิ่มเติม → แต้มของฉัน"] as [string, unknown],
           ]
         : []),
     ],
@@ -284,8 +284,8 @@ async function weeklySummary(nowMs: number) {
         ? top.map((m: any, i: number): [string, unknown] => [`${medal[i]} ${m.display_name}`, `${Number(m.score)} แต้ม`])
         : [["อันดับ", "สัปดาห์นี้ยังไม่มีใครได้แต้ม"] as [string, unknown]]),
       ["หลักฐานที่ผ่าน", `แอร์ดรอป ${Number(approved?.a || 0)} · ทีม ${Number(approved?.p || 0)} รายการ`],
-      ["ค้างคะแนนทีม", owing.length ? `${owing.length} คน · รวม ${owing.reduce((s: number, m: any) => s + Number(m.debt), 0)} คะแนน` : "ไม่มี 🎉"],
-      ...groupedLines(owing, (m) => Number(m.debt), (n) => `ค้าง ${n}`),
+      ["ขาดคะแนนทีมเดือนนี้", owing.length ? `${owing.length} คน · รวม ${owing.reduce((s: number, m: any) => s + Number(m.debt), 0)} คะแนน` : "ไม่มี 🎉"],
+      ...groupedLines(owing, (m) => Number(m.debt), (n) => `ขาด ${n}`),
     ],
     color: 0x60a5fa,
     mention: mentions(top.slice(0, 3)),

@@ -1036,7 +1036,7 @@ const POINT_CATEGORIES: [string, string][] = [
   ["loop", "ลูป"],
   ["adjust", "แอดมินปรับ"],
   ["penalty", "โดนหัก (ทีมไม่ครบ)"],
-  ["refund", "ได้คืน (ทำชด)"],
+  ["refund", "ได้คืน"],
 ];
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
@@ -1113,8 +1113,7 @@ function MyPoints({ data }: { data: Data }) {
         {month === thisMonth && mine && (
           <p className="text-sm text-[var(--ui-text-2)]">
             คะแนนทีมวันนี้ {mine.today}/{data.team?.perDay ?? 9}
-            {mine.debt > 0 ? ` · ค้าง ${mine.debt} คะแนน (ทำชดแล้วได้แต้มคืน)` : ""}
-            {mine.bank > 0 && mine.neededToday === 0 ? ` · เกินเก็บไว้ ${mine.bank}` : ""}
+            {mine.debt > 0 ? ` · เดือนนี้ขาดรวม ${mine.debt} คะแนน (หักไปแล้ว)` : ""}
           </p>
         )}
       </div>
@@ -1212,17 +1211,17 @@ function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
               label: `โดนหักคะแนนทีม${label}`,
               value: `${p.team.docked} คน`,
               tone: p.team.docked ? "bad" : "good",
-              sub: `หักรวม ${-p.points.penalty} แต้ม · ทำชดได้คืน ${p.points.refund} แต้ม`,
+              sub: `หักรวม ${-p.points.penalty} แต้ม`,
             },
           ]
         : []),
     ...(t.on
       ? [
           {
-            label: "ตอนนี้ค้างคะแนนทีม",
+            label: "ขาดคะแนนทีมเดือนนี้",
             value: `${t.owing} คน`,
             tone: t.owing ? "bad" : "good",
-            sub: t.owing ? `ค้างรวม ${t.owingTotal} คะแนน · ทำชดแล้วได้แต้มคืน` : undefined,
+            sub: t.owing ? `ขาดรวม ${t.owingTotal} คะแนน · หักไปแล้ว ไม่ได้คืน` : undefined,
           },
         ]
       : []),
@@ -1617,9 +1616,9 @@ function AdminTodo({ data, summary, onGo }: { data: Data; summary: any; onGo: (v
           },
           {
             id: "owing",
-            head: "ค้างทีม",
+            head: "ขาดทีม",
             sub: "จากวันก่อน",
-            chip: "ค้างคะแนนทีม",
+            chip: "ขาดคะแนนทีม",
             problem: (id: string) => (owing.has(id) ? `${owing.get(id)}` : null),
           },
         ]
@@ -1737,7 +1736,7 @@ function AdminTodo({ data, summary, onGo }: { data: Data; summary: any; onGo: (v
         {onLeave.size ? ` · ลาวันนี้ ${onLeave.size} คน` : ""}
       </p>
       <p className="todo-legend">
-        ทีมวันนี้ = ขาดเท่าไหร่ โดนหักเท่านั้นตอนเที่ยงคืน · ค้างทีม = ทำชดแล้วได้แต้มคืน · รอบที่ยังไม่ส่ง ไม่นับคนที่ลา ·
+        ทีมวันนี้ = ขาดเท่าไหร่ โดนหักเท่านั้นตอนเที่ยงคืน ไม่ได้คืน · ขาดทีม = คะแนนทีมที่ขาดรวมทั้งเดือน · รอบที่ยังไม่ส่ง ไม่นับคนที่ลา ·
         ขาดเมื่อวานบันทึกผิด ลบได้ที่ จัดการแก๊ง → การลา
       </p>
     </div>
@@ -2346,7 +2345,7 @@ function AdminCommandCenter({
                   { id: "missing", label: `ยังไม่ครบ ${attCounts.missing}` },
                   { id: "done", label: `ครบแล้ว ${attCounts.done}` },
                   { id: "leave", label: `ลา ${attCounts.leave}` },
-                  { id: "team", label: `ค้างคะแนนทีม ${attCounts.teamDebt}` },
+                  { id: "team", label: `ขาดคะแนนทีม ${attCounts.teamDebt}` },
                 ]}
               />
             </>
@@ -2742,7 +2741,7 @@ function AdminCommandCenter({
                 inset={false}
                 leading={<Avatar url={data.avatars?.[String(r.member.id)]} name={r.member.display_name} size={34} />}
                 title={r.member.display_name}
-                subtitle={`${r.leave ? "ลา" : `ส่งแล้ว ${r.sent}/${ROUNDS.length} รอบ`} · ทีม ${r.teamPoints}/${data.team?.perDay ?? 9}${r.teamDebt > 0 ? ` · ค้าง ${r.teamDebt} แต้ม` : ""}`}
+                subtitle={`${r.leave ? "ลา" : `ส่งแล้ว ${r.sent}/${ROUNDS.length} รอบ`} · ทีม ${r.teamPoints}/${data.team?.perDay ?? 9}${r.teamDebt > 0 ? ` · เดือนนี้ขาด ${r.teamDebt}` : ""}`}
                 trailing={
                   <span className="att-rounds" aria-label="สถานะแต่ละรอบ">
                     {ROUNDS.map((round, index) => (
@@ -2766,7 +2765,7 @@ function AdminCommandCenter({
                   : attFilter === "done"
                     ? "ยังไม่มีใครส่งครบ 4 รอบ"
                     : attFilter === "team"
-                      ? "ไม่มีใครค้างคะแนนทีม"
+                      ? "ไม่มีใครขาดคะแนนทีมเดือนนี้"
                       : shownAttDate === data.date
                         ? "ไม่มีใครลาวันนี้"
                         : "ไม่มีใครลาวันนั้น"
@@ -3485,7 +3484,7 @@ export default function Home() {
               {data.team?.mine && data.team.mine.debt > 0 && (
                 <button type="button" onClick={() => setView("mine")} className="topbar-stat topbar-stat--extra topbar-stat--warn">
                   <b>{data.team.mine.debt}</b>
-                  <span>ค้างคะแนนทีม</span>
+                  <span>ขาดทีมเดือนนี้</span>
                 </button>
               )}
             </div>
@@ -3551,7 +3550,7 @@ export default function Home() {
                     <span className="tile-cta">สร้างหรือเข้าทีม →</span>
                     {data.team.mine.debt > 0 && (
                       <span className="hud-tile__warn">
-                        ค้าง {data.team.mine.debt} คะแนน · ถูกหัก {data.team.mine.debt * data.team.penalty} แต้ม (ทำชดแล้วได้คืน)
+                        เดือนนี้ขาด {data.team.mine.debt} คะแนน · ถูกหักไป {data.team.mine.debt * data.team.penalty} แต้ม
                       </span>
                     )}
                   </>
@@ -3564,12 +3563,12 @@ export default function Home() {
                           {data.team.mine.neededToday > 0
                             ? `ต้องได้อีก ${data.team.mine.neededToday} คะแนนก่อนจบวัน · งัดร้าน +${data.team.points.shop} ลูป +${data.team.points.loop}`
                             : data.team.mine.bank > 0
-                              ? `ครบแล้ว · เกินเก็บไว้ ${data.team.mine.bank} คะแนน`
+                              ? `ครบแล้ว · ทำเกินไม่เก็บไปวันอื่น`
                               : "ครบแล้ววันนี้"}
                         </span>
                         {data.team.mine.debt > 0 && (
                           <span className="hud-tile__warn">
-                            ค้าง {data.team.mine.debt} คะแนน · ถูกหัก {data.team.mine.debt * data.team.penalty} แต้ม (ทำชดแล้วได้คืน)
+                            เดือนนี้ขาด {data.team.mine.debt} คะแนน · ถูกหักไป {data.team.mine.debt * data.team.penalty} แต้ม
                           </span>
                         )}
                       </span>

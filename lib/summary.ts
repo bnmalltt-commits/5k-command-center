@@ -143,7 +143,7 @@ export async function buildSummary(date: string, isAdmin: boolean) {
     // (it's what clears everything), which would read as "short 18" for
     // someone who only misses today's 9. While in debt, today's points first
     // pay that debt off, so today's shortfall is simply what's left of 9.
-    short: num(row.debt) > 0 ? Math.max(0, TEAM_PER_DAY - num(row.today)) : num(row.needed_today),
+    short: num(row.needed_today),
   }));
   const quotaOn = date >= TEAM_RULE_START;
   const teamNow = {
