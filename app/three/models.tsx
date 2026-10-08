@@ -223,10 +223,7 @@ export function HexBadge() {
   logo.colorSpace = THREE.SRGBColorSpace;
   return (
     <group>
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[1, 1, 0.26, 6]} />
-        <meshStandardMaterial color="#1d1d23" metalness={0.7} roughness={0.38} emissive="#2a0610" />
-      </mesh>
+      {/* No dark face: just the glowing rim with the mark floating inside. */}
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[1.05, 1.05, 0.16, 6, 1, true]} />
         <meshStandardMaterial color={RED} emissive={RED_GLOW} emissiveIntensity={1.6} toneMapped={false} side={THREE.DoubleSide} />
