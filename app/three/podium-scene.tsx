@@ -259,6 +259,17 @@ function AvatarCard({ spot, calm, onReady }: { spot: Spot; calm: boolean; onRead
   );
 }
 
+// Redraws 30 times a second while the podium animates (the canvas otherwise
+// only draws on demand).
+function Ticker30() {
+  const invalidate = useThree((state) => state.invalidate);
+  useEffect(() => {
+    const timer = window.setInterval(() => invalidate(), 1000 / 30);
+    return () => window.clearInterval(timer);
+  }, [invalidate]);
+  return null;
+}
+
 export default function PodiumScene({ calm, watch }: { calm: boolean; watch: string }) {
   const host = useRef<HTMLDivElement>(null);
   const [spots, setSpots] = useState<Spot[]>([]);
@@ -308,10 +319,11 @@ export default function PodiumScene({ calm, watch }: { calm: boolean; watch: str
         style={{ pointerEvents: "none" }}
         orthographic
         camera={{ zoom: 1, position: [0, 0, 500], near: 1, far: 1200 }}
-        dpr={low ? 1 : [1, 2]}
+        dpr={low ? 1 : [1, 1.75]}
         gl={{ alpha: true, antialias: true }}
-        frameloop={!visible ? "never" : calm ? "demand" : "always"}
+        frameloop={!visible ? "never" : "demand"}
       >
+        {!calm && visible && <Ticker30 />}
         <ambientLight intensity={0.5} />
         <directionalLight position={[160, 420, 520]} intensity={1.6} />
         <Environment resolution={64}>

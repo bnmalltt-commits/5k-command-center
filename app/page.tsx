@@ -3289,9 +3289,37 @@ export default function Home() {
       if (seq === loadSeq.current) setLoading(false);
     }
   };
+  // Once signed in, fetch the pages people open most in the background, so
+  // the first switch to them is instant too.
+  const prefetched = useRef(false);
+  useEffect(() => {
+    if (!data || prefetched.current) return;
+    prefetched.current = true;
+    const timer = window.setTimeout(async () => {
+      for (const v of ["score", "party", "mine"]) {
+        if (seenViews.current.includes(v)) continue;
+        try {
+          const r = await fetch(`/api/dashboard?view=${v}`, { cache: "no-store" });
+          if (!r.ok) return;
+          const x: any = await r.json();
+          if (x.error || x.view !== v) continue;
+          // Only the page's own keys: the shared ones may be newer already.
+          setData((prev) => (prev ? { ...x, ...prev, ...Object.fromEntries(Object.entries(x).filter(([k]) => !(k in prev) || (EMPTY_DATA as any)[k] === (prev as any)[k])) } : prev));
+          setLoadedViews((prev) => (prev.includes(v) ? prev : [...prev, v]));
+        } catch {
+          return;
+        }
+      }
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [Boolean(data)]);
+  // A page seen before shows straight away and refreshes quietly behind;
+  // only a first visit shows the loading state.
+  const seenViews = useRef<string[]>([]);
+  seenViews.current = loadedViews;
   useEffect(() => {
     viewRef.current = view;
-    load();
+    load({ silent: seenViews.current.includes(view) });
   }, [view]);
   useEffect(() => {
     const timer = window.setInterval(() => load({ silent: true }), 60000);

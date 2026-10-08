@@ -475,12 +475,15 @@ export default function CommandScene({ tier, calm }: { tier: SceneTier; calm: bo
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
 
-  const frameloop = !tabVisible ? "never" : calm || !high ? "demand" : "always";
+  // Drawn on demand at 30 frames a second on every machine: the arena moves
+  // slowly, and a full-screen canvas behind the whole app at the display's
+  // full rate cost more than it showed.
+  const frameloop = !tabVisible ? "never" : "demand";
   return (
     <div className="command-scene" aria-hidden="true">
       <Canvas
         style={{ pointerEvents: "none" }}
-        dpr={high ? [1, 1.75] : [0.75, 1]}
+        dpr={high ? [1, 1.25] : [0.75, 1]}
         camera={{ position: (flyIn ? FLY_FROM : REST).toArray(), fov: 45, near: 0.1, far: 400 }}
         gl={{ alpha: false, antialias: high, powerPreference: high ? "high-performance" : "low-power" }}
         frameloop={frameloop}
@@ -488,7 +491,7 @@ export default function CommandScene({ tier, calm }: { tier: SceneTier; calm: bo
       >
         <fog attach="fog" args={["#07040a", 24, 150]} />
         <ambientLight intensity={0.25} />
-        {!calm && !high && tabVisible && <Ticker fps={30} />}
+        {!calm && tabVisible && <Ticker fps={30} />}
         <CameraRig animate={animate} flyIn={flyIn} />
         <Sky palette={palette} animate={animate} />
         <Stars radius={110} depth={40} count={high ? 1800 : 600} factor={3.2} saturation={0} fade speed={animate ? 0.5 : 0} />

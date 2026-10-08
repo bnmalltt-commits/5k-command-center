@@ -35,13 +35,15 @@ export default function WidgetLayer({ tier, calm }: { tier: SceneTier; calm: boo
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, []);
   const high = tier === "high";
-  const frameloop = !tabVisible ? "never" : calm || !high ? "demand" : "always";
+  // 30 frames a second is plenty for icons that sway; dragging asks for
+  // extra frames itself.
+  const frameloop = !tabVisible ? "never" : "demand";
   return (
     <div className="widget-layer" aria-hidden="true">
       <Canvas
         style={{ pointerEvents: "none" }}
         frameloop={frameloop}
-        dpr={[1, 2]}
+        dpr={[1, 1.75]}
         gl={{ alpha: true, antialias: true, powerPreference: high ? "high-performance" : "low-power" }}
       >
         <View.Port />
