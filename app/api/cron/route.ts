@@ -119,10 +119,12 @@ async function shopReminder(nowMs: number) {
   return sent ? [`shop ${date}`] : [];
 }
 
-// 1st of the month, 00:00–06:00: announce last month's top 3 (ties share a place).
+// Announce last month's top 3 (ties share a place). Due from the 1st; any
+// run in the first ten days posts it if it hasn't gone out yet (the claim
+// key keeps it to once), so a missed night doesn't lose the announcement.
 async function monthlyWinners(nowMs: number) {
   const date = bkkDateOf(nowMs);
-  if (!date.endsWith("-01") || nowMs >= bkkTime(date, "06:00")) return [];
+  if (Number(date.slice(8, 10)) > 10) return [];
   const [y, m] = date.split("-").map(Number);
   const prev = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
   const board = (await db.prepare(

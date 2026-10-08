@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { now, thaiDate } from "./auth";
 import { notifyApproval, notifyRejection, discordUserId } from "./notify";
+import { audit } from "./audit";
 import { pointsByDaySql, pointsFor } from "./points";
 import { storage } from "./storage";
 
@@ -63,6 +64,11 @@ export async function approveEvidence(admin: { id: unknown; display_name: string
     ),
   ]);
   if (!flipped.meta.changes) throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
+  try {
+    const names = (await db.prepare("SELECT STRING_AGG(display_name,', ' ORDER BY display_name) AS n FROM members WHERE id = ANY(?::bigint[])")
+      .bind(credited.map((r: any) => Number(r.member_id))).first<any>())?.n || "";
+    await audit(admin, "approve", `ตรวจผ่าน ${kindLabel}${type === "airdrop" ? ` รอบ ${updated.round_time}` : ""} · ${updated.activity_date} · ${names}`, points);
+  } catch {}
   // The approval is committed; nothing in the Discord card may turn it into an error.
   try {
     await notifyApproval({
@@ -114,6 +120,11 @@ export async function rejectEvidence(admin: { id: unknown; display_name: string 
     ? await db.prepare("SELECT m.display_name AS name,m.external_user_id FROM party_activity_members pam JOIN members m ON m.id=pam.member_id WHERE pam.party_activity_id=? ORDER BY m.display_name").bind(id).all<any>()
     : await db.prepare("SELECT m.display_name AS name,m.external_user_id FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE a.id=?").bind(id).all<any>()
   ).results;
+  await audit(
+    admin,
+    "reject",
+    `ไม่ผ่าน ${type === "party" ? (rejected.kind === "loop" ? "ลูป" : "งัดร้าน") : `แอร์ดรอปรอบ ${rejected.round_time}`} · ${rejected.activity_date} · ${people.map((p: any) => p.name).join(", ")}${reason ? ` · ${reason}` : ""}`,
+  );
   await notifyRejection({
     reason,
     kind: type === "party"

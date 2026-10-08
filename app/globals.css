@@ -1724,3 +1724,60 @@ html[data-scene-motion="full"] .podium--3d .podium__slot.tilt { transform: none;
 /* 3D pieces turn when dragged (sideways on touch screens, so scrolling still works). */
 .w3d--drag { pointer-events: auto; cursor: grab; touch-action: pan-y; }
 .w3d--drag:active { cursor: grabbing; }
+/* Countdown chips on the mission card. */
+.mission__clock { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
+.mission__clock span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--ui-line); border-radius: 999px; background: rgba(0, 0, 0, 0.3); color: var(--ui-text-2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.mission__clock span.is-urgent { border-color: rgba(255, 181, 71, 0.55); background: rgba(255, 181, 71, 0.12); color: #ffd28a; }
+.mission__clock svg { width: 13px; height: 13px; }
+
+/* ---- Profiles and achievements --------------------------------------------- */
+.is-link { cursor: pointer; }
+.rank-list__item.is-link:hover { background: rgba(255, 255, 255, 0.03); }
+.ui-dialog.profile { position: relative; max-width: 620px; max-height: calc(100vh - 36px); overflow-y: auto; }
+.profile__close { position: absolute; top: 12px; right: 12px; }
+.profile__head { display: flex; align-items: center; gap: 14px; padding-right: 40px; }
+.profile__name { margin: 0; color: var(--ui-text); font-family: var(--font-display); font-size: 24px; font-weight: 700; }
+.profile__sub { margin: 2px 0 0; color: var(--ui-text-3); font-size: 13px; }
+.profile__stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-top: 16px; }
+.profile__stats > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--ui-line); border-radius: 12px; background: rgba(0, 0, 0, 0.25); }
+.profile__stats b { color: var(--ui-text); font-family: var(--font-display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.profile__stats span { color: var(--ui-text-3); font-size: 12.5px; }
+.profile__section { margin-top: 18px; }
+.profile__section h3 { margin: 0 0 8px; color: var(--ui-text-2); font-size: 13.5px; font-weight: 600; }
+.profile__rounds { display: grid; gap: 6px; }
+.profile__rounds > div { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; gap: 10px; color: var(--ui-text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+.profile__rounds b { color: var(--ui-text); text-align: right; }
+.profile__rounds .is-worst span:first-child, .profile__rounds .is-worst b { color: var(--ui-red-light); }
+.profile__roundbar { height: 8px; overflow: hidden; border-radius: 99px; background: rgba(255, 255, 255, 0.06); }
+.profile__roundbar span { display: block; height: 100%; border-radius: inherit; background: var(--ui-red); }
+.profile__note { margin: 6px 0 0; color: var(--ui-text-3); font-size: 12.5px; }
+.profile__months { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.profile__months li { display: grid; grid-template-columns: 1fr auto 44px; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--ui-line); color: var(--ui-text-2); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.profile__months b { color: var(--ui-text); }
+.profile__months li > span:last-child { text-align: right; color: var(--ui-amber); }
+.achievements { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.achievements li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--ui-line); border-radius: 12px; background: rgba(0, 0, 0, 0.22); }
+.achievements li.is-done { border-color: rgba(245, 197, 66, 0.4); background: rgba(245, 197, 66, 0.07); }
+.achievements__icon { display: grid; flex-shrink: 0; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #2a2a31; color: #6b6b76; font-family: var(--font-display); font-weight: 700; }
+.achievements li.is-done .achievements__icon { background: linear-gradient(135deg, #ffe17a, #c99a16); color: #3a2800; box-shadow: 0 0 14px rgba(245, 197, 66, 0.4); }
+.achievements b { display: block; color: var(--ui-text); font-size: 14px; }
+.achievements span { color: var(--ui-text-3); font-size: 12.5px; }
+.achievements__bar { display: block; height: 5px; margin-top: 5px; overflow: hidden; border-radius: 99px; background: rgba(255, 255, 255, 0.07); }
+.achievements__bar span { display: block; height: 100%; border-radius: inherit; background: var(--ui-amber); }
+.achievements__state { flex-shrink: 0; color: var(--ui-text-2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.achievements li.is-done .achievements__state { color: var(--ui-amber); font-weight: 600; }
+.medal-rack { width: 100%; height: 150px; margin-bottom: 12px; border: 1px solid var(--ui-line); border-radius: 14px; background: radial-gradient(70% 90% at 50% 100%, rgba(245, 197, 66, 0.1), transparent 70%), rgba(0, 0, 0, 0.28); }
+/* Several rounds at once. */
+.batch-toggle { justify-self: center; }
+.batch { display: grid; gap: 10px; padding: 12px; border: 1px dashed var(--ui-line-strong); border-radius: 14px; }
+.batch__head { display: flex; align-items: center; justify-content: space-between; color: var(--ui-text); }
+.batch__list { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.batch__list li { display: grid; gap: 6px; }
+.batch__list img { width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border: 1px solid var(--ui-line); border-radius: 10px; }
+/* Swipe to review. */
+.review__swipe { position: relative; touch-action: pan-y; cursor: grab; user-select: none; transition: transform 0.12s ease-out; }
+.review__swipe:active { cursor: grabbing; transition: none; }
+.review__swipe.is-ok .review__img { outline: 3px solid var(--ui-green); }
+.review__swipe.is-no .review__img { outline: 3px solid var(--ui-red); }
+.review__swipe-label { position: absolute; top: 14px; left: 50%; padding: 4px 14px; border-radius: 999px; background: rgba(0, 0, 0, 0.7); color: #fff; font-family: var(--font-display); font-weight: 700; transform: translateX(-50%); pointer-events: none; }
+.review__hint { margin: 6px 0 0; color: var(--ui-text-3); font-size: 12px; text-align: center; }

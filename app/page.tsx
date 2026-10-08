@@ -1,6 +1,7 @@
 "use client";
 import {
   FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   useEffect,
   useMemo,
   useRef,
@@ -205,6 +206,7 @@ type Data = {
   submissionLog: any[];
   adminParties: any[];
   ledger: any[];
+  pointAudit?: any[];
   adminLeaves: any[];
   boards?: Record<string, any[]>;
   monthBoards?: Record<string, any[]>;
@@ -368,6 +370,138 @@ function Medal({ rank, className }: { rank: number; className?: string }) {
   );
 }
 
+// Several rounds at once: pick a few screenshots, check which round each is
+// for (filled in with the rounds still to send, in order), send them one by
+// one through the same upload as a single round.
+function BatchUpload({ open, onDone }: { open: Round[]; onDone: (message: string, sent: number) => void }) {
+  const [items, setItems] = useState<{ file: File; url: string; round: Round }[]>([]);
+  const [sending, setSending] = useState(false);
+  const [shown, setShown] = useState(false);
+  useEffect(() => () => items.forEach((item) => URL.revokeObjectURL(item.url)), [items]);
+  if (open.length < 2) return null;
+  const pick = (files: FileList | null) => {
+    const list = Array.from(files || []).filter((f) => f.type.startsWith("image/")).slice(0, open.length);
+    setItems(list.map((file, i) => ({ file, url: URL.createObjectURL(file), round: open[i] })));
+  };
+  const duplicate = new Set(items.map((i) => i.round)).size !== items.length;
+  const send = async () => {
+    setSending(true);
+    const results: string[] = [];
+    let sent = 0;
+    for (const item of items) {
+      try {
+        const form = new FormData();
+        form.append("type", "airdrop");
+        form.append("image", await shrinkImage(item.file));
+        form.append("round", item.round);
+        const x: any = await uploadResult(await fetch("/api/upload", { method: "POST", body: form }));
+        if (x.error) results.push(`รอบ ${item.round}: ${x.error}`);
+        else sent++;
+      } catch (error) {
+        results.push(`รอบ ${item.round}: ${error instanceof Error && error.name === "ImageError" ? error.message : "ส่งไม่สำเร็จ"}`);
+      }
+    }
+    setSending(false);
+    setItems([]);
+    setShown(false);
+    onDone(results.length ? `ส่งแล้ว ${sent} รอบ · ${results.join(" · ")}` : `ส่งเข้าคิวตรวจแล้ว ${sent} รอบ`, sent);
+  };
+  if (!shown)
+    return (
+      <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm batch-toggle" onClick={() => setShown(true)}>
+        <Upload className="h-4 w-4" />
+        ส่งหลายรอบพร้อมกัน
+      </button>
+    );
+  return (
+    <div className="batch">
+      <div className="batch__head">
+        <b>ส่งหลายรอบพร้อมกัน</b>
+        <button type="button" className="ui-btn ui-btn--ghost ui-btn--sm" onClick={() => (setItems([]), setShown(false))}>
+          ปิด
+        </button>
+      </div>
+      <label className="ui-btn ui-btn--ghost ui-btn--block">
+        <input type="file" accept="image/*" multiple hidden onChange={(e) => pick(e.target.files)} />
+        เลือกรูป (สูงสุด {open.length} รูป)
+      </label>
+      {items.length > 0 && (
+        <>
+          <ul className="batch__list">
+            {items.map((item, i) => (
+              <li key={item.url}>
+                <img src={item.url} alt="" />
+                <select
+                  className="ui-input"
+                  value={item.round}
+                  aria-label={`รูปที่ ${i + 1} เป็นของรอบไหน`}
+                  onChange={(e) => setItems((all) => all.map((x, j) => (j === i ? { ...x, round: e.target.value as Round } : x)))}
+                >
+                  {open.map((round) => (
+                    <option key={round} value={round}>
+                      รอบ {round}
+                    </option>
+                  ))}
+                </select>
+              </li>
+            ))}
+          </ul>
+          {duplicate && <p className="mission__note">มีสองรูปที่เลือกรอบเดียวกัน แก้ให้ไม่ซ้ำก่อนส่ง</p>}
+          <button type="button" className="ui-btn ui-btn--primary ui-btn--block" disabled={sending || duplicate} onClick={send}>
+            {sending ? "กำลังส่ง…" : `ส่ง ${items.length} รอบเข้าคิวตรวจ`}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Countdown under the mission title: time to the next round still to send,
+// and (with the team rule) how much team score is left before midnight.
+// Re-renders itself every 30 seconds.
+const ROUND_MINUTES: Record<string, number> = { "17:00": 17 * 60, "20:00": 20 * 60, "23:00": 23 * 60, "01:00": 25 * 60 };
+const spell = (minutes: number) => {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  return h ? `${h} ชม.${m ? ` ${m} นาที` : ""}` : `${m} นาที`;
+};
+function MissionClock({ data, mine }: { data: Data; mine: Map<any, any> }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => tick((n) => n + 1), 30000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const [h, m] = new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    .format(new Date())
+    .split(":")
+    .map(Number);
+  // A clock running past midnight until 05:00, so the 01:00 round is 25:00.
+  const now = (h < LATE_ROUND_UNTIL_HOUR ? h + 24 : h) * 60 + m;
+  // Still to send: nothing sent yet, or sent and rejected.
+  const next = ROUNDS.find((round) => ROUND_MINUTES[round] >= now && (!mine.get(round) || mine.get(round).status === "rejected"));
+  const parts: { text: string; urgent: boolean }[] = [];
+  if (next) {
+    const left = ROUND_MINUTES[next] - now;
+    parts.push({ text: left === 0 ? `ถึงรอบ ${next} แล้ว` : `รอบถัดไป ${next} · อีก ${spell(left)}`, urgent: left <= 30 });
+  }
+  const need = data.team?.mine?.neededToday ?? 0;
+  if (data.team?.mine && need > 0 && data.date >= data.team.start) {
+    const toMidnight = 24 * 60 - (h * 60 + m);
+    parts.push({ text: `ทีมขาดอีก ${need} คะแนน · เหลือ ${spell(toMidnight)} ก่อนเที่ยงคืน`, urgent: toMidnight <= 120 });
+  }
+  if (!parts.length) return null;
+  return (
+    <p className="mission__clock">
+      {parts.map((part) => (
+        <span key={part.text} className={part.urgent ? "is-urgent" : ""}>
+          <Clock aria-hidden="true" />
+          {part.text}
+        </span>
+      ))}
+    </p>
+  );
+}
+
 // The day's four rounds as one card: progress, per-round state, and the
 // upload for the selected round all in one place. Replaces the old hero
 // clock + progress bar + label buttons + separate check-in panel, which
@@ -382,6 +516,7 @@ function MissionCard({
   setImage,
   pickerReset,
   onSubmit,
+  onBatchDone,
 }: {
   data: Data;
   round: Round;
@@ -392,6 +527,7 @@ function MissionCard({
   setImage: (file: File | null) => void;
   pickerReset: number;
   onSubmit: (event: FormEvent) => void;
+  onBatchDone: (message: string, sent: number) => void;
 }) {
   const approved = ROUNDS.filter(
     (r) => mine.get(r)?.status === "approved",
@@ -440,6 +576,7 @@ function MissionCard({
           <p className="mission__lead">
             ส่งรูปหลักฐานทุกรอบ · ผ่านแล้วได้รอบละ +{data.team?.points.airdrop ?? 5}
           </p>
+          <MissionClock data={data} mine={mine} />
         </div>
       </header>
       <div className="mission__grid">
@@ -488,6 +625,10 @@ function MissionCard({
             <Upload className="h-5 w-5" />
             {selected ? `ส่งหลักฐานรอบ ${round} ใหม่` : `ส่งหลักฐานรอบ ${round}`}
           </button>
+          <BatchUpload
+            open={ROUNDS.filter((r) => !mine.get(r) || mine.get(r).status === "rejected")}
+            onDone={onBatchDone}
+          />
         </form>
       )}
     </section>
@@ -760,7 +901,7 @@ function SquadRanking({
             const member = rows[index];
             if (!member) return <div key={index} className="podium__slot podium__slot--empty" />;
             return (
-              <div key={member.id} className={`podium__slot podium__slot--${index + 1} tilt`}>
+              <div key={member.id} className={`podium__slot podium__slot--${index + 1} tilt is-link`} {...profileKeys(member.id)}>
                 <Medal rank={ranks[index]} className="podium__medal" />
                 <Avatar url={avatars[String(member.id)]} name={member.display_name} size={index === 0 ? 76 : 60} />
                 <span className="podium__name">
@@ -783,7 +924,7 @@ function SquadRanking({
               const pct = top > 0 ? Math.max(2, Math.min(100, (Number(member.score || 0) / top) * 100)) : 0;
               const isMe = String(member.id) === String(highlightId);
               return (
-                <li key={member.id} className={`rank-list__item ${isMe ? "is-me" : ""}`}>
+                <li key={member.id} className={`rank-list__item is-link ${isMe ? "is-me" : ""}`} {...profileKeys(member.id)}>
                   <span className={`rank-num rank-num--${ranks[index]}`}>{ranks[index]}</span>
                   <span className="rank-list__main">
                     <span className="name-with-avatar">
@@ -809,6 +950,7 @@ function SquadRanking({
           <Row
             key={member.id}
             inset={false}
+            onClick={() => openProfile(member.id)}
             leading={
               <span className={`rank-num rank-num--${ranks[index]}`}>
                 {ranks[index]}
@@ -1040,6 +1182,136 @@ const POINT_CATEGORIES: [string, string][] = [
 ];
 const signed = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
+// ---- Profiles and achievements ----
+// Any name in the ranking opens that member's profile; the page listens for
+// this event so lists don't have to pass a callback down.
+const openProfile = (id: unknown) => window.dispatchEvent(new CustomEvent("fivek-profile", { detail: String(id) }));
+const profileKeys = (id: unknown) => ({
+  role: "button" as const,
+  tabIndex: 0,
+  onClick: () => openProfile(id),
+  onKeyDown: (event: ReactKeyboardEvent) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openProfile(id);
+    }
+  },
+});
+
+function useProfile(id: string | null) {
+  const [profile, setProfile] = useState<any>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    setProfile(null);
+    setError("");
+    fetch(`/api/profile?id=${encodeURIComponent(id)}`)
+      .then((r) => r.json())
+      .then((x) => alive && (x.error ? setError(x.error) : setProfile(x)))
+      .catch(() => alive && setError("เปิดโปรไฟล์ไม่สำเร็จ"));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+  return { profile, error };
+}
+
+function AchievementList({ items }: { items: any[] }) {
+  return (
+    <ul className="achievements">
+      {items.map((a) => (
+        <li key={a.id} className={a.done ? "is-done" : ""}>
+          <span className="achievements__icon" aria-hidden="true">{a.icon}</span>
+          <span className="min-w-0 flex-1">
+            <b>{a.title}</b>
+            <span>{a.hint}</span>
+            {!a.done && (
+              <span className="achievements__bar" aria-label={`${a.progress} จาก ${a.goal}`}>
+                <span style={{ width: `${(a.progress / a.goal) * 100}%` }} />
+              </span>
+            )}
+          </span>
+          <span className="achievements__state">{a.done ? "ได้แล้ว" : `${a.progress}/${a.goal}`}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ProfileDialog({ id, data, onClose }: { id: string; data: Data; onClose: () => void }) {
+  const { profile: p, error } = useProfile(id);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const done = p ? p.achievements.filter((a: any) => a.done).length : 0;
+  return (
+    <div className="ui-dialog-backdrop" role="dialog" aria-modal="true" aria-label="โปรไฟล์สมาชิก" onClick={onClose}>
+      <div className="ui-dialog profile" onClick={(event) => event.stopPropagation()}>
+        <button type="button" className="icon-btn profile__close" onClick={onClose} aria-label="ปิด">
+          <X />
+        </button>
+        {!p ? (
+          <p className="ui-dialog__message">{error || "กำลังโหลด…"}</p>
+        ) : (
+          <>
+            <header className="profile__head">
+              <Avatar url={data.avatars?.[p.id]} name={p.name} size={64} />
+              <div className="min-w-0">
+                <h2 className="profile__name">{p.name}</h2>
+                <p className="profile__sub">
+                  {p.role === "admin" ? "แอดมิน" : "สมาชิก"} · อยู่แก๊งตั้งแต่ {p.joined}
+                </p>
+              </div>
+            </header>
+            <div className="profile__stats">
+              <div><b>{p.month.score}</b><span>แต้มเดือนนี้{p.month.rank ? ` · อันดับ #${p.month.rank}` : ""}</span></div>
+              <div><b>{p.airdrops.fullDays}</b><span>วันที่ครบ 4 รอบ · แอร์ดรอปผ่าน {p.airdrops.total} รอบ</span></div>
+              <div><b>{p.team.metDays}/{p.team.days}</b><span>วันที่คะแนนทีมครบ</span></div>
+              <div><b>{p.team.shops}</b><span>งัดร้าน · ลูป {p.team.loops}</span></div>
+            </div>
+            {p.airdrops.days30 > 0 && (
+              <section className="profile__section">
+                <h3>รอบที่ไม่ได้ส่ง (30 วันล่าสุด)</h3>
+                <div className="profile__rounds">
+                  {p.airdrops.missed30.map((r: any) => (
+                    <div key={r.round} className={p.airdrops.worst?.round === r.round ? "is-worst" : ""}>
+                      <span>{r.round}</span>
+                      <span className="profile__roundbar"><span style={{ width: `${(r.missed / p.airdrops.days30) * 100}%` }} /></span>
+                      <b>{r.missed} วัน</b>
+                    </div>
+                  ))}
+                </div>
+                {p.airdrops.worst && <p className="profile__note">พลาดบ่อยสุด: รอบ {p.airdrops.worst.round}</p>}
+              </section>
+            )}
+            {p.months.length > 0 && (
+              <section className="profile__section">
+                <h3>แต้มรายเดือน</h3>
+                <ul className="profile__months">
+                  {p.months.map((m: any) => (
+                    <li key={m.month}>
+                      <span>{monthLabel(m.month)}{m.complete ? "" : " (เดือนนี้)"}</span>
+                      <b>{m.score}</b>
+                      <span>{m.rank ? `#${m.rank}` : "—"}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            <section className="profile__section">
+              <h3>ป้ายความสำเร็จ {done}/{p.achievements.length}</h3>
+              <AchievementList items={p.achievements} />
+            </section>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // The member's own points per day, split by where they came from, so a
 // deduction is never a mystery. Same source as every score on the site.
 function MyPoints({ data }: { data: Data }) {
@@ -1070,7 +1342,9 @@ function MyPoints({ data }: { data: Data }) {
     return parts ? [...parts.values()].reduce((a, b) => a + b, 0) : 0;
   });
   const best = Math.max(0, ...perDay.map((v) => v || 0));
+  const { profile } = useProfile(String(data.me.id));
   return (
+    <>
     <Panel label="MY POINTS" title={monthLabel(month)} subtitle={month === thisMonth ? "เดือนนี้ · นับถึงวันนี้" : "ทั้งเดือน"} flush>
       <div className="space-y-4 p-5">
         <div className="points-total">
@@ -1140,6 +1414,21 @@ function MyPoints({ data }: { data: Data }) {
         <EmptyState art="crate" title="ยังไม่มีแต้มในเดือนนี้" hint="ส่งหลักฐานแอร์ดรอปหรือหลักฐานทีม แต้มจะขึ้นที่นี่หลังตรวจผ่าน" />
       )}
     </Panel>
+    {profile && (
+      <Panel
+        label="ACHIEVEMENTS"
+        title="ป้ายความสำเร็จ"
+        subtitle={`ได้แล้ว ${profile.achievements.filter((a: any) => a.done).length} จาก ${profile.achievements.length} ป้าย`}
+      >
+        <Widget3D
+          kind="medals"
+          args={{ medals: profile.achievements.map((a: any) => ({ icon: a.icon, done: a.done })) }}
+          className="medal-rack"
+        />
+        <AchievementList items={profile.achievements} />
+      </Panel>
+    )}
+    </>
   );
 }
 
@@ -1941,10 +2230,43 @@ function ReviewDialog({
       if (event.key === "Escape") onClose();
       else if (event.key === "ArrowRight") go(step(index, 1, handled));
       else if (event.key === "ArrowLeft") go(step(index, -1, handled));
+      // A = ผ่าน, R = ไม่ผ่าน (opens the reasons), while not already choosing one.
+      else if (!rejecting && (event.key === "a" || event.key === "A")) void act("approve");
+      else if (!rejecting && (event.key === "r" || event.key === "R")) setRejecting(true);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [index, handled, onClose]);
+  }, [index, handled, onClose, rejecting, busy]);
+  // Swipe the photo: right far enough approves, left asks for a reason.
+  const [dx, setDx] = useState(0);
+  const swipe = useRef<{ x: number; moved: boolean } | null>(null);
+  const SWIPE = 110;
+  const swipeHandlers = {
+    onPointerDown: (event: React.PointerEvent<HTMLDivElement>) => {
+      if (rejecting) return;
+      swipe.current = { x: event.clientX, moved: false };
+      event.currentTarget.setPointerCapture(event.pointerId);
+    },
+    onPointerMove: (event: React.PointerEvent<HTMLDivElement>) => {
+      if (!swipe.current) return;
+      const d = event.clientX - swipe.current.x;
+      if (Math.abs(d) > 6) swipe.current.moved = true;
+      setDx(d);
+    },
+    onPointerUp: () => {
+      const moved = swipe.current?.moved;
+      swipe.current = null;
+      const d = dx;
+      setDx(0);
+      if (!moved) return;
+      if (d > SWIPE) void act("approve");
+      else if (d < -SWIPE) setRejecting(true);
+    },
+    onClickCapture: (event: React.MouseEvent) => {
+      // A swipe isn't a click on the "open full size" link.
+      if (dx !== 0 || swipe.current?.moved) event.preventDefault();
+    },
+  };
   const finished = !left || !item || handled.includes(keyOf(item));
   return (
     <div className="ui-dialog-backdrop" role="dialog" aria-modal="true" aria-label="ตรวจหลักฐาน">
@@ -1959,9 +2281,17 @@ function ReviewDialog({
           <p className="ui-dialog__message">ตรวจครบทุกรายการแล้ว</p>
         ) : (
           <>
-            <a href={`/api/image/${item.image_key}`} target="_blank" rel="noreferrer" title="เปิดรูปเต็ม">
-              <img key={item.image_key} src={`/api/image/${item.image_key}`} alt="รูปหลักฐาน" className="review__img" />
-            </a>
+            <div
+              className={`review__swipe ${dx > SWIPE ? "is-ok" : dx < -SWIPE ? "is-no" : ""}`}
+              style={{ transform: dx ? `translateX(${dx}px) rotate(${dx / 40}deg)` : undefined }}
+              {...swipeHandlers}
+            >
+              <a href={`/api/image/${item.image_key}`} target="_blank" rel="noreferrer" title="เปิดรูปเต็ม" draggable={false}>
+                <img key={item.image_key} src={`/api/image/${item.image_key}`} alt="รูปหลักฐาน" className="review__img" draggable={false} />
+              </a>
+              {dx !== 0 && <span className="review__swipe-label">{dx > 0 ? "ผ่าน" : "ไม่ผ่าน"}</span>}
+            </div>
+            <p className="review__hint">ปัดรูปไปขวา = ผ่าน · ปัดซ้าย = ไม่ผ่าน · คีย์ A = ผ่าน · R = ไม่ผ่าน · ← → เลื่อนรายการ</p>
             <p className="review__title">
               {item.type === "party"
                 ? `${item.detail} · ${item.activity_date}`
@@ -2129,7 +2459,7 @@ function AdminCommandCenter({
   onReviewTargetUsed?: (found: boolean) => void;
 }) {
   const [tab, setTab] = useState<
-    "verify" | "attendance" | "members" | "parties" | "points" | "leave" | "admins"
+    "verify" | "attendance" | "members" | "parties" | "points" | "audit" | "leave" | "admins"
   >("verify");
   const [attDate, setAttDate] = useState(data.date);
   const [attFilter, setAttFilter] = useState("missing");
@@ -2191,6 +2521,8 @@ function AdminCommandCenter({
   const visibleLedger = data.ledger.filter((entry: any) =>
     matches(`${entry.names} ${entry.note}`),
   );
+  const visibleAudit = (data.pointAudit || []).filter((row: any) => matches(`${row.admin_name} ${row.summary}`));
+  const AUDIT_LABEL: Record<string, string> = { approve: "ตรวจผ่าน", reject: "ไม่ผ่าน", adjust: "ปรับแต้ม", undo: "ย้อน", edit: "แก้ไข" };
   const visibleLeaves = data.adminLeaves.filter((leave: any) =>
     matches(`${leave.display_name} ${leave.reason} ${leave.leave_date}`),
   );
@@ -2293,6 +2625,7 @@ function AdminCommandCenter({
               { id: "members", label: "สมาชิก", count: activeMembers.length },
               { id: "parties", label: "ปาร์ตี้", count: data.adminParties.length },
               { id: "points", label: "แต้ม" },
+              { id: "audit", label: "ประวัติแก้แต้ม" },
               { id: "leave", label: "การลา", count: data.adminLeaves.length },
               {
                 id: "admins",
@@ -2699,6 +3032,30 @@ function AdminCommandCenter({
             <EmptyState art="trophy" title="ยังไม่มีประวัติแต้ม" />
           ))}
 
+        {tab === "audit" &&
+          (visibleAudit.length ? (
+            visibleAudit.map((row: any) => (
+              <Row
+                key={row.id}
+                inset={false}
+                title={row.summary}
+                subtitle={`${AUDIT_LABEL[row.action] || row.action} โดย ${row.admin_name} · ${new Date(row.created_at).toLocaleString("th-TH", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`}
+                trailing={
+                  row.points != null && Number(row.points) !== 0 ? (
+                    <b className={`rank-score ${Number(row.points) < 0 ? "text-[var(--ui-red-light)]" : "text-[var(--ui-green)]"}`}>
+                      {Number(row.points) > 0 ? "+" : ""}
+                      {Number(row.points)}
+                    </b>
+                  ) : undefined
+                }
+              />
+            ))
+          ) : (data.pointAudit || []).length ? (
+            noMatch
+          ) : (
+            <EmptyState art="check" title="ยังไม่มีประวัติการแก้แต้ม" hint="ทุกครั้งที่แอดมินตรวจ ปรับ ย้อน หรือแก้แต้ม จะบันทึกไว้ที่นี่ (เริ่มเก็บตั้งแต่วันนี้)" />
+          ))}
+
         {tab === "leave" &&
           (visibleLeaves.length ? (
             visibleLeaves.map((leave: any) => (
@@ -2878,6 +3235,7 @@ export default function Home() {
     [discordLater, setDiscordLater] = useState(false),
     [showOffline, setShowOffline] = useState(false),
     [celebration, setCelebration] = useState(""),
+    [profileId, setProfileId] = useState<string | null>(null),
     [reviewTarget, setReviewTarget] = useState(""),
     [confirmState, setConfirmState] = useState<{
       message: string;
@@ -3071,6 +3429,11 @@ export default function Home() {
       document.removeEventListener("pointermove", onMove);
       document.documentElement.removeEventListener("pointerleave", onLeave);
     };
+  }, []);
+  useEffect(() => {
+    const onOpen = (event: Event) => setProfileId(String((event as CustomEvent).detail));
+    window.addEventListener("fivek-profile", onOpen);
+    return () => window.removeEventListener("fivek-profile", onOpen);
   }, []);
   // Celebrate milestones reached since the last refresh (never on first load,
   // so reopening the site doesn't replay them).
@@ -3534,6 +3897,13 @@ export default function Home() {
               setImage={setImage}
               pickerReset={pickerReset}
               onSubmit={sendAirdrop}
+              onBatchDone={(message, sent) => {
+                setNotice(message);
+                if (sent) {
+                  playFx("airdrop");
+                  void load();
+                }
+              }}
             />
             <div className="home-stats">
               <button
@@ -3874,6 +4244,7 @@ export default function Home() {
         )}
       </nav>
       {celebration && <Celebration message={celebration} onDone={() => setCelebration("")} />}
+      {profileId && <ProfileDialog id={profileId} data={data} onClose={() => setProfileId(null)} />}
       {confirmState && (
         <ConfirmDialog
           message={confirmState.message}

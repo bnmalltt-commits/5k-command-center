@@ -3,6 +3,7 @@ import { leaveStatements } from "@/lib/party";
 import { discordUserId, discordAvatarUrl, postCard } from "@/lib/notify";
 import { pointsByDaySql, pointsDetailSql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
 import { approveEvidence, rejectEvidence, validType } from "@/lib/review";
+import { audit } from "@/lib/audit";
 import { buildSummary } from "@/lib/summary";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 
@@ -122,15 +123,17 @@ export async function GET(request: Request) {
     // The member's own team-quota standing, for the home screen (null before
     // the rule starts or for a member it doesn't cover yet).
     const myTeam = await db.prepare(`SELECT * FROM (${teamStatusSql(date)}) s WHERE member_id=?`).bind(me.id).first<any>();
-    const [adminParties, ledger, adminLeaves] = wants.admin
+    const [adminParties, ledger, adminLeaves, pointAudit] = wants.admin
       ? await Promise.all([
           db.prepare("SELECT p.id,p.name,p.status,owner.display_name AS owner_name,COALESCE(json_agg(json_build_object('id',m.id,'name',m.display_name) ORDER BY pm.id) FILTER (WHERE m.id IS NOT NULL),'[]') AS members FROM parties p LEFT JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id LEFT JOIN members m ON m.id=pm.member_id WHERE p.status IN ('open','locked') GROUP BY p.id,owner.display_name ORDER BY p.id DESC").bind().all(),
           // One row per award: a party approval credits up to 5 people under the
           // same source_id, and undoing it has to take back all of them at once.
           db.prepare("SELECT pl.source,pl.source_id,MAX(pl.id) AS id,MAX(pl.points) AS points,MAX(pl.note) AS note,MAX(pl.created_at) AS created_at,STRING_AGG(m.display_name,' · ' ORDER BY m.display_name) AS names,json_agg(json_build_object('id',m.id::text,'name',m.display_name) ORDER BY m.display_name) AS people,MAX(pa.kind) AS kind,MAX(COALESCE(pa.activity_date,a.activity_date)) AS activity_date,MAX(a.round_time) AS round_time FROM point_ledger pl JOIN members m ON m.id=pl.member_id LEFT JOIN party_activities pa ON pl.source='party' AND pa.id=pl.source_id LEFT JOIN airdrop_submissions a ON pl.source='airdrop' AND a.id=pl.source_id GROUP BY pl.source,pl.source_id ORDER BY MAX(pl.id) DESC LIMIT 60").bind().all(),
           db.prepare("SELECT l.id,l.leave_date,l.reason,m.display_name,creator.display_name AS created_by_name FROM leave_requests l JOIN members m ON m.id=l.member_id JOIN members creator ON creator.id=l.created_by ORDER BY l.leave_date DESC LIMIT 100").bind().all(),
+          // Who changed whose points (approve, reject, adjust, undo, edit).
+          db.prepare("SELECT id,created_at,admin_name,action,summary,points FROM point_audit ORDER BY id DESC LIMIT 150").bind().all(),
         ])
-      : [null, null, null];
+      : [null, null, null, null];
     // Top 5 of the current month for the side rail, shown on every view.
     const monthTop = (await db.prepare(
       `SELECT m.id,m.display_name,CASE WHEN m.last_seen_at>=? THEN 1 ELSE 0 END AS online,SUM(x.points) AS score FROM (${POINTS_BY_DAY}) x JOIN members m ON m.id=x.member_id WHERE m.active=1 AND x.day>=? GROUP BY m.id ORDER BY score DESC,m.display_name LIMIT 5`
@@ -217,6 +220,7 @@ export async function GET(request: Request) {
         pending: pending.results.map((row: any) => ({ ...row, points: pointsFor(row.type, row.kind, String(row.activity_date)) })),
         adminParties: adminParties!.results,
         ledger: ledger!.results,
+        pointAudit: pointAudit!.results,
         adminLeaves: adminLeaves!.results,
         attendance: attendance!.results,
         attendanceLeaves: attendanceLeaves!.results,
@@ -375,19 +379,23 @@ export async function POST(request: Request) {
       const memberId = Number(body.memberId), points = Number(body.points), reason = String(body.reason || "").trim();
       if (!Number.isInteger(points) || points === 0 || Math.abs(points) > 100) throw Error("ใส่แต้มเป็นจำนวนเต็ม -100 ถึง 100 และไม่เป็น 0");
       if (reason.length < 2 || reason.length > 100) throw Error("กรอกเหตุผล 2–100 ตัวอักษร");
-      const target = await db.prepare("SELECT id FROM members WHERE id=? AND active=1").bind(memberId).first();
+      const target = await db.prepare("SELECT id,display_name FROM members WHERE id=? AND active=1").bind(memberId).first<any>();
       if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
       await db.prepare(
         "INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) VALUES (?,'adjustment',?,?,?,?)"
       ).bind(memberId, adjustmentId(), points,`${reason} · โดย ${admin.display_name}`, now()).run();
+      await audit(admin, "adjust", `${points > 0 ? "เพิ่ม" : "ลด"}แต้ม ${target.display_name} · ${reason}`, points);
       return json({ ok: true });
     }
     if (body.action === "points_undo") {
-      await requireAdmin(request);
+      const admin = await requireAdmin(request);
       const source = String(body.source), sourceId = Number(body.sourceId);
+      // What is about to be taken back, for the audit line (read before delete).
+      const undone = await db.prepare("SELECT STRING_AGG(m.display_name,', ' ORDER BY m.display_name) AS names,MAX(pl.points) AS points,MAX(pl.note) AS note FROM point_ledger pl JOIN members m ON m.id=pl.member_id WHERE pl.source=? AND pl.source_id=?").bind(source, sourceId).first<any>();
       if (source === "adjustment") {
         const r = await db.prepare("DELETE FROM point_ledger WHERE source='adjustment' AND source_id=?").bind(sourceId).run();
         if (!r.meta.changes) throw Error("ไม่พบรายการแต้มนี้");
+        await audit(admin, "undo", `ย้อนการปรับแต้ม ${undone?.names || ""} · ${undone?.note || ""}`, -Number(undone?.points || 0));
         return json({ ok: true });
       }
       const table = validType(source) === "party" ? "party_activities" : "airdrop_submissions";
@@ -398,6 +406,7 @@ export async function POST(request: Request) {
         db.prepare("DELETE FROM point_ledger WHERE source=? AND source_id=?").bind(source, sourceId),
       ]);
       if (!revoked.meta.changes) throw Error("รายการนี้ถูกยกเลิกไปแล้วหรือไม่พบข้อมูล");
+      await audit(admin, "undo", `ยกเลิกหลักฐาน${source === "party" ? "ทีม" : "แอร์ดรอป"} #${sourceId} · ${undone?.names || ""}`, -Number(undone?.points || 0));
       return json({ ok: true });
     }
     // Fixes an approved team entry that was sent wrong: switch it between shop
@@ -429,6 +438,12 @@ export async function POST(request: Request) {
       const affected = credited
         .map((row: any) => ({ ...row, after: keep.includes(String(row.member_id)) ? points : 0 }))
         .filter((row: any) => Number(row.points) !== row.after);
+      await audit(
+        admin,
+        "edit",
+        `แก้หลักฐานทีม #${sourceId} · ${affected.map((row: any) => `${row.display_name} ${Number(row.points)}→${row.after}`).join(", ")}`,
+        affected.reduce((sum: number, row: any) => sum + row.after - Number(row.points), 0),
+      );
       if (affected.length && process.env.DISCORD_POINTS_WEBHOOK_URL)
         await postCard(process.env.DISCORD_POINTS_WEBHOOK_URL, {
           title: "✏️ แก้ไขแต้มหลักฐานทีม",

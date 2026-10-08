@@ -741,3 +741,85 @@ export function Cabinet({ items, calm }: { items: CabinetItem[]; calm: boolean }
     </group>
   );
 }
+
+// ---------- Achievement medals on a rack ----------
+
+export type MedalItem = { icon: string; done: boolean };
+
+function MedalCoin({ item, x, calm, index }: { item: MedalItem; x: number; calm: boolean; index: number }) {
+  const coin = useRef<THREE.Group>(null);
+  const face = useDisposable(
+    () =>
+      canvasTexture(128, 128, (ctx) => {
+        const g = ctx.createRadialGradient(46, 40, 6, 64, 64, 64);
+        g.addColorStop(0, item.done ? "#ffe17a" : "#5a5a64");
+        g.addColorStop(0.6, item.done ? METAL.gold : "#34343c");
+        g.addColorStop(1, item.done ? "#8a6408" : "#1b1b20");
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, 128, 128);
+        ctx.strokeStyle = item.done ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.15)";
+        ctx.lineWidth = 5;
+        ctx.beginPath();
+        ctx.arc(64, 64, 50, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = item.done ? "#4a3200" : "#6b6b76";
+        ctx.font = `700 58px ${displayFont()}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(item.icon, 64, 68);
+      }),
+    [item.icon, item.done],
+  );
+  useEffect(() => {
+    face.center.set(0.5, 0.5);
+    face.rotation = Math.PI / 2;
+  }, [face]);
+  useFrame(({ clock }) => {
+    if (coin.current) coin.current.rotation.y = calm || !item.done ? 0.25 : Math.sin(clock.elapsedTime * 1.1 + index * 0.7) * 0.6;
+  });
+  const metal = item.done ? METAL.gold : "#3a3a42";
+  return (
+    <group position={[x, 0, 0]}>
+      {/* Ribbon from the rail. */}
+      <mesh position={[-0.12, 0.62, 0]} rotation={[0, 0, 0.18]}>
+        <boxGeometry args={[0.16, 0.62, 0.02]} />
+        <meshStandardMaterial color={item.done ? RED : "#2a2a30"} roughness={0.6} />
+      </mesh>
+      <mesh position={[0.12, 0.62, 0]} rotation={[0, 0, -0.18]}>
+        <boxGeometry args={[0.16, 0.62, 0.02]} />
+        <meshStandardMaterial color={item.done ? "#c8132a" : "#24242a"} roughness={0.6} />
+      </mesh>
+      <group ref={coin}>
+        <mesh rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.42, 0.42, 0.09, 40]} />
+          <meshStandardMaterial attach="material-0" color={metal} metalness={1} roughness={0.25} />
+          <meshStandardMaterial attach="material-1" map={face} metalness={0.5} roughness={0.35} />
+          <meshStandardMaterial attach="material-2" color={metal} metalness={1} roughness={0.25} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+export function MedalRack({ items, calm }: { items: MedalItem[]; calm: boolean }) {
+  const step = 1.05;
+  const width = Math.max(1, items.length) * step;
+  useFrame((state) => {
+    const cam = state.camera as THREE.PerspectiveCamera;
+    const tan = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const d = Math.max((width / 2 + 0.4) / (tan * (cam.aspect || 3)), 0.95 / tan);
+    cam.position.set(0, 0.25, d);
+    cam.lookAt(0, 0.25, 0);
+  });
+  return (
+    <group>
+      <mesh position={[0, 0.95, -0.05]}>
+        <boxGeometry args={[width + 0.4, 0.06, 0.06]} />
+        <meshStandardMaterial color="#b9bec6" metalness={1} roughness={0.25} />
+      </mesh>
+      {items.map((item, i) => (
+        <MedalCoin key={i} item={item} index={i} calm={calm} x={(i - (items.length - 1) / 2) * step} />
+      ))}
+    </group>
+  );
+}

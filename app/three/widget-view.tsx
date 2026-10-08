@@ -9,6 +9,7 @@ import { pointer, trackPointer } from "./pointer";
 import {
   Bars,
   Cabinet,
+  MedalRack,
   CalendarBlock,
   Clipboard,
   CoinStack,
@@ -20,6 +21,7 @@ import {
   Trophy,
   useStudioEnv,
   type CabinetItem,
+  type MedalItem,
   type DropState,
   type SeatMember,
   type Tone,
@@ -27,7 +29,7 @@ import {
 
 // One small 3D scene drawn into the page-wide widget canvas, pinned to this
 // element's box (drei <View>). The element itself is laid out by the page.
-export type WidgetKind = "crate" | "badge" | "trophy" | "squad" | "calendar" | "coins" | "shield" | "clipboard" | "bars" | "cabinet";
+export type WidgetKind = "crate" | "badge" | "trophy" | "squad" | "calendar" | "coins" | "shield" | "clipboard" | "bars" | "cabinet" | "medals";
 export type WidgetArgs = {
   done?: boolean;
   drop?: DropState;
@@ -40,10 +42,11 @@ export type WidgetArgs = {
   values?: (number | null)[];
   today?: number;
   cabinet?: CabinetItem[];
+  medals?: MedalItem[];
 };
 
 type Shot = { position: [number, number, number]; look: [number, number, number]; fov: number };
-const SHOTS: Record<Exclude<WidgetKind, "bars" | "cabinet">, Shot> = {
+const SHOTS: Record<Exclude<WidgetKind, "bars" | "cabinet" | "medals">, Shot> = {
   crate: { position: [0, 1.5, 7.4], look: [0, 0.75, 0], fov: 30 },
   badge: { position: [0, 0, 4.1], look: [0, 0, 0], fov: 30 },
   trophy: { position: [0, 0.7, 4.6], look: [0, 0.05, 0], fov: 30 },
@@ -97,7 +100,7 @@ function KeyLight() {
 function Stage({ kind, args, calm, drag }: { kind: WidgetKind; args: WidgetArgs; calm: boolean; drag?: DragState }) {
   useStudioEnv();
   const shot: Shot | null =
-    kind === "bars" || kind === "cabinet"
+    kind === "bars" || kind === "cabinet" || kind === "medals"
       ? null
       : kind === "crate" && args.chute === false
         ? { position: [0, 0.9, 4.2], look: [0, 0, 0], fov: 30 }
@@ -153,6 +156,7 @@ function Stage({ kind, args, calm, drag }: { kind: WidgetKind; args: WidgetArgs;
           </Motion>
         )}
         {kind === "cabinet" && <Cabinet items={args.cabinet || []} calm={calm} />}
+        {kind === "medals" && <MedalRack items={args.medals || []} calm={calm} />}
         {kind === "bars" && <Bars values={args.values || []} today={args.today ?? -1} calm={calm} />}
       </DragRig>
     </>
