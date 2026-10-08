@@ -216,24 +216,17 @@ export function SupplyDrop({ calm, done, chute = true }: { calm: boolean; done: 
   );
 }
 
-// ---------- 5K badge ----------
+// ---------- 5K badge: the chrome logo floating in 3D ----------
 
 export function HexBadge() {
-  const logo = useTexture("/5k-logo.png");
+  const logo = useTexture("/art/5k-chrome.png");
   logo.colorSpace = THREE.SRGBColorSpace;
+  logo.anisotropy = 8;
   return (
-    <group>
-      {/* No dark face: just the glowing rim with the mark floating inside. */}
-      <mesh rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[1.05, 1.05, 0.16, 6, 1, true]} />
-        <meshStandardMaterial color={RED} emissive={RED_GLOW} emissiveIntensity={1.6} toneMapped={false} side={THREE.DoubleSide} />
-      </mesh>
-      <mesh position={[0, 0, 0.135]}>
-        <planeGeometry args={[1.7, 1.7]} />
-        {/* The logo image has a black ground: add it as light so only the mark shows. */}
-        <meshBasicMaterial map={logo} transparent blending={THREE.AdditiveBlending} depthWrite={false} toneMapped={false} />
-      </mesh>
-    </group>
+    <mesh>
+      <planeGeometry args={[3.3, 1.42]} />
+      <meshBasicMaterial map={logo} transparent alphaTest={0.02} side={THREE.DoubleSide} toneMapped={false} />
+    </mesh>
   );
 }
 

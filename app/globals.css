@@ -1025,7 +1025,7 @@ html[data-flyin="1"] .login-stage .auth-card { opacity: 0; transform: translateY
 .widget-layer { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
 .w3d { display: block; flex-shrink: 0; pointer-events: none; }
 .w3d__view { display: block; width: 100%; height: 100%; }
-.side-brand__badge { width: 68px; height: 68px; margin: -6px -4px -6px -6px; }
+.side-brand__badge { width: 96px; height: 50px; margin: -4px -8px -4px -6px; }
 .topbar__icon { width: 58px; height: 58px; margin: -6px 0; }
 .topbar:has(.topbar__icon) .topbar__logo { display: none; }
 /* The crate keeps to the corner the heading leaves free (the 3D draws over

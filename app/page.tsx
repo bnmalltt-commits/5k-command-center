@@ -3245,7 +3245,7 @@ export default function Home() {
         <section className="auth-card">
           <div className="auth-emblem">
             <img src="/art/emblem.svg" alt="" />
-            <img src="/art/5k-mark.png" alt="5K Fivethousand" className="auth-emblem__mark" />
+            <img src="/art/5k-chrome.png" alt="5K Fivethousand" className="auth-emblem__mark" />
           </div>
           <p className="ui-eyebrow">5K FIVETHOUSAND · COMMAND CENTER</p>
           <h1 className="auth-title">เข้าสู่ระบบแก๊ง</h1>
@@ -3385,7 +3385,7 @@ export default function Home() {
             <Widget3D
               kind="badge"
               className="side-brand__badge"
-              fallback={<img src="/art/5k-mark.png" alt="5K Fivethousand" className="side-brand__mark" />}
+              fallback={<img src="/art/5k-chrome.png" alt="5K Fivethousand" className="side-brand__mark" />}
             />
             <div className="side-brand__text">
               <b>COMMAND</b>
@@ -3441,7 +3441,7 @@ export default function Home() {
         </aside>
         <section className="main-col min-w-0 flex-1">
           <header className="topbar">
-            <img src="/art/5k-mark.png" alt="5K" className="topbar__logo" />
+            <img src="/art/5k-chrome.png" alt="5K" className="topbar__logo" />
             <Widget3D key={view} kind={pageIcon.kind} args={pageIcon.args} className="topbar__icon" />
             <div className="topbar__heading">
               <h1 className="topbar__title">{pageTitle}</h1>
