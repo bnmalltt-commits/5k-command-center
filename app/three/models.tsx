@@ -225,14 +225,14 @@ export function HexBadge() {
     <group>
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[1, 1, 0.26, 6]} />
-        <meshStandardMaterial color="#141418" metalness={0.85} roughness={0.32} />
+        <meshStandardMaterial color="#1d1d23" metalness={0.7} roughness={0.38} emissive="#2a0610" />
       </mesh>
       <mesh rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[1.05, 1.05, 0.16, 6, 1, true]} />
         <meshStandardMaterial color={RED} emissive={RED_GLOW} emissiveIntensity={1.6} toneMapped={false} side={THREE.DoubleSide} />
       </mesh>
       <mesh position={[0, 0, 0.135]}>
-        <planeGeometry args={[1.45, 1.45]} />
+        <planeGeometry args={[1.9, 1.9]} />
         <meshBasicMaterial map={logo} transparent toneMapped={false} />
       </mesh>
     </group>

@@ -34,7 +34,7 @@ export type WidgetArgs = {
 type Shot = { position: [number, number, number]; look: [number, number, number]; fov: number };
 const SHOTS: Record<Exclude<WidgetKind, "bars">, Shot> = {
   crate: { position: [0, 1.5, 7.4], look: [0, 0.75, 0], fov: 30 },
-  badge: { position: [0, 0, 4.6], look: [0, 0, 0], fov: 30 },
+  badge: { position: [0, 0, 4.1], look: [0, 0, 0], fov: 30 },
   trophy: { position: [0, 0.7, 4.6], look: [0, 0.05, 0], fov: 30 },
   squad: { position: [0, 2.7, 4.3], look: [0, 0.05, 0], fov: 34 },
   calendar: { position: [0, 0.5, 4.6], look: [0, 0, 0], fov: 30 },
@@ -68,7 +68,7 @@ function Stage({ kind, args, calm }: { kind: WidgetKind; args: WidgetArgs; calm:
       <pointLight position={[-2.5, 1, 2]} color="#ff4655" intensity={9} distance={9} decay={2} />
       {kind === "crate" && <SupplyDrop calm={calm} done={!!args.done} chute={args.chute !== false} />}
       {kind === "badge" && (
-        <Motion calm={calm} tilt={0} sway={0.5} bob={0.03}>
+        <Motion calm={calm} tilt={0.12} sway={0.6} bob={0.03}>
           <Suspense fallback={null}>
             <HexBadge />
           </Suspense>
