@@ -82,6 +82,22 @@ function DragRig({ drag, children }: { drag?: DragState; children: ReactNode }) 
   return <group ref={group}>{children}</group>;
 }
 
+// Keeps a w×h object (centred at the origin) fully in frame whatever the
+// box's shape, by pulling the camera back for narrow boxes. The wide 5K
+// logo needs this: a square header icon would otherwise crop it to "SK".
+function FitCamera({ w, h }: { w: number; h: number }) {
+  useFrame((state) => {
+    const cam = state.camera as THREE.PerspectiveCamera;
+    const tan = Math.tan(THREE.MathUtils.degToRad(cam.fov / 2));
+    const d = Math.max(w / 2 / (tan * (cam.aspect || 1)), h / 2 / tan) * 1.08;
+    if (Math.abs(cam.position.z - d) > 0.001) {
+      cam.position.set(0, 0, d);
+      cam.lookAt(0, 0, 0);
+    }
+  });
+  return null;
+}
+
 // The key light swings with the mouse, so every piece catches it as the
 // pointer moves across the page.
 function KeyLight() {
@@ -122,6 +138,7 @@ function Stage({ kind, args, calm, drag }: { kind: WidgetKind; args: WidgetArgs;
       <pointLight position={[-2.5, 1, 2]} color="#ff4655" intensity={9} distance={9} decay={2} />
       <DragRig drag={drag}>
         {kind === "crate" && <SupplyDrop calm={calm} state={args.done ? "done" : args.drop || "idle"} chute={args.chute !== false} />}
+        {kind === "badge" && <FitCamera w={3.4} h={1.5} />}
         {kind === "badge" && (
           <Motion calm={calm} tilt={0.12} sway={0.6} bob={0.03}>
             <Suspense fallback={null}>

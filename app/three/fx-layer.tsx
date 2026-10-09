@@ -21,6 +21,29 @@ const clamp01 = (p: number) => Math.min(1, Math.max(0, p));
 type Anchor = { x: number; y: number } | null;
 const CRATE_PX = 70;
 
+// Timings shared by the animations and their sounds.
+const LAND = 1.15, OPEN = 1.35; // airdrop: crate lands, lid pops
+const burstGap = (low: boolean) => (low ? 0.45 : 0.32); // seconds between fireworks
+const burstCount = (low: boolean) => (low ? 4 : 7);
+const COIN_FALL = 1; // seconds a coin takes to reach the chip
+const coinCount = (amount: number, low: boolean) => Math.min(low ? 8 : 14, Math.max(5, amount * 2));
+const coinDelay = (i: number) => i * 0.07;
+
+// Sounds are scheduled the moment the event arrives, on the page side, so
+// they keep time even when the 3D canvas is slow to start (it only runs its
+// scene once it has been measured).
+function playSound(kind: FxKind, amount: number, low: boolean) {
+  if (kind === "airdrop") {
+    whoosh(0, LAND);
+    thud(LAND);
+    pop(OPEN, 1.4);
+  } else if (kind === "celebrate") {
+    for (let b = 0; b < burstCount(low); b++) pop(b * burstGap(low), 0.8 + (b % 3) * 0.25);
+  } else {
+    for (let i = 0; i < coinCount(amount, low); i++) chime(coinDelay(i) + COIN_FALL, i % 5);
+  }
+}
+
 function anchorOf(selector: string, place: (r: DOMRect) => { x: number; y: number }): Anchor {
   const el = document.querySelector(selector);
   if (!el) return null;
@@ -39,6 +62,7 @@ export default function FxLayer() {
             : kind === "coins"
               ? anchorOf(".topbar-stat", (r) => ({ x: r.left + r.width / 2, y: r.top + r.height / 2 }))
               : null;
+        playSound(kind, amount, sceneTier() === "low");
         setFx({ kind, id: Date.now(), anchor, amount });
       }),
     [],
@@ -102,12 +126,6 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
   }, [sparkCount]);
 
   useStudioEnv();
-  const LAND = 1.15, OPEN = 1.35;
-  useEffect(() => {
-    whoosh(0, LAND);
-    thud(LAND);
-    pop(OPEN, 1.4);
-  }, []);
   useFrame(() => {
     const t = (performance.now() - started.current) / 1000;
     if (drop.current) {
@@ -203,7 +221,7 @@ const PALETTE = ["#ff4655", "#f5c542", "#ffffff", "#ff8a94", "#ffb547"];
 
 function Fireworks({ low }: { low: boolean }) {
   const viewport = useThree((state) => state.viewport);
-  const bursts = low ? 4 : 7;
+  const bursts = burstCount(low);
   const perBurst = low ? 90 : 170;
   const total = bursts * perBurst;
   // Wall-clock time since the moment started, so a slow device skips frames
@@ -220,7 +238,7 @@ function Fireworks({ low }: { low: boolean }) {
       const oy = 0.6 + Math.random() * Math.max(2.2, viewport.height * 0.32);
       const oz = -Math.random() * 2;
       const color = new THREE.Color(PALETTE[b % PALETTE.length]);
-      const t0 = b * (low ? 0.45 : 0.32);
+      const t0 = b * burstGap(low);
       for (let i = 0; i < perBurst; i++) {
         const k = b * perBurst + i;
         const dir = new THREE.Vector3().randomDirection();
@@ -259,9 +277,6 @@ function Fireworks({ low }: { low: boolean }) {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }, [confettiCount]);
   const dummy = useMemo(() => new THREE.Object3D(), []);
-  useEffect(() => {
-    for (let b = 0; b < bursts; b++) pop(b * (low ? 0.45 : 0.32), 0.8 + (b % 3) * 0.25);
-  }, [bursts, low]);
 
   useFrame(() => {
     const t = (performance.now() - started.current) / 1000;
@@ -324,14 +339,14 @@ function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low
     () => (anchor ? { x: anchor.x - size.width / 2, y: size.height / 2 - anchor.y } : { x: size.width / 2 - 120, y: size.height / 2 - 60 }),
     [anchor, size.width, size.height],
   );
-  const count = Math.min(low ? 8 : 14, Math.max(5, amount * 2));
+  const count = coinCount(amount, low);
   const coins = useMemo(
     () =>
       Array.from({ length: count }, (_, i) => ({
         x: (Math.random() * 2 - 1) * Math.min(320, size.width * 0.35),
         y: -size.height * 0.1 + (Math.random() * 2 - 1) * 90,
         arc: 60 + Math.random() * 120,
-        delay: i * 0.07,
+        delay: coinDelay(i),
         spin: 6 + Math.random() * 6,
       })),
     [count, size.width, size.height],
@@ -339,7 +354,7 @@ function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low
   const refs = useRef<(THREE.Group | null)[]>([]);
   const label = useRef<THREE.Mesh>(null);
   const started = useRef(performance.now());
-  const FALL = 1;
+  const FALL = COIN_FALL;
   const text = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 256;
@@ -358,9 +373,6 @@ function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low
     return t;
   }, [amount]);
   useEffect(() => () => text.dispose(), [text]);
-  useEffect(() => {
-    coins.forEach((c, i) => chime(c.delay + FALL, i % 5));
-  }, [coins]);
   useStudioEnv();
   useFrame(() => {
     const t = (performance.now() - started.current) / 1000;
