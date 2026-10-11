@@ -46,7 +46,7 @@ def need_tool(name):
 
 
 def fmt_time(t):
-    t = max(0.0, t)
+    t = round(max(0.0, t), 1)
     h = int(t // 3600)
     m = int((t % 3600) // 60)
     s = t - h * 3600 - m * 60
@@ -76,14 +76,28 @@ def clip01(x):
 # ---------------------------------------------------------------- ffmpeg passes
 
 def probe_duration(path):
+    """ความยาววินาที หรือ None ถ้า ffprobe บอกไม่ได้ (จะใช้ความยาวจากการวิเคราะห์เสียงแทน)"""
     r = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration:stream=duration",
          "-of", "default=nw=1:nk=1", path],
-        capture_output=True, text=True)
-    try:
-        return float(r.stdout.strip())
-    except ValueError:
-        die("อ่านความยาววิดีโอไม่ได้ (ไฟล์เสียหรือพาธผิด?): " + r.stderr.strip()[:200])
+        capture_output=True)
+    vals = []
+    for tok in r.stdout.decode("utf-8", "replace").split():
+        try:
+            v = float(tok)
+        except ValueError:
+            continue
+        if v > 0 and not math.isinf(v):
+            vals.append(v)
+    return max(vals) if vals else None
+
+
+def video_codec(path):
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+         "stream=codec_name", "-of", "default=nw=1:nk=1", path],
+        capture_output=True)
+    return r.stdout.decode("utf-8", "replace").strip().lower()
 
 
 def parse_db(s):
@@ -149,8 +163,14 @@ def audio_pass(path, window, silence_db, silence_min):
 
 
 def scene_pass(path, threshold):
-    """คืน [(เวลา, คะแนนเปลี่ยนฉาก)] อ่านเฉพาะ keyframe ให้เร็ว (ละเอียดระดับ keyframe)"""
-    vf = (f"scale=160:-2,select='gt(scene,{threshold})',"
+    """คืน [(เวลา, คะแนนเปลี่ยนฉาก)] เทียบเฉพาะ keyframe ต่อ keyframe (เร็ว ละเอียดระดับ keyframe)"""
+    codec = video_codec(path)
+    if codec in ("vp9", "vp8"):
+        log(f"หมายเหตุ: วิดีโอเป็น {codec} ตัวถอดรหัสต้องอ่านทุกเฟรม ขั้นตอนนี้อาจช้ามาก "
+            "(กด Ctrl+C แล้วรันใหม่พร้อม --no-scene ได้)")
+    # select='key' ก่อน เพื่อให้ผลเหมือนกันทุก codec แม้ตัวถอดรหัสไม่ยอมข้ามเฟรม
+    vf = ("select='key',scale=160:-2,"
+          f"select='gt(scene,{threshold})',"
           "metadata=mode=print:key=lavfi.scene_score:file=-")
     cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-nostats", "-loglevel", "error",
            "-skip_frame", "nokey", "-i", path, "-an", "-vf", vf, "-f", "null", "-"]
@@ -192,61 +212,132 @@ def parse_srt(text):
     return segs
 
 
-def load_transcript(path):
-    with open(path, "r", encoding="utf-8-sig") as f:
-        raw = f.read()
-    if path.lower().endswith(".srt"):
-        segs = parse_srt(raw)
-    else:
-        data = json.loads(raw)
-        if isinstance(data, dict):
-            data = data.get("segments", [])
-        segs = []
+def read_text_file(path):
+    try:
+        with open(path, "rb") as f:
+            raw = f.read()
+    except OSError as e:
+        die(f"เปิดไฟล์ {path} ไม่ได้: {e}")
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        return raw.decode("utf-16", "replace")
+    for enc in ("utf-8-sig", "cp874"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode("utf-8", "replace")
+
+
+def segments_from_data(data):
+    if isinstance(data, dict):
+        data = data.get("segments", [])
+    segs = []
+    if isinstance(data, list):
         for s in data:
             try:
                 segs.append({"start": float(s["start"]), "end": float(s["end"]),
                              "text": str(s.get("text", "")).strip()})
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError, AttributeError):
                 continue
     segs = [s for s in segs if s["text"] and s["end"] > s["start"]]
     segs.sort(key=lambda s: s["start"])
+    return segs
+
+
+def load_transcript(path):
+    raw = read_text_file(path)
+    if path.lower().endswith(".srt"):
+        segs = parse_srt(raw)
+    else:
+        try:
+            segs = segments_from_data(json.loads(raw))
+        except json.JSONDecodeError as e:
+            die(f"ไฟล์ {path} ไม่ใช่ JSON ที่ถูกต้อง ({e})")
     if not segs:
         die(f"อ่านข้อความถอดเสียงจาก {path} ไม่ได้ (รองรับ JSON รายการ {{start,end,text}}, "
             "JSON ที่มีคีย์ segments หรือ .srt)")
     return segs
 
 
+def write_json_atomic(path, obj):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=2)
+    os.replace(tmp, path)
+
+
+def cache_meta(video, model, language):
+    st = os.stat(video)
+    return {"video": os.path.basename(video), "size": st.st_size,
+            "mtime": int(st.st_mtime), "model": model, "language": language}
+
+
+def read_cache(path, meta):
+    """คืนข้อความถอดเสียงเดิมเฉพาะเมื่อเป็นของไฟล์เดียวกัน/โมเดล/ภาษาเดียวกัน ไม่งั้นคืน None"""
+    if not os.path.isfile(path):
+        return None
+    try:
+        data = json.loads(read_text_file(path))
+    except (json.JSONDecodeError, SystemExit):
+        return None
+    if not isinstance(data, dict) or not data.get("complete"):
+        return None
+    if any(data.get(k) != v for k, v in meta.items()):
+        log("พบแคชข้อความถอดเสียงเดิม แต่เป็นของไฟล์/โมเดล/ภาษาอื่น จึงไม่ใช้")
+        return None
+    return segments_from_data(data) or None
+
+
+def write_cache(path, meta, segments):
+    write_json_atomic(path, {**meta, "complete": True, "segments": segments})
+
+
 def transcribe(path, outdir, model_size, language, device):
+    """คืน (segments, complete) หรือ (None, False) ถ้าถอดไม่ได้เลย
+    ถอดไม่จบ (เช่น Ctrl+C หรือเครื่องล้ม) จะเก็บส่วนที่ได้ไว้ที่ transcript.partial.json"""
     try:
         from faster_whisper import WhisperModel
     except ImportError:
         log("ไม่พบ faster-whisper (pip install faster-whisper) ข้ามการถอดเสียง "
             "จะให้คะแนนจากเสียงและภาพอย่างเดียว หรือใช้ --transcript ไฟล์.json/.srt")
-        return None
+        return None, False
     wav = os.path.join(outdir, "_audio16k.wav")
+    partial = os.path.join(outdir, "transcript.partial.json")
     log("กำลังแยกเสียงเพื่อถอดเสียง ...")
     r = subprocess.run(["ffmpeg", "-hide_banner", "-nostdin", "-nostats", "-loglevel", "error",
                         "-y", "-i", path, "-vn", "-ac", "1", "-ar", "16000", wav],
                        capture_output=True)
     if r.returncode != 0:
         log("แยกเสียงไม่สำเร็จ ข้ามการถอดเสียง: " + r.stderr.decode("utf-8", "replace")[-300:])
-        return None
+        return None, False
+    segs = []
     try:
         compute = "int8" if device == "cpu" else "float16"
         model = WhisperModel(model_size, device=device, compute_type=compute)
         log(f"กำลังถอดเสียง (โมเดล {model_size}, {device}) อาจใช้เวลานานกับไลฟ์ยาว ๆ ...")
         it, _info = model.transcribe(wav, language=language, vad_filter=True)
-        segs = []
         for s in it:
             text = s.text.strip()
-            if text:
-                segs.append({"start": float(s.start), "end": float(s.end), "text": text})
-            if len(segs) % 200 == 0 and segs:
+            if not text:
+                continue
+            segs.append({"start": float(s.start), "end": float(s.end), "text": text})
+            if len(segs) % 100 == 0:
+                write_json_atomic(partial, segs)
                 log(f"  ถอดได้ถึง {fmt_time(s.end)}")
-        return segs
+        return segs, True
+    except KeyboardInterrupt:
+        if segs:
+            write_json_atomic(partial, segs)
+            log(f"หยุดกลางคัน เก็บส่วนที่ถอดได้ไว้ที่ {partial} "
+                "(ใช้ต่อด้วย --transcript ไฟล์นั้นได้)")
+        raise
     except Exception as e:  # โมเดลโหลดไม่ได้/หน่วยความจำไม่พอ ฯลฯ
-        log(f"ถอดเสียงไม่สำเร็จ ({type(e).__name__}: {e}) ข้ามการถอดเสียง")
-        return None
+        log(f"ถอดเสียงไม่สำเร็จ ({type(e).__name__}: {e})")
+        if segs:
+            write_json_atomic(partial, segs)
+            log(f"ใช้ส่วนที่ถอดได้แล้ว {len(segs)} ช่วง (ไม่ครบทั้งไลฟ์) เก็บไว้ที่ {partial}")
+            return segs, False
+        return None, False
     finally:
         try:
             os.remove(wav)
@@ -281,13 +372,20 @@ def rolling_median(vals, half):
 
 def score_windows(nwin, window, rms, segments, scenes, keywords, weights):
     rms = (rms + [DB_FLOOR] * nwin)[:nwin]
-    base = rolling_median(rms, max(1, int(round(60.0 / window))))
-    burst = [max(0.0, r - b) if r > DB_FLOOR else 0.0 for r, b in zip(rms, base)]
-    sorted_rms = sorted(rms)
+    half = max(1, int(round(60.0 / window)))
+    burst = []
+    for i, r in enumerate(rms):
+        # หน้าต่างที่เงียบสนิท (-inf) ถือว่าไม่มีข้อมูล ไม่นับเป็นสัญญาณหรือค่าฐาน
+        around = [v for v in rms[max(0, i - half):i + half + 1] if v > DB_FLOOR]
+        if r <= DB_FLOOR or not around:
+            burst.append(0.0)
+        else:
+            burst.append(max(0.0, r - median(around)))
+    valid = sorted(v for v in rms if v > DB_FLOOR)
     p95 = pct(burst, 95) or 1.0
     audio = []
     for r, bu in zip(rms, burst):
-        rank = bisect.bisect_right(sorted_rms, r) / float(len(sorted_rms))
+        rank = (bisect.bisect_right(valid, r) / float(len(valid))) if (r > DB_FLOOR and valid) else 0.0
         audio.append(0.6 * clip01(bu / p95) + 0.4 * rank)
 
     speech = [0.0] * nwin
@@ -298,10 +396,11 @@ def score_windows(nwin, window, rms, segments, scenes, keywords, weights):
         sp95 = pct(chars, 95) or 1.0
         speech = [clip01(c / sp95) for c in chars]
         hits = spread(segments, nwin, window,
-                      lambda s: sum(s["text"].count(k) for k in keywords))
+                      lambda s: sum(s["text"].casefold().count(k) for k in keywords))
         kw = [clip01(h / 2.0) for h in hits]
         for s in segments:
-            found = [k for k in keywords if k in s["text"]]
+            low = s["text"].casefold()
+            found = [k for k in keywords if k in low]
             if not found:
                 continue
             i0 = max(0, int(s["start"] // window))
@@ -335,27 +434,43 @@ def score_windows(nwin, window, rms, segments, scenes, keywords, weights):
 
 # ------------------------------------------------------------------- selection
 
-def snap_start(t, segs, max_fwd=3.0):
+def snap_start(t, segs, max_back=6.0, max_fwd=3.0):
+    """ขยับจุดเริ่มไปขอบประโยคที่ใกล้ที่สุด (ถอยไม่เกิน max_back / เดินหน้าไม่เกิน max_fwd)
+    คืน (เวลา, snap ได้ไหม)"""
     for s in segs:
         if s["start"] <= t < s["end"]:
-            return s["start"]
+            opts = []
+            if t - s["start"] <= max_back:
+                opts.append((t - s["start"], s["start"]))
+            if s["end"] - t <= max_fwd:
+                opts.append((s["end"] - t, s["end"]))
+            return (min(opts)[1], True) if opts else (t, False)
         if s["start"] >= t:
-            return s["start"] if s["start"] - t <= max_fwd else t
-    return t
+            if s["start"] - t <= max_fwd:
+                return s["start"], True
+            return t, False
+    return t, False
 
 
-def snap_end(t, segs, max_back=3.0):
+def snap_end(t, segs, max_fwd=6.0, max_back=6.0):
+    """ขยับจุดจบไปขอบประโยคที่ใกล้ที่สุด (เดินหน้าไม่เกิน max_fwd / ถอยไม่เกิน max_back)
+    คืน (เวลา, snap ได้ไหม)"""
     prev = None
     for s in segs:
         if s["start"] < t <= s["end"]:
-            return s["end"]
+            opts = []
+            if s["end"] - t <= max_fwd:
+                opts.append((s["end"] - t, s["end"]))
+            if t - s["start"] <= max_back:
+                opts.append((t - s["start"], s["start"]))
+            return (min(opts)[1], True) if opts else (t, False)
         if s["end"] < t:
             prev = s
         else:
             break
-    if prev is not None and t - prev["end"] <= max_back:
-        return prev["end"]
-    return t
+    if prev is not None and t - prev["end"] <= 3.0:
+        return prev["end"], True
+    return t, False
 
 
 def snap_silence_start(t, silences, span=5.0):
@@ -384,30 +499,42 @@ def build_candidates(path, duration, window, nwin, smooth, comps, kw_words, segm
             break
         if smooth[i] <= 0:
             break
-        center = i * window + window / 2.0
+        peak0 = i * window
+        peak1 = min(duration, (i + 1) * window)
+        center = peak0 + window / 2.0
         start = max(0.0, center - clip_len / 2.0)
         end = min(duration, center + clip_len / 2.0)
-        snapped = False
+        core_start, core_end = start, end
+        snapped_to = "none"
         if segments:
-            start = snap_start(start, segments)
-            end = snap_end(end, segments)
-            snapped = True
-            # ไม่ให้ยาวเกิน max_len: ถอยจุดจบไปขอบประโยคก่อนหน้า
+            start, ok_s = snap_start(start, segments)
+            end, ok_e = snap_end(end, segments)
+            snapped_to = "sentence" if (ok_s and ok_e) else ("sentence-partial" if (ok_s or ok_e) else "none")
+            # ไม่ให้ยาวเกิน max_len: ถอยจุดจบไปขอบประโยคก่อนหน้า แต่ต้องไม่ตัดช่วงพีคทิ้ง
             while end - start > max_len:
-                prev = [s["end"] for s in segments if start + min_len <= s["end"] < end - 0.01]
+                prev = [s["end"] for s in segments
+                        if max(start + min_len, peak1) <= s["end"] < end - 0.01]
                 if not prev:
-                    end = start + max_len
+                    end = max(peak1, start + max_len)
                     break
                 end = max(prev)
+            core_start, core_end = start, end
             start = max(0.0, start - 0.2)
             end = min(duration, end + 0.3)
         elif silences:
             s2 = snap_silence_start(start, silences)
             e2 = snap_silence_end(end, silences)
-            snapped = (s2 != start or e2 != end)
+            if s2 != start or e2 != end:
+                snapped_to = "silence"
             start, end = s2, e2
-        if end - start > max_len:
-            end = start + max_len
+            if end - start > max_len:
+                end = max(peak1, start + max_len)
+            core_start, core_end = start, end
+        # ช่วงพีคที่ทำให้ถูกเลือกต้องอยู่ในคลิปเสมอ
+        start = min(start, peak0)
+        end = max(end, peak1)
+        if end - start > max_len + window:
+            end = start + max_len + window
         if end - start < min_len or any(start < c["end"] and end > c["start"] for c in chosen):
             continue
         w0, w1 = int(start // window), min(nwin - 1, int(end // window))
@@ -427,7 +554,11 @@ def build_candidates(path, duration, window, nwin, smooth, comps, kw_words, segm
             reasons.append("คะแนนรวมสูงสุดในช่วงนี้")
         text = ""
         if segments:
-            inside = [s["text"] for s in segments if s["end"] > start and s["start"] < end]
+            inside = []
+            for s in segments:
+                ov = min(s["end"], core_end) - max(s["start"], core_start)
+                if ov >= 0.5 or ov >= 0.3 * (s["end"] - s["start"]):
+                    inside.append(s["text"])
             text = " ".join(inside)
         cuts = []
         for s, e in silences:
@@ -444,7 +575,7 @@ def build_candidates(path, duration, window, nwin, smooth, comps, kw_words, segm
             "reasons": reasons,
             "text": (text[:300] + "…") if len(text) > 300 else text,
             "cut_silences": cuts,
-            "snapped_to": "sentence" if segments else ("silence" if snapped else "none"),
+            "snapped_to": snapped_to,
         })
     for rank, c in enumerate(chosen, 1):
         c["rank"] = rank
@@ -505,7 +636,7 @@ def main():
     ap.add_argument("--max-len", type=float, default=35.0, help="ยาวสุดต่อช่วง (วินาที)")
     ap.add_argument("--transcript", help="ไฟล์ข้อความถอดเสียง .json หรือ .srt (ข้ามการถอดเสียงเอง)")
     ap.add_argument("--no-transcribe", action="store_true", help="ไม่ถอดเสียง (เร็ว ใช้เสียง+ภาพอย่างเดียว)")
-    ap.add_argument("--retranscribe", action="store_true", help="ถอดเสียงใหม่ แม้มี transcript.json เดิม")
+    ap.add_argument("--retranscribe", action="store_true", help="ถอดเสียงใหม่ แม้มีแคชเดิม")
     ap.add_argument("--model", default="small", help="โมเดล whisper (small เร็ว, medium/large-v3 แม่นกว่าแต่ช้า)")
     ap.add_argument("--language", default="th")
     ap.add_argument("--device", default="cpu", choices=["cpu", "cuda"])
@@ -521,13 +652,30 @@ def main():
     need_tool("ffmpeg")
     need_tool("ffprobe")
     os.makedirs(args.out, exist_ok=True)
-    keywords = ([k.strip() for k in args.keywords.split(",") if k.strip()]
-                if args.keywords else DEFAULT_KEYWORDS)
+    keywords = [k.strip().casefold() for k in
+                (args.keywords.split(",") if args.keywords else DEFAULT_KEYWORDS) if k.strip()]
+
+    # ตรวจไฟล์ข้อความถอดเสียงตั้งแต่ต้น จะได้ไม่เสียเวลารอ ffmpeg แล้วค่อยพบว่าไฟล์เสีย
+    segments = None
+    complete = True
+    cache_path = os.path.join(args.out, "transcript.cache.json")
+    meta_key = cache_meta(args.video, args.model, args.language)
+    cached = None
+    if args.transcript:
+        segments = load_transcript(args.transcript)
+    elif not args.no_transcribe and not args.retranscribe:
+        cached = read_cache(cache_path, meta_key)
 
     duration = probe_duration(args.video)
-    log(f"ความยาว {fmt_time(duration)}")
+    if duration is not None:
+        log(f"ความยาว {fmt_time(duration)}")
     log("1/3 วิเคราะห์เสียง ...")
     rms, peak, silences = audio_pass(args.video, args.window, args.silence_db, args.silence_min)
+    if sum(1 for r in rms if r <= DB_FLOOR) > 0.95 * len(rms):
+        die("เสียงเงียบสนิทเกือบทั้งไฟล์ ใช่แทร็กเสียงที่ถูกต้องหรือเปล่า? (ไฟล์อาจมีหลายแทร็ก)")
+    if duration is None:
+        duration = len(rms) * args.window
+        log(f"คำเตือน: ffprobe บอกความยาวไม่ได้ ใช้ความยาวจากการวิเคราะห์เสียง ({fmt_time(duration)})")
     nwin = max(len(rms), int(math.ceil(duration / args.window)))
 
     scenes = None
@@ -536,22 +684,23 @@ def main():
         scenes = scene_pass(args.video, args.scene_threshold)
 
     notes = []
-    segments = None
-    tpath = os.path.join(args.out, "transcript.json")
-    if args.transcript:
-        segments = load_transcript(args.transcript)
-    elif not args.no_transcribe:
-        if os.path.isfile(tpath) and not args.retranscribe:
-            log("3/3 ใช้ transcript.json เดิม (ใส่ --retranscribe ถ้าอยากถอดใหม่)")
-            segments = load_transcript(tpath)
+    if not args.transcript and not args.no_transcribe:
+        if cached:
+            log("3/3 ใช้แคชข้อความถอดเสียงเดิม (ไฟล์/โมเดล/ภาษาตรงกัน; ใส่ --retranscribe ถ้าอยากถอดใหม่)")
+            segments = cached
         else:
             log("3/3 ถอดเสียง ...")
-            segments = transcribe(args.video, args.out, args.model, args.language, args.device)
-            if segments:
-                with open(tpath, "w", encoding="utf-8") as f:
-                    json.dump(segments, f, ensure_ascii=False, indent=2)
+            segments, complete = transcribe(args.video, args.out, args.model, args.language, args.device)
+            if segments and complete:
+                write_cache(cache_path, meta_key, segments)
+                try:
+                    os.remove(os.path.join(args.out, "transcript.partial.json"))
+                except OSError:
+                    pass
     if not segments:
         notes.append("ไม่มีข้อความถอดเสียง: คะแนนมาจากเสียงและภาพเท่านั้น และจุดตัดอิงช่วงเงียบแทนขอบประโยค")
+    elif not complete:
+        notes.append("ข้อความถอดเสียงไม่ครบทั้งไลฟ์ (ถอดไม่จบ) ช่วงที่ไม่มีข้อความจะได้คะแนนจากเสียงและภาพอย่างเดียว")
 
     weights = {"audio": 0.35, "speech": 0.20, "kw": 0.25, "scene": 0.20}
     smooth, comps, kw_words, active = score_windows(

@@ -122,11 +122,12 @@ def main():
         check(all(c["length"] <= 35.0 + 0.6 for c in c1), "ไม่ยาวเกิน max-len")
         edges_s = [a for a, _b, _t in SEGMENTS]
         edges_e = [b for _a, b, _t in SEGMENTS]
+        snapped = [c for c in c1 if c["snapped_to"] == "sentence"]
         ok_edges = all(any(abs(c["start"] + 0.2 - s) < 0.06 or abs(c["start"] - 0.0) < 0.01 for s in edges_s)
                        and any(abs(c["end"] - 0.3 - e) < 0.06 or abs(c["end"] - 180.0) < 0.01 for e in edges_e)
-                       for c in c1)
-        check(ok_edges, "จุดเริ่ม-จบลงที่ขอบประโยค")
-        check(all(c["snapped_to"] == "sentence" for c in c1), "บันทึกว่า snap ที่ประโยค")
+                       for c in snapped)
+        check(ok_edges and len(snapped) >= 2, "จุดเริ่ม-จบของช่วงที่ snap แล้วลงขอบประโยคจริง")
+        check(all(c["snapped_to"] == "sentence" for c in c1[:2]), "ช่วงเด็ดอันดับ 1-2 snap ที่ประโยคทั้งสองด้าน")
         check(any(c["cut_silences"] for c in c1 if overlaps(c, 69, 71.5)),
               "ช่วงเงียบ 69-71.5 กลางช่วงเด็ดถูกแนะนำให้ตัด")
         kws = [w for c in c1 for r in c["reasons"] for w in [r] if r.startswith("คำกระตุ้น")]
@@ -151,6 +152,54 @@ def main():
         with open(wrapped, "w", encoding="utf-8") as f:
             json.dump({"segments": [{"start": 1, "end": 2, "text": "ทดสอบ"}]}, f, ensure_ascii=False)
         check(len(mod.load_transcript(wrapped)) == 1, "อ่าน JSON ที่มีคีย์ segments ได้")
+
+        print("\n[4] ทดสอบกันบั๊กที่ผู้ตรวจพบ")
+        check(mod.fmt_time(59.96) == "0:01:00.0" and mod.fmt_time(3599.97) == "1:00:00.0",
+              "fmt_time ไม่พิมพ์ 60.0 วินาที")
+
+        # ข้อความยาว ๆ ติดกัน (ขอบประโยคอยู่ห่างจุดพีค) ต้องไม่ทำให้ช่วงพีคหลุดจากคลิป
+        long_segs = [(0, 13)] + [(a, a + 20) for a in range(13, 173, 20)] + [(173, 180)]
+        tlong = os.path.join(tmp, "long.json")
+        with open(tlong, "w", encoding="utf-8") as f:
+            json.dump([{"start": a, "end": b, "text": "ข้อความยาวต่อเนื่องไม่มีจุดหยุด"} for a, b in long_segs], f,
+                      ensure_ascii=False)
+        c3 = run_tool(media, os.path.join(tmp, "o3"), "--transcript", tlong, "--no-scene")
+        check(top_hits_bursts(c3), "ข้อความยาว 20 วินาทีติดกัน: ช่วงเด็ดยังอยู่ในอันดับ 1-2 และอยู่ในคลิป")
+        check(all(c["length"] <= 35.0 + 5.0 + 0.6 for c in c3), "ข้อความยาว: ความยาวไม่เกินกำหนด")
+
+        # คลิปไม่ควรมีประโยคข้างเคียงที่แค่แตะขอบจากการเผื่อเวลา
+        check("โอเค ผ่านมาได้แล้ว" not in c1[0]["text"] and "ต่อไปเรามาดูอีกด่านหนึ่ง" not in c1[0]["text"],
+              "ข้อความในรายงานไม่รวมประโยคข้างเคียงที่แค่แตะขอบ")
+
+        # ไฟล์ที่เสียงเงียบสนิททั้งไฟล์ ต้องไม่ได้ช่วงเด็ดปลอม
+        silent = os.path.join(tmp, "silent.mp4")
+        run(["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-f", "lavfi", "-i", "color=c=black:s=160x90:r=10:d=30",
+             "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", "30",
+             "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", silent])
+        r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "find_highlights.py"), silent,
+                            "--out", os.path.join(tmp, "o4"), "--no-transcribe", "--no-scene"],
+                           capture_output=True)
+        check(r.returncode != 0 and "เงียบสนิท" in r.stderr.decode("utf-8", "replace"),
+              "เสียงเงียบทั้งไฟล์: หยุดพร้อมแจ้งเตือน ไม่สร้างช่วงเด็ดปลอม")
+
+        # คำกระตุ้นไม่สนตัวพิมพ์เล็ก-ใหญ่
+        _s, comps, _kw, _a = mod.score_windows(
+            4, 5.0, [-30.0] * 4, [{"start": 0.0, "end": 5.0, "text": "HAHA that was great"}], None,
+            ["haha"], {"audio": 0.35, "speech": 0.2, "kw": 0.25, "scene": 0.2})
+        check(comps["kw"][0] > 0, "คำกระตุ้นตัวอักษรละตินจับได้แม้ Whisper พิมพ์ใหญ่")
+
+        # แคชข้อความถอดเสียงต้องตรงไฟล์/โมเดล/ภาษา
+        cp = os.path.join(tmp, "cache.json")
+        meta = mod.cache_meta(media, "small", "th")
+        mod.write_cache(cp, meta, [{"start": 1.0, "end": 2.0, "text": "ทดสอบแคช"}])
+        check(len(mod.read_cache(cp, meta) or []) == 1, "แคช: ไฟล์/โมเดล/ภาษาตรงกัน ใช้ซ้ำได้")
+        check(mod.read_cache(cp, mod.cache_meta(media, "medium", "th")) is None, "แคช: โมเดลต่างกัน ไม่ใช้ซ้ำ")
+        check(mod.read_cache(cp, {**meta, "size": meta["size"] + 1}) is None, "แคช: คนละไฟล์ ไม่ใช้ซ้ำ")
+        check(not os.path.exists(cp + ".tmp"), "แคช: เขียนแบบอะตอมมิก ไม่ทิ้งไฟล์ชั่วคราว")
+        with open(cp, "w", encoding="utf-8") as f:
+            f.write('{"video": "x"')  # ไฟล์เขียนไม่จบ
+        check(mod.read_cache(cp, meta) is None, "แคช: ไฟล์เสีย/เขียนไม่จบ ไม่ทำให้โปรแกรมล้ม")
 
     print()
     if check.failed:
