@@ -6,6 +6,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { SceneTier } from "./three/prefs";
 import { pointer, trackPointer } from "./three/pointer";
+import { NOISE, canvasTexture, glowTexture, grain, seeded, splat, swipe } from "./three/paint";
 
 // "Paint Arena", the 3D world behind the whole app, drawn in the style of the
 // 5000 brush logo: a huge red ensō (a single brush-painted ring) rising from
@@ -30,108 +31,6 @@ function usePageMode() {
   return mode;
 }
 
-// Small seeded random, so the generated paint looks the same on every visit.
-function seeded(seed: number) {
-  return () => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function canvasTexture(canvas: HTMLCanvasElement, srgb = true) {
-  const texture = new THREE.CanvasTexture(canvas);
-  if (srgb) texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
-}
-
-// A soft round glow, drawn once into a texture.
-function glowTexture(inner: string, outer: string) {
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = 256;
-  const ctx = canvas.getContext("2d")!;
-  const gradient = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-  gradient.addColorStop(0, inner);
-  gradient.addColorStop(1, outer);
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, 256, 256);
-  return canvasTexture(canvas);
-}
-
-// One paint splat: a lumpy blob, droplets thrown around it and, on walls,
-// drips running down from it.
-function splat(ctx: CanvasRenderingContext2D, rand: () => number, x: number, y: number, r: number, color: string, drips = 0) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  for (let i = 0; i < 9; i++) {
-    const a = rand() * Math.PI * 2;
-    const d = rand() * r * 0.45;
-    ctx.moveTo(x + Math.cos(a) * d + r * 0.6, y + Math.sin(a) * d);
-    ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, r * (0.45 + rand() * 0.35), 0, Math.PI * 2);
-  }
-  ctx.fill();
-  for (let i = 0; i < 26; i++) {
-    const a = rand() * Math.PI * 2;
-    const d = r * (0.9 + rand() * 1.6);
-    ctx.beginPath();
-    ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, Math.max(0.6, r * 0.12 * rand() * (1.6 - d / (r * 2.6))), 0, Math.PI * 2);
-    ctx.fill();
-  }
-  for (let i = 0; i < drips; i++) {
-    const dx = x + (rand() - 0.5) * r * 1.2;
-    const w = 1.5 + rand() * r * 0.12;
-    const len = r * (0.8 + rand() * 3.5);
-    ctx.fillRect(dx - w / 2, y, w, len);
-    ctx.beginPath();
-    ctx.arc(dx, y + len, w * 0.9, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
-
-// A brush swipe: many thin bristle lines dragged side by side, thinning out
-// towards the end of the stroke.
-function swipe(ctx: CanvasRenderingContext2D, rand: () => number, x: number, y: number, length: number, width: number, angle: number, color: string) {
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(angle);
-  ctx.strokeStyle = color;
-  ctx.lineCap = "round";
-  for (let i = 0; i < 40; i++) {
-    const off = (rand() - 0.5) * width;
-    ctx.globalAlpha = 0.35 + rand() * 0.65;
-    ctx.lineWidth = 1 + rand() * (width / 9);
-    ctx.beginPath();
-    ctx.moveTo(rand() * length * 0.1, off);
-    ctx.lineTo(length * (0.55 + rand() * 0.45), off + (rand() - 0.5) * 4);
-    ctx.stroke();
-  }
-  ctx.restore();
-  ctx.globalAlpha = 1;
-}
-
-// Grainy dark concrete.
-function grain(ctx: CanvasRenderingContext2D, rand: () => number, w: number, h: number, base: string, specks: number) {
-  ctx.fillStyle = base;
-  ctx.fillRect(0, 0, w, h);
-  for (let i = 0; i < specks; i++) {
-    const light = rand() > 0.5;
-    ctx.fillStyle = light ? `rgba(255,255,255,${rand() * 0.05})` : `rgba(0,0,0,${rand() * 0.25})`;
-    ctx.fillRect(rand() * w, rand() * h, 1 + rand() * 2, 1 + rand() * 2);
-  }
-}
-
-// GLSL value noise shared by the painted shaders.
-const NOISE = `
-  float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-  float noise(vec2 p){
-    vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
-    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
-  }
-  float fbm(vec2 p){ float v = 0.0; float a = 0.5; for (int i = 0; i < 4; i++){ v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
-`;
 const PLAIN_VERTEX = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }";
 
 // The arena follows the gang's clock (Bangkok time): a bright orange-red

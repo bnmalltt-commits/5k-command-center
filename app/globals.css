@@ -1816,3 +1816,42 @@ html[data-scene="on"] *::after { -webkit-backdrop-filter: none !important; backd
   background: url("/art/brush.png") left center / 100% 100% no-repeat;
 }
 .ui-btn--primary { font-family: var(--font-display); font-style: italic; font-weight: 700; letter-spacing: 0.01em; }
+
+/* Big numbers in a marker brush, like the digits of the 5000 logo. */
+.topbar-stat b,
+.rank-badge,
+.score-ring__label,
+.podium__score,
+.rank-me__pos,
+.points-total b,
+.profile__stats b,
+.podium__base::after,
+.hud-tile__value:not(.hud-tile__value--text) {
+  font-family: var(--font-brush), var(--font-display), sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+.score-ring__label small { font-family: inherit; }
+
+/* Painted edges: cards, chips, dialogs and the main buttons get a rough
+   brush-painted edge instead of smooth rounded corners (Chromium and
+   Safari; other browsers keep the rounded corners). */
+.ui-panel,
+.command-sidebar,
+.mission,
+.hud-tile,
+.topbar-stat,
+.ui-dialog,
+.ui-btn--primary {
+  -webkit-mask-box-image-source: url("/art/edge.png");
+  -webkit-mask-box-image-slice: 48 fill;
+  -webkit-mask-box-image-width: 34px;
+  -webkit-mask-box-image-repeat: round;
+}
+.topbar-stat,
+.ui-btn--primary { -webkit-mask-box-image-width: 16px; }
+/* The keyboard focus ring sits outside the box: show it unmasked. */
+.ui-btn--primary:focus-visible,
+.topbar-stat:focus-visible,
+.hud-tile:focus-visible { -webkit-mask-box-image-source: none; }

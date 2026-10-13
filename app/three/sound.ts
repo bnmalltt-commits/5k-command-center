@@ -98,3 +98,25 @@ export function chime(delay = 0, step = 0) {
     osc.stop(at + i * 0.06 + 0.45);
   });
 }
+
+// Wet paint slapping onto a surface.
+export function splash(delay = 0, pitch = 1) {
+  const a = audio();
+  if (!a) return;
+  const at = a.currentTime + delay;
+  const src = noise(a, 0.4);
+  const filter = a.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.Q.value = 1.4;
+  filter.frequency.setValueAtTime(2600 * pitch, at);
+  filter.frequency.exponentialRampToValueAtTime(380 * pitch, at + 0.22);
+  src.connect(filter).connect(envelope(a, at, 0.42, 0.004, 0.24));
+  src.start(at);
+  const body = a.createOscillator();
+  body.type = "sine";
+  body.frequency.setValueAtTime(180 * pitch, at);
+  body.frequency.exponentialRampToValueAtTime(70 * pitch, at + 0.12);
+  body.connect(envelope(a, at, 0.22, 0.003, 0.14));
+  body.start(at);
+  body.stop(at + 0.2);
+}

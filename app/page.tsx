@@ -3362,8 +3362,8 @@ export default function Home() {
   useEffect(() => {
     const n = data?.me.role === "admin" ? data.pendingCount || 0 : 0;
     document.title = n > 0
-      ? `(${n}) 5K Fivethousand Command Center`
-      : "5K Fivethousand Command Center";
+      ? `(${n}) 5000 Fivethousand`
+      : "5000 Fivethousand";
   }, [data?.pendingCount, data?.me.role]);
   useEffect(() => {
     const message = new URLSearchParams(window.location.search).get("discord");
@@ -3649,7 +3649,7 @@ export default function Home() {
       <main className="login-stage">
         <section className="auth-card">
           <img src="/art/5000.svg" alt="5000 Fivethousand" className="auth-logo" width={2054} height={1178} />
-          <p className="ui-eyebrow">5K FIVETHOUSAND · COMMAND CENTER</p>
+          <p className="ui-eyebrow">COMMAND CENTER · แก๊ง 5000</p>
           <h1 className="auth-title">เข้าสู่ระบบแก๊ง</h1>
           <p className="auth-lead">
             เข้าด้วยบัญชี Discord ของคุณ

@@ -5,13 +5,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Crate, METAL, Parachute, displayFont, useStudioEnv } from "./models";
 import { onFx, sceneTier, type FxKind } from "./prefs";
-import { chime, pop, thud, whoosh } from "./sound";
+import { dropletMaterial, splatTexture } from "./paint";
+import { chime, pop, splash, thud, whoosh } from "./sound";
 
 // One-off 3D moments over the page, each in its own short-lived transparent
 // canvas that unmounts when it ends:
-//   airdrop   — a supply crate parachutes onto the mission card, lands,
-//               and pops open in a beam of light with sparks.
-//   celebrate — fireworks and falling confetti.
+//   airdrop   — a supply crate parachutes onto the mission card, lands
+//               with a splash of red paint, and pops open in a beam of
+//               light with flying paint droplets.
+//   celebrate — red and white paint thrown at the screen, splat after
+//               splat, with droplets flying and flecks drifting down.
 //   coins     — gold coins fly up from mid-screen into the month-points
 //               chip, which then shows "+N".
 const DURATION: Record<FxKind, number> = { airdrop: 2800, celebrate: 3600, coins: 2600 };
@@ -23,7 +26,7 @@ const CRATE_PX = 70;
 
 // Timings shared by the animations and their sounds.
 const LAND = 1.15, OPEN = 1.35; // airdrop: crate lands, lid pops
-const burstGap = (low: boolean) => (low ? 0.45 : 0.32); // seconds between fireworks
+const burstGap = (low: boolean) => (low ? 0.45 : 0.32); // seconds between splats
 const burstCount = (low: boolean) => (low ? 4 : 7);
 const COIN_FALL = 1; // seconds a coin takes to reach the chip
 const coinCount = (amount: number, low: boolean) => Math.min(low ? 8 : 14, Math.max(5, amount * 2));
@@ -36,9 +39,10 @@ function playSound(kind: FxKind, amount: number, low: boolean) {
   if (kind === "airdrop") {
     whoosh(0, LAND);
     thud(LAND);
+    splash(LAND, 0.8);
     pop(OPEN, 1.4);
   } else if (kind === "celebrate") {
-    for (let b = 0; b < burstCount(low); b++) pop(b * burstGap(low), 0.8 + (b % 3) * 0.25);
+    for (let b = 0; b < burstCount(low); b++) splash(b * burstGap(low), 0.8 + (b % 3) * 0.2);
   } else {
     for (let i = 0; i < coinCount(amount, low); i++) chime(coinDelay(i) + COIN_FALL, i % 5);
   }
@@ -88,7 +92,7 @@ export default function FxLayer() {
         </Canvas>
       ) : (
         <Canvas key={fx.id} camera={{ position: [0, 0.6, 10], fov: 50 }} {...common}>
-          <Fireworks low={low} />
+          <PaintSplash low={low} />
         </Canvas>
       )}
     </div>
@@ -115,15 +119,29 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
   const sparkCount = low ? 40 : 90;
   const sparkData = useMemo(() => {
     const velocity = new Float32Array(sparkCount * 3);
+    const colors = new Float32Array(sparkCount * 3);
+    const sizes = new Float32Array(sparkCount);
+    const red = new THREE.Color("#e3141b");
+    const white = new THREE.Color("#f4efec");
     for (let i = 0; i < sparkCount; i++) {
       const a = Math.random() * Math.PI * 2;
       const spread = 60 + Math.random() * 120;
       velocity.set([Math.cos(a) * spread, 260 + Math.random() * 260, Math.sin(a) * spread * 0.4], i * 3);
+      const c = Math.random() < 0.65 ? red : white;
+      colors.set([c.r, c.g, c.b], i * 3);
+      sizes[i] = 4 + Math.random() * Math.random() * 10;
     }
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(sparkCount * 3), 3));
-    return { velocity, geometry: g };
+    g.setAttribute("aColor", new THREE.Float32BufferAttribute(colors, 3));
+    g.setAttribute("aSize", new THREE.Float32BufferAttribute(sizes, 1));
+    g.setAttribute("aAlpha", new THREE.Float32BufferAttribute(new Float32Array(sparkCount).fill(1), 1));
+    const material = dropletMaterial(true);
+    material.uniforms.scale.value = 1;
+    return { velocity, geometry: g, material };
   }, [sparkCount]);
+  const landing = useMemo(() => splatTexture(41, "#e3141b", 2), []);
+  useEffect(() => () => landing.dispose(), [landing]);
 
   useStudioEnv();
   useFrame(() => {
@@ -145,11 +163,12 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
       chute.current.position.x = c;
       chute.current.visible = c < 1;
     }
+    // The paint splash where it lands: out fast, then soaks away.
     if (ring.current) {
-      const r = clamp01((t - LAND) / 0.7);
+      const r = clamp01((t - LAND) / 0.12);
       ring.current.visible = t > LAND;
-      ring.current.scale.setScalar(40 + r * 170);
-      (ring.current.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - r);
+      ring.current.scale.setScalar(60 + easeOut(r) * 150);
+      (ring.current.material as THREE.MeshBasicMaterial).opacity = 0.9 * (1 - clamp01((t - LAND - 0.7) / 0.6));
     }
     if (lid.current) {
       const o = clamp01((t - OPEN) / 0.7);
@@ -177,7 +196,9 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
           );
         }
         pos.needsUpdate = true;
-        (sparks.current.material as THREE.PointsMaterial).opacity = 1 - clamp01(s / 1.2);
+        const alpha = sparkData.geometry.attributes.aAlpha as THREE.BufferAttribute;
+        (alpha.array as Float32Array).fill(1 - clamp01((s - 0.5) / 0.7));
+        alpha.needsUpdate = true;
       }
     }
   });
@@ -202,131 +223,140 @@ function AirdropDrop({ anchor, low }: { anchor: Anchor; low: boolean }) {
           <cylinderGeometry args={[70, 30, 300, 32, 1, true]} />
           <meshBasicMaterial color="#ff7a5c" transparent opacity={0} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
-        <points ref={sparks} geometry={sparkData.geometry} visible={false}>
-          <pointsMaterial color="#ffb08a" size={5} sizeAttenuation={false} transparent blending={THREE.AdditiveBlending} depthWrite={false} />
-        </points>
-        {/* Landing ring on the card. */}
-        <mesh ref={ring} position={[0, -36, -10]} rotation={[-1.2, 0, 0]} visible={false}>
-          <ringGeometry args={[0.86, 1, 64]} />
-          <meshBasicMaterial color="#ff4655" transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} />
+        <points ref={sparks} geometry={sparkData.geometry} material={sparkData.material} visible={false} frustumCulled={false} />
+        {/* Paint splashed on the card where it lands, behind the crate. */}
+        <mesh ref={ring} position={[0, -30, -200]} rotation={[0, 0, 0.5]} visible={false}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial map={landing} transparent opacity={0} depthWrite={false} toneMapped={false} />
         </mesh>
       </group>
     </>
   );
 }
 
-// ---------- Celebration: fireworks and confetti ----------
+// ---------- Celebration: paint thrown at the screen ----------
 
-const PALETTE = ["#ff4655", "#f5c542", "#ffffff", "#ff8a94", "#ffb547"];
+const PAINT = ["#e3141b", "#f4efec", "#c40f17", "#e3141b", "#ffffff", "#9e0c12", "#e3141b"];
 
-function Fireworks({ low }: { low: boolean }) {
+function PaintSplash({ low }: { low: boolean }) {
   const viewport = useThree((state) => state.viewport);
+  const height = useThree((state) => state.size.height);
+  const dpr = useThree((state) => state.viewport.dpr);
   const bursts = burstCount(low);
-  const perBurst = low ? 90 : 170;
-  const total = bursts * perBurst;
+  const perBurst = low ? 36 : 70;
+  const flecks = low ? 50 : 120;
+  const total = bursts * perBurst + flecks;
   // Wall-clock time since the moment started, so a slow device skips frames
   // instead of running late past the layer closing.
   const started = useRef(performance.now());
   const sim = useMemo(() => {
+    const w = Math.max(3, viewport.width * 0.36);
+    const splats = Array.from({ length: bursts }, (_, b) => ({
+      x: (Math.random() * 2 - 1) * w,
+      y: (Math.random() * 2 - 1) * viewport.height * 0.3 + 0.4,
+      z: -Math.random() * 1.5,
+      size: 2.4 + Math.random() * 1.8,
+      turn: Math.random() * Math.PI * 2,
+      color: PAINT[b % PAINT.length],
+      t0: b * burstGap(low),
+      texture: splatTexture(101 + b * 7 + Math.floor(Math.random() * 1000), PAINT[b % PAINT.length], 3),
+    }));
     const origin = new Float32Array(total * 3);
     const velocity = new Float32Array(total * 3);
-    const base = new Float32Array(total * 3);
     const start = new Float32Array(total);
-    const w = Math.max(6, viewport.width * 0.42);
-    for (let b = 0; b < bursts; b++) {
-      const ox = (Math.random() * 2 - 1) * w;
-      const oy = 0.6 + Math.random() * Math.max(2.2, viewport.height * 0.32);
-      const oz = -Math.random() * 2;
-      const color = new THREE.Color(PALETTE[b % PALETTE.length]);
-      const t0 = b * burstGap(low);
+    const colors = new Float32Array(total * 3);
+    const sizes = new Float32Array(total);
+    const c = new THREE.Color();
+    splats.forEach((sp, b) => {
+      c.set(sp.color);
       for (let i = 0; i < perBurst; i++) {
         const k = b * perBurst + i;
-        const dir = new THREE.Vector3().randomDirection();
-        const speed = 2.4 + Math.random() * 1.6;
-        origin.set([ox, oy, oz], k * 3);
-        velocity.set([dir.x * speed, dir.y * speed, dir.z * speed], k * 3);
-        base.set([color.r, color.g, color.b], k * 3);
-        start[k] = t0;
+        const a = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 5;
+        origin.set([sp.x, sp.y, sp.z + 0.1], k * 3);
+        velocity.set([Math.cos(a) * speed, Math.sin(a) * speed + 1.2, (Math.random() - 0.5) * 2], k * 3);
+        colors.set([c.r, c.g, c.b], k * 3);
+        sizes[k] = 0.05 + Math.pow(Math.random(), 2.5) * 0.3;
+        start[k] = sp.t0;
       }
+    });
+    // Flecks drifting down from the top the whole time; their "velocity" is
+    // (sway phase, fall speed).
+    for (let i = bursts * perBurst; i < total; i++) {
+      c.set(PAINT[i % PAINT.length]);
+      origin.set([(Math.random() * 2 - 1) * viewport.width * 0.55, viewport.height * 0.55 + Math.random() * viewport.height * 0.7, -Math.random() * 3], i * 3);
+      velocity.set([Math.random() * Math.PI * 2, 1.3 + Math.random() * 1.4, 0], i * 3);
+      colors.set([c.r, c.g, c.b], i * 3);
+      sizes[i] = 0.05 + Math.random() * 0.09;
     }
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute("position", new THREE.Float32BufferAttribute(new Float32Array(total * 3), 3));
-    geometry.setAttribute("color", new THREE.Float32BufferAttribute(new Float32Array(total * 3), 3));
-    return { origin, velocity, base, start, geometry };
+    geometry.setAttribute("aColor", new THREE.Float32BufferAttribute(colors, 3));
+    geometry.setAttribute("aSize", new THREE.Float32BufferAttribute(sizes, 1));
+    geometry.setAttribute("aAlpha", new THREE.Float32BufferAttribute(new Float32Array(total), 1));
+    return { splats, origin, velocity, start, geometry, material: dropletMaterial() };
   }, [total, bursts, perBurst, low, viewport.width, viewport.height]);
-
-  // Confetti: little paper rectangles tumbling down.
-  const confettiCount = low ? 70 : 160;
-  const confetti = useRef<THREE.InstancedMesh>(null);
-  const paper = useMemo(() => {
-    const items = Array.from({ length: confettiCount }, () => ({
-      x: (Math.random() * 2 - 1) * viewport.width * 0.55,
-      y: viewport.height * 0.6 + Math.random() * viewport.height * 0.8,
-      z: -Math.random() * 3,
-      fall: 1.4 + Math.random() * 1.4,
-      sway: Math.random() * Math.PI * 2,
-      spin: new THREE.Vector3(Math.random() * 6, Math.random() * 6, Math.random() * 6),
-    }));
-    return items;
-  }, [confettiCount, viewport.width, viewport.height]);
-  useEffect(() => {
-    const mesh = confetti.current;
-    if (!mesh) return;
-    const color = new THREE.Color();
-    for (let i = 0; i < confettiCount; i++) mesh.setColorAt(i, color.set(PALETTE[i % PALETTE.length]));
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  }, [confettiCount]);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
+  useEffect(() => () => sim.splats.forEach((sp) => sp.texture.dispose()), [sim]);
+  const decals = useRef<(THREE.Mesh | null)[]>([]);
 
   useFrame(() => {
     const t = (performance.now() - started.current) / 1000;
+    // Camera fov is 50°: pixels per world unit at distance 1.
+    sim.material.uniforms.scale.value = (height * dpr) / (2 * Math.tan(THREE.MathUtils.degToRad(25)));
+    sim.splats.forEach((sp, b) => {
+      const m = decals.current[b];
+      if (!m) return;
+      const s = t - sp.t0;
+      m.visible = s > 0;
+      if (s <= 0) return;
+      // Hits hard, then slides down a little and fades.
+      const hit = easeOut(s / 0.1);
+      m.scale.set(sp.size * hit, sp.size * hit * (1 + Math.min(0.25, s * 0.15)), 1);
+      m.position.set(sp.x, sp.y - Math.min(0.5, s * 0.25), sp.z);
+      (m.material as THREE.MeshBasicMaterial).opacity = 1 - clamp01((s - 0.9) / 0.7);
+    });
     const pos = sim.geometry.attributes.position as THREE.BufferAttribute;
-    const col = sim.geometry.attributes.color as THREE.BufferAttribute;
-    const drag = 1.7;
+    const alpha = sim.geometry.attributes.aAlpha as THREE.BufferAttribute;
+    const drag = 3;
+    const thrown = bursts * perBurst;
     for (let k = 0; k < total; k++) {
+      if (k >= thrown) {
+        pos.setXYZ(
+          k,
+          sim.origin[k * 3] + Math.sin(t * 2 + sim.velocity[k * 3]) * 0.25,
+          sim.origin[k * 3 + 1] - sim.velocity[k * 3 + 1] * t,
+          sim.origin[k * 3 + 2],
+        );
+        alpha.setX(k, 0.9 * (1 - clamp01((t - 2.8) / 0.7)));
+        continue;
+      }
       const s = t - sim.start[k];
       if (s <= 0) {
-        col.setXYZ(k, 0, 0, 0);
+        alpha.setX(k, 0);
         continue;
       }
       const spread = (1 - Math.exp(-drag * s)) / drag;
       pos.setXYZ(
         k,
         sim.origin[k * 3] + sim.velocity[k * 3] * spread,
-        sim.origin[k * 3 + 1] + sim.velocity[k * 3 + 1] * spread - 0.9 * s * s,
+        sim.origin[k * 3 + 1] + sim.velocity[k * 3 + 1] * spread - 2.2 * s * s,
         sim.origin[k * 3 + 2] + sim.velocity[k * 3 + 2] * spread,
       );
-      // Additive blending: dimming the colour fades the spark out.
-      const life = Math.max(0, 1 - s / 1.7);
-      const flicker = 0.75 + 0.25 * Math.sin(k * 12.9 + t * 30);
-      const f = life * life * flicker;
-      col.setXYZ(k, sim.base[k * 3] * f, sim.base[k * 3 + 1] * f, sim.base[k * 3 + 2] * f);
+      alpha.setX(k, 1 - clamp01((s - 0.8) / 0.6));
     }
     pos.needsUpdate = true;
-    col.needsUpdate = true;
-    const mesh = confetti.current;
-    if (mesh) {
-      for (let i = 0; i < confettiCount; i++) {
-        const p = paper[i];
-        dummy.position.set(p.x + Math.sin(t * 2 + p.sway) * 0.35, p.y - p.fall * t, p.z);
-        dummy.rotation.set(p.spin.x * t, p.spin.y * t, p.spin.z * t);
-        dummy.updateMatrix();
-        mesh.setMatrixAt(i, dummy.matrix);
-      }
-      mesh.instanceMatrix.needsUpdate = true;
-    }
+    alpha.needsUpdate = true;
   });
 
   return (
     <>
-      <ambientLight intensity={1.2} />
-      <points geometry={sim.geometry}>
-        <pointsMaterial vertexColors size={low ? 0.15 : 0.12} sizeAttenuation transparent blending={THREE.AdditiveBlending} depthWrite={false} />
-      </points>
-      <instancedMesh ref={confetti} args={[undefined, undefined, confettiCount]}>
-        <planeGeometry args={[0.22, 0.11]} />
-        <meshBasicMaterial side={THREE.DoubleSide} toneMapped={false} />
-      </instancedMesh>
+      {sim.splats.map((sp, b) => (
+        <mesh key={b} ref={(el) => { decals.current[b] = el; }} rotation={[0, 0, sp.turn]} visible={false}>
+          <planeGeometry args={[1, 1]} />
+          <meshBasicMaterial map={sp.texture} transparent depthWrite={false} toneMapped={false} />
+        </mesh>
+      ))}
+      <points geometry={sim.geometry} material={sim.material} frustumCulled={false} />
     </>
   );
 }

@@ -474,10 +474,10 @@ export function CoinStack({ calm }: { calm: boolean }) {
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, 128, 128);
         ctx.fillStyle = "#4a3200";
-        ctx.font = `700 54px ${displayFont()}`;
+        ctx.font = `700 38px ${displayFont()}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("5K", 64, 68);
+        ctx.fillText("5000", 64, 68);
       }),
     [],
   );
