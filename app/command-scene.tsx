@@ -1,19 +1,21 @@
 "use client";
 
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Grid, Sparkles, Stars, useTexture } from "@react-three/drei";
+import { useTexture } from "@react-three/drei";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import type { SceneTier } from "./three/prefs";
 import { pointer, trackPointer } from "./three/pointer";
 
-// "Night Arena", the 3D world behind the whole app: a striped synthwave sun
-// setting between neon wireframe mountains, a red grid floor running towards
-// the viewer, stars and embers, and the 5K emblem floating in front. The UI
-// sits on dark glass above it, so text contrast never depends on the scene.
+// "Paint Arena", the 3D world behind the whole app, drawn in the style of the
+// 5000 brush logo: a huge red ensō (a single brush-painted ring) rising from
+// behind ink-black ridges, brush-stroke ribbons sweeping through the air,
+// concrete pillars splashed with red paint, a splattered floor, and flecks of
+// red and white paint drifting down. The 5000 emblem floats in front. The UI
+// sits on dark panels above it, so text contrast never depends on the scene.
 //
-// tier "low" (phones, small machines) draws fewer particles at lower
-// resolution and 30 frames a second; calm draws one still frame.
+// tier "low" (phones, small machines) draws fewer flecks at lower resolution;
+// calm draws one still frame.
 
 // "login", or the open page ("airdrop", "party", "score", ...), set by the
 // page on <html data-scene-mode>.
@@ -28,7 +30,25 @@ function usePageMode() {
   return mode;
 }
 
-// A soft round glow, drawn once into a texture (no image files to load).
+// Small seeded random, so the generated paint looks the same on every visit.
+function seeded(seed: number) {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function canvasTexture(canvas: HTMLCanvasElement, srgb = true) {
+  const texture = new THREE.CanvasTexture(canvas);
+  if (srgb) texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 4;
+  return texture;
+}
+
+// A soft round glow, drawn once into a texture.
 function glowTexture(inner: string, outer: string) {
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = 256;
@@ -38,21 +58,92 @@ function glowTexture(inner: string, outer: string) {
   gradient.addColorStop(1, outer);
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, 256, 256);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
+  return canvasTexture(canvas);
 }
 
-// The arena follows the gang's clock (Bangkok time): a golden afternoon
-// sun, the red evening of the rounds, magenta night, violet small hours.
-// In the half hour before a round (17:00, 20:00, 23:00, 01:00) the grid runs
-// faster and the sun pulses, as a nudge to get ready.
-type Palette = { sunTop: string; sunMid: string; sunBottom: string; skyMid: string; horizon: string };
+// One paint splat: a lumpy blob, droplets thrown around it and, on walls,
+// drips running down from it.
+function splat(ctx: CanvasRenderingContext2D, rand: () => number, x: number, y: number, r: number, color: string, drips = 0) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 9; i++) {
+    const a = rand() * Math.PI * 2;
+    const d = rand() * r * 0.45;
+    ctx.moveTo(x + Math.cos(a) * d + r * 0.6, y + Math.sin(a) * d);
+    ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, r * (0.45 + rand() * 0.35), 0, Math.PI * 2);
+  }
+  ctx.fill();
+  for (let i = 0; i < 26; i++) {
+    const a = rand() * Math.PI * 2;
+    const d = r * (0.9 + rand() * 1.6);
+    ctx.beginPath();
+    ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d, Math.max(0.6, r * 0.12 * rand() * (1.6 - d / (r * 2.6))), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let i = 0; i < drips; i++) {
+    const dx = x + (rand() - 0.5) * r * 1.2;
+    const w = 1.5 + rand() * r * 0.12;
+    const len = r * (0.8 + rand() * 3.5);
+    ctx.fillRect(dx - w / 2, y, w, len);
+    ctx.beginPath();
+    ctx.arc(dx, y + len, w * 0.9, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// A brush swipe: many thin bristle lines dragged side by side, thinning out
+// towards the end of the stroke.
+function swipe(ctx: CanvasRenderingContext2D, rand: () => number, x: number, y: number, length: number, width: number, angle: number, color: string) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.strokeStyle = color;
+  ctx.lineCap = "round";
+  for (let i = 0; i < 40; i++) {
+    const off = (rand() - 0.5) * width;
+    ctx.globalAlpha = 0.35 + rand() * 0.65;
+    ctx.lineWidth = 1 + rand() * (width / 9);
+    ctx.beginPath();
+    ctx.moveTo(rand() * length * 0.1, off);
+    ctx.lineTo(length * (0.55 + rand() * 0.45), off + (rand() - 0.5) * 4);
+    ctx.stroke();
+  }
+  ctx.restore();
+  ctx.globalAlpha = 1;
+}
+
+// Grainy dark concrete.
+function grain(ctx: CanvasRenderingContext2D, rand: () => number, w: number, h: number, base: string, specks: number) {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < specks; i++) {
+    const light = rand() > 0.5;
+    ctx.fillStyle = light ? `rgba(255,255,255,${rand() * 0.05})` : `rgba(0,0,0,${rand() * 0.25})`;
+    ctx.fillRect(rand() * w, rand() * h, 1 + rand() * 2, 1 + rand() * 2);
+  }
+}
+
+// GLSL value noise shared by the painted shaders.
+const NOISE = `
+  float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+  float noise(vec2 p){
+    vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+  }
+  float fbm(vec2 p){ float v = 0.0; float a = 0.5; for (int i = 0; i < 4; i++){ v += a * noise(p); p *= 2.03; a *= 0.5; } return v; }
+`;
+const PLAIN_VERTEX = "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }";
+
+// The arena follows the gang's clock (Bangkok time): a bright orange-red
+// afternoon, logo red in the evening rounds, deep crimson at night, dried
+// maroon in the small hours. In the half hour before a round (17:00, 20:00,
+// 23:00, 01:00) the ensō turns faster and pulses, as a nudge to get ready.
+type Palette = { ink: string; sky: string; haze: string };
 const PALETTES: Record<string, Palette> = {
-  day: { sunTop: "#ffe08a", sunMid: "#ff8a3d", sunBottom: "#e0442b", skyMid: "#1a0b0c", horizon: "#5a1a12" },
-  dusk: { sunTop: "#ffc27a", sunMid: "#e3141b", sunBottom: "#b80f25", skyMid: "#16050c", horizon: "#4f0b19" },
-  night: { sunTop: "#ff9ab0", sunMid: "#e0245c", sunBottom: "#7a0c3a", skyMid: "#12040f", horizon: "#3d0a2a" },
-  late: { sunTop: "#ffa8e0", sunMid: "#b02a8a", sunBottom: "#4a0c4a", skyMid: "#0c0512", horizon: "#2a0a2e" },
+  day: { ink: "#f0261c", sky: "#121011", haze: "#2a0e0d" },
+  dusk: { ink: "#e3141b", sky: "#0f0809", haze: "#33090c" },
+  night: { ink: "#c8102e", sky: "#0b0607", haze: "#27060b" },
+  late: { ink: "#9a0d16", sky: "#080506", haze: "#180406" },
 };
 const ROUND_MINUTES = [17 * 60, 20 * 60, 23 * 60, 25 * 60]; // 01:00 is after midnight
 function arenaClock(at = new Date()) {
@@ -78,8 +169,7 @@ function useArenaClock() {
 // Ease a colour uniform towards a target (instantly when the scene is still).
 const towards = (uniform: { value: THREE.Color }, hex: string, k: number) => uniform.value.lerp(new THREE.Color(hex), k);
 
-// Sky dome: black overhead, deep crimson towards the horizon with a thin
-// glowing band right at it.
+// Sky: near-black grunge overhead, a red haze low down.
 function Sky({ palette, animate }: { palette: Palette; animate: boolean }) {
   const material = useMemo(
     () =>
@@ -87,19 +177,19 @@ function Sky({ palette, animate }: { palette: Palette; animate: boolean }) {
         side: THREE.BackSide,
         depthWrite: false,
         uniforms: {
-          top: { value: new THREE.Color("#040406") },
-          mid: { value: new THREE.Color("#16050c") },
-          horizon: { value: new THREE.Color("#4f0b19") },
-          glow: { value: new THREE.Color("#e3141b") },
+          top: { value: new THREE.Color("#050405") },
+          mid: { value: new THREE.Color("#120709") },
+          haze: { value: new THREE.Color("#4a0b10") },
         },
         vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-        fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 horizon; uniform vec3 glow; varying vec3 vDir;
+        fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 haze; varying vec3 vDir; ${NOISE}
           void main(){
             float h = vDir.y;
-            vec3 c = mix(horizon, mid, smoothstep(0.0, 0.1, h));
-            c = mix(c, top, smoothstep(0.1, 0.55, h));
-            c += glow * 0.32 * exp(-abs(h - 0.012) * 45.0);
-            c = mix(c, vec3(0.018, 0.01, 0.014), smoothstep(0.0, -0.04, h));
+            vec2 q = vec2(atan(vDir.x, -vDir.z) * 3.0, h * 6.0);
+            float cloud = fbm(q * 1.7);
+            vec3 c = mix(haze, mid, smoothstep(-0.02, 0.22, h + (cloud - 0.5) * 0.08));
+            c = mix(c, top, smoothstep(0.2, 0.6, h));
+            c *= 0.82 + 0.36 * cloud;
             gl_FragColor = vec4(c, 1.0);
             #include <colorspace_fragment>
           }`,
@@ -111,177 +201,402 @@ function Sky({ palette, animate }: { palette: Palette; animate: boolean }) {
   useEffect(() => invalidate(), [palette, invalidate]);
   useFrame((_, delta) => {
     const k = animate ? 1 - Math.pow(0.3, delta) : 1;
-    towards(material.uniforms.mid, palette.skyMid, k);
-    towards(material.uniforms.horizon, palette.horizon, k);
+    towards(material.uniforms.mid, palette.sky, k);
+    towards(material.uniforms.haze, palette.haze, k);
   });
   return (
     <mesh material={material} renderOrder={-2}>
-      <sphereGeometry args={[160, 32, 16]} />
+      <sphereGeometry args={[170, 32, 16]} />
     </mesh>
   );
 }
 
-// The setting sun: orange to red, its lower half cut into stripes whose gaps
-// widen towards the bottom and drift slowly down.
-function Sun({ animate, palette, urgency }: { animate: boolean; palette: Palette; urgency: number }) {
-  const material = useMemo(
-    () =>
-      new THREE.ShaderMaterial({
-        transparent: true,
-        depthWrite: false,
-        uniforms: {
-          topColor: { value: new THREE.Color("#ffc27a") },
-          midColor: { value: new THREE.Color("#e3141b") },
-          bottomColor: { value: new THREE.Color("#b80f25") },
-          time: { value: 0 },
-        },
-        vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
-        fragmentShader: `uniform vec3 topColor; uniform vec3 midColor; uniform vec3 bottomColor; uniform float time; varying vec2 vUv;
-          void main(){
-            vec2 p = vUv - 0.5;
-            float edge = smoothstep(0.5, 0.488, length(p));
-            float t = vUv.y;
-            vec3 c = mix(bottomColor, midColor, smoothstep(0.0, 0.55, t));
-            c = mix(c, topColor, smoothstep(0.55, 1.0, t));
-            float lower = 1.0 - smoothstep(0.5, 0.62, t);
-            float band = fract(t * 10.0 + time * 0.035);
-            float gap = mix(0.05, 0.6, clamp((0.58 - t) * 1.9, 0.0, 1.0));
-            float cut = lower * step(band, gap);
-            gl_FragColor = vec4(c * 1.05, edge * (1.0 - cut));
-            #include <colorspace_fragment>
-          }`,
-      }),
-    [],
-  );
-  const halo = useMemo(() => glowTexture("rgba(255,70,85,0.55)", "rgba(255,70,85,0)"), []);
+// An ensō: one ring painted with a loaded brush, thick and wet where it
+// starts, breaking into dry bristle streaks towards the open end, with a few
+// droplets thrown off. `reveal` paints it in around the circle.
+const ENSO_END = 0.93;
+function ensoMaterial(color: string) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    uniforms: { ink: { value: new THREE.Color(color) }, reveal: { value: ENSO_END }, opacity: { value: 1 } },
+    vertexShader: PLAIN_VERTEX,
+    fragmentShader: `uniform vec3 ink; uniform float reveal; uniform float opacity; varying vec2 vUv; ${NOISE}
+      void main(){
+        vec2 p = vUv - 0.5;
+        float r = length(p);
+        // Position along the stroke, clockwise from the lower left.
+        float s = fract((-2.6 - atan(p.y, p.x)) / 6.28318);
+        float R = 0.37;
+        float w = mix(0.095, 0.03, s) * (0.8 + 0.45 * noise(vec2(s * 7.0, 3.1)));
+        float d = (r - R + (fbm(vec2(s * 90.0, r * 40.0)) - 0.5) * 0.045) / w;
+        float body = 1.0 - smoothstep(0.78, 1.0, abs(d) + (noise(vec2(s * 160.0, d * 2.0)) - 0.5) * 0.35);
+        // Bristle streaks run along the stroke and open up as the brush dries.
+        float bristle = noise(vec2(d * 8.0 + 11.0, s * 1.6)) * 0.55 + noise(vec2(d * 31.0, s * 4.0)) * 0.45;
+        float dry = 0.12 + smoothstep(0.2, 1.0, s) * 0.62;
+        body *= smoothstep(dry - 0.05, dry + 0.05, bristle);
+        body *= smoothstep(0.0, 0.012, s) * smoothstep(reveal, reveal - 0.05, s);
+        // Droplets near the ring, only where it has been painted.
+        vec2 g = p * 30.0;
+        vec2 cell = floor(g);
+        vec2 f = fract(g) - 0.5 - (vec2(hash(cell + 7.0), hash(cell + 13.0)) - 0.5) * 0.5;
+        float size = 0.06 + 0.2 * hash(cell + 3.0);
+        float drop = step(hash(cell), 0.07) * (1.0 - smoothstep(size, size + 0.05, length(f)));
+        drop *= smoothstep(0.17, 0.05, abs(r - R)) * step(s, reveal);
+        float a = max(body, drop) * opacity;
+        if (a < 0.01) discard;
+        vec3 c = ink * (0.62 + 0.38 * fbm(p * 9.0 + 4.0)) * (0.7 + 0.45 * noise(vec2(d * 19.0, s * 3.0)));
+        gl_FragColor = vec4(c, a);
+        #include <colorspace_fragment>
+      }`,
+  });
+}
+
+// The big ensō behind the ridges, where the old sun used to set. It paints
+// itself in as the scene opens.
+function Enso({ animate, palette, urgency }: { animate: boolean; palette: Palette; urgency: number }) {
+  const material = useMemo(() => ensoMaterial("#e3141b"), []);
+  const halo = useMemo(() => glowTexture("rgba(227,20,27,0.22)", "rgba(227,20,27,0)"), []);
+  const ring = useRef<THREE.Mesh>(null);
   const haloRef = useRef<THREE.Mesh>(null);
+  const painted = useRef(animate ? 0 : ENSO_END);
   useFrame(({ clock }, delta) => {
-    if (animate) material.uniforms.time.value += delta * (1 + urgency * 3);
-    const k = animate ? 1 - Math.pow(0.3, delta) : 1;
-    towards(material.uniforms.topColor, palette.sunTop, k);
-    towards(material.uniforms.midColor, palette.sunMid, k);
-    towards(material.uniforms.bottomColor, palette.sunBottom, k);
+    painted.current = Math.min(ENSO_END, painted.current + delta * 0.42);
+    // Ease out so the brush slows as it lifts off.
+    const p = painted.current / ENSO_END;
+    material.uniforms.reveal.value = ENSO_END * (1 - Math.pow(1 - p, 2.2));
+    towards(material.uniforms.ink, palette.ink, animate ? 1 - Math.pow(0.3, delta) : 1);
+    if (ring.current && animate) ring.current.rotation.z -= delta * (0.018 + urgency * 0.12);
     // A heartbeat in the halo as a round gets close.
-    if (haloRef.current) haloRef.current.scale.setScalar(1 + (animate ? urgency * 0.12 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 5)) : 0));
+    if (haloRef.current) haloRef.current.scale.setScalar(1 + (animate ? urgency * 0.14 * (0.5 + 0.5 * Math.sin(clock.elapsedTime * 5)) : 0));
   });
   return (
-    <group position={[0, 12.5, -84]}>
+    <group position={[0, 9, -86]}>
       <mesh ref={haloRef} renderOrder={-1}>
-        <planeGeometry args={[96, 96]} />
+        <planeGeometry args={[110, 110]} />
         <meshBasicMaterial map={halo} transparent depthWrite={false} blending={THREE.AdditiveBlending} fog={false} />
       </mesh>
-      <mesh material={material}>
-        <planeGeometry args={[38, 38]} />
+      <mesh ref={ring} material={material} rotation={[0, 0, 0.4]}>
+        <planeGeometry args={[42, 42]} />
       </mesh>
     </group>
   );
 }
 
-// Neon wireframe mountains on both sides, flat in the middle so the sun shows
-// through the valley.
-function Mountains({ detail }: { detail: boolean }) {
-  const geometry = useMemo(() => {
-    const g = new THREE.PlaneGeometry(240, 64, detail ? 120 : 60, detail ? 32 : 16);
-    g.rotateX(-Math.PI / 2);
-    const pos = g.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const z = pos.getZ(i);
-      const valley = THREE.MathUtils.smoothstep(Math.abs(x), 9, 36);
-      const back = 1 - THREE.MathUtils.smoothstep(z, -12, 30);
-      const n =
-        Math.sin(x * 0.21) * Math.cos(z * 0.17) * 0.5 +
-        Math.sin(x * 0.07 + z * 0.11) * 0.8 +
-        Math.sin(x * 0.53 + 1.3) * Math.sin(z * 0.41) * 0.25;
-      pos.setY(i, Math.max(0, n + 1.15) * 6 * valley * back);
-    }
-    g.computeVertexNormals();
-    return g;
-  }, [detail]);
-  return (
-    <group position={[0, -1.74, -80]}>
-      <mesh geometry={geometry}>
-        <meshBasicMaterial color="#07040a" polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
-      </mesh>
-      <mesh geometry={geometry}>
-        <meshBasicMaterial color="#e3141b" wireframe transparent opacity={0.42} fog={false} />
-      </mesh>
-    </group>
-  );
+// Ink-black ridges in layers, torn-paper edges, low in the middle so the
+// ensō shows through the valley. The far layer has a thin red outline.
+function ridgeShape(width: number, height: number, seed: number, valley: number) {
+  const rand = seeded(seed);
+  const shape = new THREE.Shape();
+  const steps = 140;
+  const top: THREE.Vector2[] = [];
+  shape.moveTo(-width / 2, -4);
+  let wobble = 0;
+  for (let i = 0; i <= steps; i++) {
+    const x = -width / 2 + (i / steps) * width;
+    wobble = wobble * 0.6 + (rand() - 0.5) * 0.9;
+    const n = Math.sin(x * 0.13 + seed) * 0.5 + Math.sin(x * 0.051 + seed * 2) * 0.8 + Math.sin(x * 0.37) * 0.2 + 1.2;
+    const y = Math.max(0.15, n * height * THREE.MathUtils.smoothstep(Math.abs(x), valley * 0.4, valley * 1.6) + wobble * 0.35);
+    shape.lineTo(x, y);
+    top.push(new THREE.Vector2(x, y));
+  }
+  shape.lineTo(width / 2, -4);
+  shape.lineTo(-width / 2, -4);
+  return { geometry: new THREE.ShapeGeometry(shape), outline: new THREE.BufferGeometry().setFromPoints(top.map((v) => new THREE.Vector3(v.x, v.y, 0.05))) };
 }
-
-// The floor: an opaque dark ground (hides the bottom of the sun below the
-// horizon), the neon grid on it running towards the viewer, and the sun's
-// long reflection.
-function Floor({ animate, urgency }: { animate: boolean; urgency: number }) {
-  const grid = useRef<THREE.Group>(null);
-  // A pool of red light on the floor that follows the mouse.
-  const spot = useRef<THREE.Mesh>(null);
-  const spotGlow = useMemo(() => glowTexture("rgba(255,70,85,0.5)", "rgba(255,70,85,0)"), []);
-  const reflection = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 16;
-    canvas.height = 256;
-    const ctx = canvas.getContext("2d")!;
-    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
-    gradient.addColorStop(0, "rgba(255,120,90,0.9)");
-    gradient.addColorStop(0.5, "rgba(255,70,85,0.35)");
-    gradient.addColorStop(1, "rgba(255,70,85,0)");
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 16, 256);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    return texture;
-  }, []);
-  useFrame((_, delta) => {
-    if (animate && grid.current) grid.current.position.z = (grid.current.position.z + delta * 1.6 * (1 + urgency * 2.5)) % 4;
-    if (spot.current) {
-      const k = 1 - Math.pow(0.02, delta);
-      spot.current.position.x = THREE.MathUtils.lerp(spot.current.position.x, pointer.x * 7, k);
-      spot.current.position.z = THREE.MathUtils.lerp(spot.current.position.z, 1.5 - (pointer.y + 1) * 5, k);
-      (spot.current.material as THREE.MeshBasicMaterial).opacity = THREE.MathUtils.lerp(
-        (spot.current.material as THREE.MeshBasicMaterial).opacity,
-        animate && pointer.active ? 0.9 : 0,
-        k,
-      );
-    }
-  });
+function Ridges() {
+  const far = useMemo(() => ridgeShape(260, 5.5, 3, 30), []);
+  const near = useMemo(() => ridgeShape(200, 3.2, 9, 22), []);
+  const outline = useMemo(
+    () => new THREE.Line(far.outline, new THREE.LineBasicMaterial({ color: "#e3141b", transparent: true, opacity: 0.4, fog: false })),
+    [far],
+  );
   return (
     <>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.76, -60]}>
-        <planeGeometry args={[600, 400]} />
-        <meshBasicMaterial color="#050306" />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.71, -44]}>
-        <planeGeometry args={[18, 80]} />
-        <meshBasicMaterial map={reflection} transparent depthWrite={false} blending={THREE.AdditiveBlending} opacity={0.5} />
-      </mesh>
-      <mesh ref={spot} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.69, -2]}>
-        <planeGeometry args={[9, 9]} />
-        <meshBasicMaterial map={spotGlow} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
-      </mesh>
-      <group ref={grid} position={[0, -1.7, 0]}>
-        <Grid
-          infiniteGrid
-          cellSize={1}
-          sectionSize={4}
-          cellThickness={0.6}
-          sectionThickness={1.25}
-          cellColor="#3d0810"
-          sectionColor="#e3141b"
-          fadeDistance={90}
-          fadeStrength={1.4}
-        />
+      <group position={[0, -1.74, -66]}>
+        <mesh geometry={far.geometry}>
+          <meshBasicMaterial color="#0b0709" />
+        </mesh>
+        <primitive object={outline} />
+      </group>
+      <group position={[0, -1.74, -48]}>
+        <mesh geometry={near.geometry}>
+          <meshBasicMaterial color="#09060a" />
+        </mesh>
       </group>
     </>
   );
 }
 
+// A flat ribbon along a curve through `points`, facing the viewer, twisting
+// a little along its length. u runs along the ribbon, v across it.
+function ribbonGeometry(points: [number, number, number][], width: number, twist: number) {
+  const curve = new THREE.CatmullRomCurve3(points.map((p) => new THREE.Vector3(...p)));
+  const steps = 72;
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const side = new THREE.Vector3();
+  const forward = new THREE.Vector3(0, 0, 1);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const p = curve.getPoint(t);
+    const tangent = curve.getTangent(t);
+    side.crossVectors(tangent, forward).normalize().applyAxisAngle(tangent, Math.sin(t * Math.PI) * twist);
+    const half = (width / 2) * (1 - t * 0.25);
+    positions.push(p.x + side.x * half, p.y + side.y * half, p.z + side.z * half, p.x - side.x * half, p.y - side.y * half, p.z - side.z * half);
+    uvs.push(t, 1, t, 0);
+    if (i < steps) {
+      const a = i * 2;
+      indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  return geometry;
+}
+
+// Brush strokes hanging in the air like the sweeps around the logo, painted
+// in one after another as the scene opens, then swaying slowly.
+type Stroke = { points: [number, number, number][]; width: number; twist: number; color: string; opacity: number; delay: number };
+const STROKES: Stroke[] = [
+  { points: [[-34, -5, -36], [-22, 4, -32], [-12, 13, -36], [-2, 22, -40]], width: 7, twist: 0.35, color: "#c8101a", opacity: 0.78, delay: 0.5 },
+  { points: [[9, -4, -26], [19, 1, -29], [29, 8, -31], [40, 15, -36]], width: 5, twist: -0.3, color: "#a80d16", opacity: 0.62, delay: 0.9 },
+  { points: [[7, 17, -42], [17, 13.5, -38], [28, 15, -38], [38, 19, -42]], width: 2.2, twist: 0.2, color: "#f1ecea", opacity: 0.42, delay: 1.3 },
+  { points: [[-30, 15, -44], [-20, 18, -42], [-9, 17, -44]], width: 1.6, twist: -0.2, color: "#f1ecea", opacity: 0.3, delay: 1.6 },
+];
+function ribbonMaterial(map: THREE.Texture, stroke: Stroke) {
+  return new THREE.ShaderMaterial({
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+    uniforms: { map: { value: map }, color: { value: new THREE.Color(stroke.color) }, opacity: { value: stroke.opacity }, reveal: { value: 1.1 } },
+    vertexShader: PLAIN_VERTEX,
+    fragmentShader: `uniform sampler2D map; uniform vec3 color; uniform float opacity; uniform float reveal; varying vec2 vUv;
+      void main(){
+        float a = texture2D(map, vUv).a * opacity * smoothstep(reveal, reveal - 0.08, vUv.x);
+        if (a < 0.01) discard;
+        gl_FragColor = vec4(color, a);
+        #include <colorspace_fragment>
+      }`,
+  });
+}
+function Strokes({ animate }: { animate: boolean }) {
+  const brush = useTexture("/art/brush.png");
+  brush.colorSpace = THREE.SRGBColorSpace;
+  const items = useMemo(
+    () => STROKES.map((stroke) => ({ stroke, geometry: ribbonGeometry(stroke.points, stroke.width, stroke.twist), material: ribbonMaterial(brush, stroke) })),
+    [brush],
+  );
+  const group = useRef<THREE.Group>(null);
+  const age = useRef(animate ? 0 : 99);
+  useFrame(({ clock }, delta) => {
+    age.current += delta;
+    for (const { stroke, material } of items) {
+      const p = THREE.MathUtils.clamp((age.current - stroke.delay) / 0.9, 0, 1);
+      material.uniforms.reveal.value = (1 - Math.pow(1 - p, 3)) * 1.1;
+    }
+    if (group.current && animate) {
+      const t = clock.elapsedTime;
+      group.current.rotation.z = Math.sin(t * 0.12) * 0.015;
+      group.current.position.y = Math.sin(t * 0.2) * 0.35;
+    }
+  });
+  return (
+    <group ref={group}>
+      {items.map(({ geometry, material }, i) => (
+        <mesh key={i} geometry={geometry} material={material} />
+      ))}
+    </group>
+  );
+}
+
+// Concrete pillars down both sides, tagged with red and white paint that
+// glows faintly, so they read as silhouettes with splashes on them.
+const PILLARS: [number, number, number, number, number][] = [
+  // x, z, width, height, depth
+  [-7.5, -10, 1.5, 6.5, 1.2],
+  [-11.5, -19, 2.4, 11, 1.6],
+  [-17, -31, 3, 16, 2],
+  [-9.5, -41, 2, 9, 1.5],
+  [8, -13, 1.8, 8.5, 1.3],
+  [12.5, -23, 2.6, 5.5, 2],
+  [18, -35, 3.2, 17, 2],
+  [10.5, -46, 2, 12, 1.5],
+];
+function pillarTextures(seed: number) {
+  const rand = seeded(seed);
+  const w = 256, h = 512;
+  const base = document.createElement("canvas");
+  base.width = w;
+  base.height = h;
+  grain(base.getContext("2d")!, rand, w, h, "#1a1719", 5000);
+  const paint = document.createElement("canvas");
+  paint.width = w;
+  paint.height = h;
+  const ctx = paint.getContext("2d")!;
+  ctx.fillStyle = "#000";
+  ctx.fillRect(0, 0, w, h);
+  swipe(ctx, rand, 10, 120 + rand() * 220, 240, 34 + rand() * 20, -0.5 + rand() * 0.3, "#e3141b");
+  splat(ctx, rand, 40 + rand() * 176, 60 + rand() * 360, 14 + rand() * 18, "#e3141b", Math.floor(rand() * 2));
+  if (rand() > 0.4) swipe(ctx, rand, 20, 260 + rand() * 180, 200, 12, -0.3 + rand() * 0.2, "#d9d4d2");
+  for (let i = 0; i < 40; i++) {
+    ctx.fillStyle = rand() > 0.5 ? "#e3141b" : "#d9d4d2";
+    ctx.beginPath();
+    ctx.arc(rand() * w, rand() * h, 0.6 + rand() * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return { map: canvasTexture(base), paint: canvasTexture(paint) };
+}
+function Pillars() {
+  const textures = useMemo(() => [pillarTextures(11), pillarTextures(23), pillarTextures(37)], []);
+  return (
+    <>
+      {PILLARS.map(([x, z, w, h, d], i) => {
+        const t = textures[i % textures.length];
+        return (
+          <mesh key={i} position={[x, -1.74 + h / 2, z]} rotation={[0, (i % 2 ? 1 : -1) * (0.15 + (i % 3) * 0.1), 0]}>
+            <boxGeometry args={[w, h, d]} />
+            <meshStandardMaterial map={t.map} emissive="#ffffff" emissiveMap={t.paint} emissiveIntensity={0.42} roughness={0.92} metalness={0} />
+          </mesh>
+        );
+      })}
+    </>
+  );
+}
+
+// The floor: dark concrete splattered with paint, creeping towards the
+// viewer; a long red brush stroke on it pointing at the ensō; and a pool of
+// red light (plus a real light for the pillars) that follows the mouse.
+function floorTexture() {
+  const rand = seeded(5);
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  grain(ctx, rand, size, size, "#0b0a0a", 9000);
+  // Draw each splat at its wrapped positions too, so the tile has no seams.
+  const wrapped = (x: number, y: number, r: number, color: string) => {
+    for (const ox of [-size, 0, size]) for (const oy of [-size, 0, size]) {
+      const local = seeded(Math.floor(x * 1000 + y));
+      splat(ctx, local, x + ox, y + oy, r, color);
+    }
+  };
+  for (let i = 0; i < 7; i++) wrapped(rand() * size, rand() * size, 10 + rand() * 26, `rgba(227,20,27,${0.12 + rand() * 0.22})`);
+  for (let i = 0; i < 5; i++) wrapped(rand() * size, rand() * size, 3 + rand() * 8, `rgba(235,230,228,${0.1 + rand() * 0.15})`);
+  const texture = canvasTexture(canvas);
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(12, 12);
+  return texture;
+}
+function Floor({ animate, urgency }: { animate: boolean; urgency: number }) {
+  const texture = useMemo(floorTexture, []);
+  const brush = useTexture("/art/brush.png");
+  const spot = useRef<THREE.Mesh>(null);
+  const light = useRef<THREE.PointLight>(null);
+  const spotGlow = useMemo(() => glowTexture("rgba(227,20,27,0.4)", "rgba(227,20,27,0)"), []);
+  useFrame((_, delta) => {
+    if (animate) texture.offset.y = (texture.offset.y + delta * 0.045 * (1 + urgency * 2.5)) % 1;
+    const k = 1 - Math.pow(0.02, delta);
+    const x = pointer.x * 7;
+    const z = 1.5 - (pointer.y + 1) * 5;
+    if (spot.current) {
+      spot.current.position.x = THREE.MathUtils.lerp(spot.current.position.x, x, k);
+      spot.current.position.z = THREE.MathUtils.lerp(spot.current.position.z, z, k);
+      const m = spot.current.material as THREE.MeshBasicMaterial;
+      m.opacity = THREE.MathUtils.lerp(m.opacity, animate && pointer.active ? 0.85 : 0, k);
+    }
+    if (light.current) {
+      light.current.position.x = THREE.MathUtils.lerp(light.current.position.x, x * 1.4, k);
+      light.current.position.z = THREE.MathUtils.lerp(light.current.position.z, z - 6, k);
+    }
+  });
+  return (
+    <>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.76, -60]}>
+        <planeGeometry args={[200, 200]} />
+        <meshStandardMaterial map={texture} roughness={0.95} metalness={0} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, Math.PI / 2]} position={[0, -1.72, -34]}>
+        <planeGeometry args={[56, 9]} />
+        <meshBasicMaterial map={brush} transparent depthWrite={false} opacity={0.26} />
+      </mesh>
+      <mesh ref={spot} rotation={[-Math.PI / 2, 0, 0]} position={[0, -1.7, -2]}>
+        <planeGeometry args={[9, 9]} />
+        <meshBasicMaterial map={spotGlow} transparent opacity={0} depthWrite={false} blending={THREE.AdditiveBlending} />
+      </mesh>
+      <pointLight ref={light} position={[0, 3, -8]} color="#ff5a4a" intensity={animate ? 22 : 12} distance={30} decay={1.7} />
+    </>
+  );
+}
+
+// Flecks of red and white paint drifting down through the arena, each a
+// slightly lumpy droplet. Moved entirely on the GPU.
+function Flecks({ count, animate }: { count: number; animate: boolean }) {
+  const height = useThree((state) => state.size.height);
+  const dpr = useThree((state) => state.viewport.dpr);
+  const { geometry, material } = useMemo(() => {
+    const rand = seeded(77);
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+    const seeds = new Float32Array(count);
+    const red = new THREE.Color("#e3141b");
+    const white = new THREE.Color("#eeeae8");
+    for (let i = 0; i < count; i++) {
+      positions.set([(rand() - 0.5) * 34, rand() * 13, -2 - rand() * 30], i * 3);
+      const c = rand() < 0.62 ? red : white;
+      colors.set([c.r, c.g, c.b], i * 3);
+      sizes[i] = 0.05 + Math.pow(rand(), 3) * 0.2;
+      seeds[i] = rand();
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    g.setAttribute("aColor", new THREE.BufferAttribute(colors, 3));
+    g.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+    g.setAttribute("aSeed", new THREE.BufferAttribute(seeds, 1));
+    const m = new THREE.ShaderMaterial({
+      transparent: true,
+      depthWrite: false,
+      uniforms: { time: { value: 0 }, scale: { value: 600 } },
+      vertexShader: `uniform float time; uniform float scale; attribute vec3 aColor; attribute float aSize; attribute float aSeed;
+        varying vec3 vColor; varying float vSeed; varying float vFade;
+        void main(){
+          vec3 p = position;
+          p.y = mod(p.y - time * (0.12 + aSeed * 0.3), 13.0) - 2.0;
+          p.x += sin(time * 0.25 + aSeed * 40.0) * 0.5;
+          vec4 mv = modelViewMatrix * vec4(p, 1.0);
+          gl_PointSize = aSize * scale / -mv.z;
+          gl_Position = projectionMatrix * mv;
+          vColor = aColor; vSeed = aSeed;
+          vFade = smoothstep(-2.0, -1.0, p.y) * smoothstep(11.0, 9.0, p.y);
+        }`,
+      fragmentShader: `varying vec3 vColor; varying float vSeed; varying float vFade; ${NOISE}
+        void main(){
+          vec2 c = gl_PointCoord - 0.5;
+          float edge = 0.3 + noise(c * 5.0 + vSeed * 60.0) * 0.16;
+          float a = (1.0 - smoothstep(edge, edge + 0.05, length(c))) * vFade * 0.85;
+          if (a < 0.01) discard;
+          gl_FragColor = vec4(vColor, a);
+          #include <colorspace_fragment>
+        }`,
+    });
+    return { geometry: g, material: m };
+  }, [count]);
+  useFrame((_, delta) => {
+    if (animate) material.uniforms.time.value += delta;
+    material.uniforms.scale.value = height * dpr * 0.9;
+  });
+  return <points geometry={geometry} material={material} frustumCulled={false} />;
+}
+
 // Where the emblem floats on each page, so moving between pages feels like
-// moving through the arena. Inside the app it keeps to the edges at half glow
-// so it never sits bright behind a list someone is reading; the sign-in
-// screen shows it big, centred in front of the sun.
-const pose = (x: number, y: number, z: number, scale: number, glow = 0.5) => ({ position: new THREE.Vector3(x, y, z), scale, glow });
+// moving through the arena. Inside the app it keeps to the edges at half
+// strength so it never sits bright behind a list someone is reading; on the
+// sign-in screen it hides, since the sign-in card carries the logo.
+const pose = (x: number, y: number, z: number, scale: number, glow = 0.55) => ({ position: new THREE.Vector3(x, y, z), scale, glow });
 const POSES: Record<string, { position: THREE.Vector3; scale: number; glow: number }> = {
   login: pose(0, 2.1, -2, 0.001, 0),
   airdrop: pose(3.5, -0.4, -3.2, 0.85),
@@ -294,41 +609,45 @@ const POSES: Record<string, { position: THREE.Vector3; scale: number; glow: numb
   admin: pose(3.5, -0.6, -3.6, 0.85),
   more: pose(-3.2, -0.4, -3.2, 0.85),
 };
-const RIM = 1, LOGO = 1, RING_A = 0.85, RING_B = 0.7, RING_C = 0.6;
 
+// The 5000 logo inside its own small ensō, with a dark wash behind it so
+// the white letters stand off the strokes behind.
 function Emblem({ mode, animate }: { mode: string; animate: boolean }) {
   const rig = useRef<THREE.Group>(null);
   const badge = useRef<THREE.Group>(null);
-  const ringA = useRef<THREE.Mesh>(null);
-  const ringB = useRef<THREE.Mesh>(null);
-  const ringC = useRef<THREE.Mesh>(null);
-  const rimMat = useRef<THREE.MeshBasicMaterial>(null);
+  const ring = useRef<THREE.Mesh>(null);
   const logoMat = useRef<THREE.MeshBasicMaterial>(null);
-  const ringAMat = useRef<THREE.MeshBasicMaterial>(null);
-  const ringBMat = useRef<THREE.MeshBasicMaterial>(null);
-  const ringCMat = useRef<THREE.MeshBasicMaterial>(null);
+  const washMat = useRef<THREE.MeshBasicMaterial>(null);
   const light = useRef<THREE.PointLight>(null);
   const start = POSES[mode] || POSES.airdrop;
   const glow = useRef(start.glow);
   const logo = useTexture("/art/5000.png");
   logo.colorSpace = THREE.SRGBColorSpace;
   logo.anisotropy = 8;
+  const enso = useMemo(() => ensoMaterial("#e3141b"), []);
+  const wash = useMemo(() => glowTexture("rgba(6,4,5,0.9)", "rgba(6,4,5,0)"), []);
   const target = useRef(new THREE.Vector3()).current;
-  // A full turn whenever the page changes, easing out.
+  // A full turn whenever the page changes, easing out, and the ring repaints.
   const spin = useRef(0);
+  const painted = useRef(ENSO_END);
   const firstMode = useRef(true);
   useEffect(() => {
     if (firstMode.current) {
       firstMode.current = false;
       return;
     }
-    if (animate) spin.current += Math.PI * 2;
+    if (animate) {
+      spin.current += Math.PI * 2;
+      painted.current = 0;
+    }
   }, [mode, animate]);
 
   useFrame(({ clock }, delta) => {
     const t = animate ? clock.getElapsedTime() : 0;
     const pose = POSES[mode] || POSES.airdrop;
     spin.current *= Math.pow(0.04, delta);
+    painted.current = Math.min(ENSO_END, painted.current + delta * 0.9);
+    enso.uniforms.reveal.value = painted.current;
     // Glide between poses (frame-rate independent); a still scene snaps.
     const ease = animate ? 1 - Math.pow(0.02, delta) : 1;
     if (rig.current) {
@@ -339,61 +658,34 @@ function Emblem({ mode, animate }: { mode: string; animate: boolean }) {
     }
     glow.current = THREE.MathUtils.lerp(glow.current, pose.glow, ease);
     const g = glow.current;
-    if (rimMat.current) rimMat.current.opacity = RIM * g;
-    if (logoMat.current) logoMat.current.opacity = LOGO * g;
-    if (ringAMat.current) ringAMat.current.opacity = RING_A * g;
-    if (ringBMat.current) ringBMat.current.opacity = RING_B * g;
-    if (ringCMat.current) ringCMat.current.opacity = RING_C * g;
+    enso.uniforms.opacity.value = g * 1.4;
+    if (logoMat.current) logoMat.current.opacity = Math.min(1, g * 1.8);
+    if (washMat.current) washMat.current.opacity = Math.min(1, g * 1.6);
     if (light.current) light.current.intensity = 9 * g;
     // The badge sways but keeps facing the viewer so the logo stays legible.
     if (badge.current) {
-      badge.current.rotation.y = Math.sin(t * 0.45) * 0.42 + spin.current;
+      badge.current.rotation.y = Math.sin(t * 0.45) * 0.38 + spin.current;
       badge.current.rotation.x = Math.sin(t * 0.3) * 0.08;
     }
-    if (ringA.current) ringA.current.rotation.z = t * 0.35;
-    if (ringB.current) {
-      ringB.current.rotation.x = Math.PI / 2.3 + Math.sin(t * 0.4) * 0.15;
-      ringB.current.rotation.z = -t * 0.22;
-    }
-    if (ringC.current) {
-      ringC.current.rotation.y = Math.PI / 3 + t * 0.18;
-      ringC.current.rotation.x = Math.PI / 2.8;
-    }
+    if (ring.current) ring.current.rotation.z = -t * 0.25;
   });
 
   return (
     <group ref={rig} position={start.position.toArray()} scale={start.scale}>
-      <pointLight ref={light} color="#ff2a3d" intensity={9} distance={7} position={[0, 0, 1.4]} />
-      <pointLight color="#ff9aa5" intensity={2} distance={4} position={[-1, 1, 1]} />
+      <pointLight ref={light} color="#ff2a2a" intensity={9} distance={7} position={[0, 0, 1.4]} />
       <group ref={badge}>
-        {/* Dark metal hexagon, flat face towards the camera. */}
-        <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[1, 1, 0.18, 6]} />
-          <meshStandardMaterial color="#14070a" metalness={0.9} roughness={0.28} emissive="#3d0009" emissiveIntensity={0.7} />
+        <mesh position={[0, 0, -0.05]}>
+          <planeGeometry args={[3.4, 3.4]} />
+          <meshBasicMaterial ref={washMat} map={wash} transparent depthWrite={false} />
         </mesh>
-        {/* Glowing hex rim (a torus with six segments is a hexagon). */}
-        <mesh position={[0, 0, 0.1]} rotation={[0, 0, Math.PI / 2]}>
-          <torusGeometry args={[1.02, 0.035, 8, 6]} />
-          <meshBasicMaterial ref={rimMat} color="#ff2a3d" transparent toneMapped={false} />
+        <mesh ref={ring} material={enso}>
+          <planeGeometry args={[3, 3]} />
         </mesh>
-        {/* The 5000 FIVETHOUSAND logo (its own transparent ground). */}
-        <mesh position={[0, 0, 0.11]}>
+        <mesh position={[0, 0, 0.05]}>
           <planeGeometry args={[1.62, 0.93]} />
           <meshBasicMaterial ref={logoMat} map={logo} transparent depthWrite={false} toneMapped={false} />
         </mesh>
       </group>
-      <mesh ref={ringA}>
-        <torusGeometry args={[1.42, 0.02, 8, 120]} />
-        <meshBasicMaterial ref={ringAMat} color="#ff4d5e" transparent opacity={RING_A} toneMapped={false} />
-      </mesh>
-      <mesh ref={ringB}>
-        <torusGeometry args={[1.7, 0.012, 8, 120]} />
-        <meshBasicMaterial ref={ringBMat} color="#ff2a3d" transparent opacity={RING_B} toneMapped={false} />
-      </mesh>
-      <mesh ref={ringC}>
-        <torusGeometry args={[1.95, 0.008, 8, 120]} />
-        <meshBasicMaterial ref={ringCMat} color="#a8303f" transparent opacity={RING_C} toneMapped={false} />
-      </mesh>
     </group>
   );
 }
@@ -442,14 +734,14 @@ function CameraRig({ animate, flyIn }: { animate: boolean; flyIn: boolean }) {
       return;
     }
     const ease = 1 - Math.pow(0.05, delta);
-    aim.set(pointer.x * 0.5, REST.y + pointer.y * 0.22, REST.z);
+    aim.set(pointer.x * 0.6, REST.y + pointer.y * 0.25, REST.z);
     camera.position.lerp(aim, ease);
     camera.lookAt(LOOK);
   });
   return null;
 }
 
-// Low tier: draw on demand at 30 frames a second instead of every display frame.
+// Draw on demand at a fixed frame rate instead of every display frame.
 function Ticker({ fps }: { fps: number }) {
   const invalidate = useThree((state) => state.invalidate);
   useEffect(() => {
@@ -487,33 +779,26 @@ export default function CommandScene({ tier, calm }: { tier: SceneTier; calm: bo
         camera={{ position: (flyIn ? FLY_FROM : REST).toArray(), fov: 45, near: 0.1, far: 400 }}
         gl={{ alpha: false, antialias: high, powerPreference: high ? "high-performance" : "low-power" }}
         frameloop={frameloop}
-        onCreated={({ gl }) => gl.setClearColor("#07040a")}
+        onCreated={({ gl }) => gl.setClearColor("#080607")}
       >
-        <fog attach="fog" args={["#07040a", 24, 150]} />
+        <fog attach="fog" args={["#080607", 22, 140]} />
         <ambientLight intensity={0.25} />
+        <hemisphereLight args={["#3a2a2c", "#000000", 0.55]} />
+        {/* Red light from the ensō, catching the tops and backs of the pillars. */}
+        <directionalLight position={[0, 14, -70]} color="#e3141b" intensity={1.1} />
         {!calm && tabVisible && <Ticker fps={30} />}
         <CameraRig animate={animate} flyIn={flyIn} />
         <Sky palette={palette} animate={animate} />
-        <Stars radius={110} depth={40} count={high ? 1800 : 600} factor={3.2} saturation={0} fade speed={animate ? 0.5 : 0} />
-        <Sun animate={animate} palette={palette} urgency={urgency} />
-        <Mountains detail={high} />
-        <Floor animate={animate} urgency={urgency} />
-        {/* The logo texture loads asynchronously. */}
+        <Enso animate={animate} palette={palette} urgency={urgency} />
+        <Ridges />
+        <Pillars />
+        {/* The brush and logo textures load asynchronously. */}
         <Suspense fallback={null}>
+          <Strokes animate={animate} />
+          <Floor animate={animate} urgency={urgency} />
           <Emblem mode={mode} animate={animate} />
         </Suspense>
-        {animate && (
-          <Sparkles
-            count={high ? 90 : 36}
-            scale={[18, 7, 10]}
-            position={[0, 1.2, -3]}
-            size={high ? 2.2 : 1.8}
-            speed={0.35}
-            noise={1.2}
-            color="#ff6a5c"
-            opacity={0.55}
-          />
-        )}
+        <Flecks count={high ? 260 : 110} animate={animate} />
       </Canvas>
     </div>
   );
