@@ -960,7 +960,7 @@ function SquadRanking({
               <span className="name-with-avatar">
                 <Avatar url={avatars[String(member.id)]} name={member.display_name} size={24} />
                 {member.id === highlightId ? (
-                  <span className="text-white">{member.display_name} · คุณ</span>
+                  <span className="text-[var(--ui-red-light)] font-semibold">{member.display_name} · คุณ</span>
                 ) : (
                   member.display_name
                 )}
@@ -3648,10 +3648,7 @@ export default function Home() {
     return (
       <main className="login-stage">
         <section className="auth-card">
-          <div className="auth-emblem">
-            <img src="/art/emblem.svg" alt="" />
-            <img src="/art/5k-chrome.png" alt="5K Fivethousand" className="auth-emblem__mark" />
-          </div>
+          <img src="/art/5000.svg" alt="5000 Fivethousand" className="auth-logo" width={2054} height={1178} />
           <p className="ui-eyebrow">5K FIVETHOUSAND · COMMAND CENTER</p>
           <h1 className="auth-title">เข้าสู่ระบบแก๊ง</h1>
           <p className="auth-lead">
@@ -3790,7 +3787,7 @@ export default function Home() {
             <Widget3D
               kind="badge"
               className="side-brand__badge"
-              fallback={<img src="/art/5k-chrome.png" alt="5K Fivethousand" className="side-brand__mark" />}
+              fallback={<img src="/art/5000.svg" alt="5000 Fivethousand" className="side-brand__mark" />}
             />
             <div className="side-brand__text">
               <b>COMMAND</b>
@@ -3846,7 +3843,7 @@ export default function Home() {
         </aside>
         <section className="main-col min-w-0 flex-1">
           <header className="topbar">
-            <img src="/art/5k-chrome.png" alt="5K" className="topbar__logo" />
+            <img src="/art/5000.svg" alt="5000" className="topbar__logo" />
             <Widget3D key={view} kind={pageIcon.kind} args={pageIcon.args} className="topbar__icon" />
             <div className="topbar__heading">
               <h1 className="topbar__title">{pageTitle}</h1>

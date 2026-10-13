@@ -138,7 +138,7 @@ function Stage({ kind, args, calm, drag }: { kind: WidgetKind; args: WidgetArgs;
       <pointLight position={[-2.5, 1, 2]} color="#ff4655" intensity={9} distance={9} decay={2} />
       <DragRig drag={drag}>
         {kind === "crate" && <SupplyDrop calm={calm} state={args.done ? "done" : args.drop || "idle"} chute={args.chute !== false} />}
-        {kind === "badge" && <FitCamera w={3.4} h={1.5} />}
+        {kind === "badge" && <FitCamera w={3.4} h={1.95} />}
         {kind === "badge" && (
           <Motion calm={calm} tilt={0.12} sway={0.6} bob={0.03}>
             <Suspense fallback={null}>

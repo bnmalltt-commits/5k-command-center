@@ -50,7 +50,7 @@ function glowTexture(inner: string, outer: string) {
 type Palette = { sunTop: string; sunMid: string; sunBottom: string; skyMid: string; horizon: string };
 const PALETTES: Record<string, Palette> = {
   day: { sunTop: "#ffe08a", sunMid: "#ff8a3d", sunBottom: "#e0442b", skyMid: "#1a0b0c", horizon: "#5a1a12" },
-  dusk: { sunTop: "#ffc27a", sunMid: "#ff4655", sunBottom: "#b80f25", skyMid: "#16050c", horizon: "#4f0b19" },
+  dusk: { sunTop: "#ffc27a", sunMid: "#e3141b", sunBottom: "#b80f25", skyMid: "#16050c", horizon: "#4f0b19" },
   night: { sunTop: "#ff9ab0", sunMid: "#e0245c", sunBottom: "#7a0c3a", skyMid: "#12040f", horizon: "#3d0a2a" },
   late: { sunTop: "#ffa8e0", sunMid: "#b02a8a", sunBottom: "#4a0c4a", skyMid: "#0c0512", horizon: "#2a0a2e" },
 };
@@ -90,7 +90,7 @@ function Sky({ palette, animate }: { palette: Palette; animate: boolean }) {
           top: { value: new THREE.Color("#040406") },
           mid: { value: new THREE.Color("#16050c") },
           horizon: { value: new THREE.Color("#4f0b19") },
-          glow: { value: new THREE.Color("#ff4655") },
+          glow: { value: new THREE.Color("#e3141b") },
         },
         vertexShader: "varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
         fragmentShader: `uniform vec3 top; uniform vec3 mid; uniform vec3 horizon; uniform vec3 glow; varying vec3 vDir;
@@ -131,7 +131,7 @@ function Sun({ animate, palette, urgency }: { animate: boolean; palette: Palette
         depthWrite: false,
         uniforms: {
           topColor: { value: new THREE.Color("#ffc27a") },
-          midColor: { value: new THREE.Color("#ff4655") },
+          midColor: { value: new THREE.Color("#e3141b") },
           bottomColor: { value: new THREE.Color("#b80f25") },
           time: { value: 0 },
         },
@@ -204,7 +204,7 @@ function Mountains({ detail }: { detail: boolean }) {
         <meshBasicMaterial color="#07040a" polygonOffset polygonOffsetFactor={1} polygonOffsetUnits={1} />
       </mesh>
       <mesh geometry={geometry}>
-        <meshBasicMaterial color="#ff2e44" wireframe transparent opacity={0.42} fog={false} />
+        <meshBasicMaterial color="#e3141b" wireframe transparent opacity={0.42} fog={false} />
       </mesh>
     </group>
   );
@@ -268,7 +268,7 @@ function Floor({ animate, urgency }: { animate: boolean; urgency: number }) {
           cellThickness={0.6}
           sectionThickness={1.25}
           cellColor="#3d0810"
-          sectionColor="#ff2e44"
+          sectionColor="#e3141b"
           fadeDistance={90}
           fadeStrength={1.4}
         />
@@ -283,7 +283,7 @@ function Floor({ animate, urgency }: { animate: boolean; urgency: number }) {
 // screen shows it big, centred in front of the sun.
 const pose = (x: number, y: number, z: number, scale: number, glow = 0.5) => ({ position: new THREE.Vector3(x, y, z), scale, glow });
 const POSES: Record<string, { position: THREE.Vector3; scale: number; glow: number }> = {
-  login: pose(0, 2.1, -2, 0.7, 1),
+  login: pose(0, 2.1, -2, 0.001, 0),
   airdrop: pose(3.5, -0.4, -3.2, 0.85),
   party: pose(-3.5, -0.35, -3.2, 0.85),
   score: pose(0, 2.3, -4.5, 0.9),
@@ -310,7 +310,7 @@ function Emblem({ mode, animate }: { mode: string; animate: boolean }) {
   const light = useRef<THREE.PointLight>(null);
   const start = POSES[mode] || POSES.airdrop;
   const glow = useRef(start.glow);
-  const logo = useTexture("/art/5k-chrome.png");
+  const logo = useTexture("/art/5000.png");
   logo.colorSpace = THREE.SRGBColorSpace;
   logo.anisotropy = 8;
   const target = useRef(new THREE.Vector3()).current;
@@ -376,9 +376,9 @@ function Emblem({ mode, animate }: { mode: string; animate: boolean }) {
           <torusGeometry args={[1.02, 0.035, 8, 6]} />
           <meshBasicMaterial ref={rimMat} color="#ff2a3d" transparent toneMapped={false} />
         </mesh>
-        {/* The chrome 5K logo (its own transparent ground). */}
+        {/* The 5000 FIVETHOUSAND logo (its own transparent ground). */}
         <mesh position={[0, 0, 0.11]}>
-          <planeGeometry args={[1.62, 0.7]} />
+          <planeGeometry args={[1.62, 0.93]} />
           <meshBasicMaterial ref={logoMat} map={logo} transparent depthWrite={false} toneMapped={false} />
         </mesh>
       </group>

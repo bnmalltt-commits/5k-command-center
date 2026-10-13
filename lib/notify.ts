@@ -98,7 +98,7 @@ export async function postCard(url: string, {
             // One code box per line, like the gang's other bot cards.
             description,
             ...(image && { image: { url: `attachment://${filename}` } }),
-            footer: { text: "5K Command Center", icon_url: `${SITE_URL}/5k-logo.png` },
+            footer: { text: "5K Command Center", icon_url: `${SITE_URL}/icon-192.png` },
             timestamp: new Date().toISOString(),
           },
         ],

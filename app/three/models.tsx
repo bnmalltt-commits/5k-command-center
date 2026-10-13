@@ -244,15 +244,15 @@ export function SupplyDrop({ calm, state = "idle", chute = true }: { calm: boole
   );
 }
 
-// ---------- 5K badge: the chrome logo floating in 3D ----------
+// ---------- 5000 badge: the brush logo floating in 3D ----------
 
 export function HexBadge() {
-  const logo = useTexture("/art/5k-chrome.png");
+  const logo = useTexture("/art/5000.png");
   logo.colorSpace = THREE.SRGBColorSpace;
   logo.anisotropy = 8;
   return (
     <mesh>
-      <planeGeometry args={[3.3, 1.42]} />
+      <planeGeometry args={[3.3, 1.89]} />
       <meshBasicMaterial map={logo} transparent alphaTest={0.02} side={THREE.DoubleSide} toneMapped={false} />
     </mesh>
   );

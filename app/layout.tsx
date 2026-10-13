@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Chakra_Petch, IBM_Plex_Sans_Thai } from "next/font/google";
+import { Chakra_Petch, IBM_Plex_Sans_Thai, Kanit } from "next/font/google";
 import "./globals.css";
 import CommandScene from "./command-scene-loader";
 
@@ -11,6 +11,14 @@ const chakra = Chakra_Petch({
   subsets: ["thai", "latin"],
   weight: ["500", "600", "700"],
   variable: "--font-chakra",
+  display: "swap",
+});
+// Kanit heavy italic: the poster face for headings, after the brush 5000 logo.
+const kanit = Kanit({
+  subsets: ["thai", "latin"],
+  weight: ["600", "700", "800"],
+  style: ["normal", "italic"],
+  variable: "--font-kanit",
   display: "swap",
 });
 // IBM Plex Sans Thai: a clean modern face for everything people read.
@@ -37,13 +45,14 @@ export const metadata: Metadata = {
   },
   twitter: { card: "summary_large_image", title: "5K Command Center", images: ["/og.png"] },
   icons: {
-    icon: "/favicon.svg",
-    shortcut: "/favicon.svg",
+    icon: [{ url: "/favicon.png", sizes: "64x64", type: "image/png" }, { url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    shortcut: "/favicon.png",
+    apple: "/icon-192.png",
   },
 };
 
 // Discord tints a link's card with this colour.
-export const viewport: Viewport = { themeColor: "#ff4655" };
+export const viewport: Viewport = { themeColor: "#e3141b" };
 
 export default function RootLayout({
   children,
@@ -51,7 +60,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="th" className={`${chakra.variable} ${plex.variable}`}>
+    <html lang="th" className={`${chakra.variable} ${plex.variable} ${kanit.variable}`}>
       <body className="antialiased"><CommandScene />{children}</body>
     </html>
   );
