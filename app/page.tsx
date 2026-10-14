@@ -218,6 +218,10 @@ type Data = {
   teamDays: any[];
   // "แต้มของฉัน": {day, category, points, n}, only after that view loads.
   myPoints?: any[];
+  // Penalties being paid back with shop runs (lib/penalty.ts OpenPenalty):
+  // the member's own, and everyone's for admins.
+  myPenalties?: any[];
+  openPenalties?: any[] | null;
   // "สรุป" (lib/summary.ts), only after that view loads.
   summary?: any;
   // Team quota: points from shops (+3) and loops (+1) per day.
@@ -1384,6 +1388,18 @@ function MyPoints({ data }: { data: Data }) {
             </div>
           </div>
         )}
+        {month === thisMonth &&
+          (data.myPenalties || []).map((penalty: any) => (
+            <div key={penalty.id} className="penalty-note">
+              <p>
+                <b>โดนหัก {penalty.points} แต้ม</b> · {penalty.reason}
+              </p>
+              <p>
+                งัดร้านผ่านอีก {penalty.shops - penalty.done} ร้าน ได้ {penalty.points} แต้มคืนอัตโนมัติ ({penalty.done}/{penalty.shops} ร้าน)
+              </p>
+              <Meter value={penalty.done} max={penalty.shops} label="งัดร้านคืนแต้ม" />
+            </div>
+          ))}
         {month === thisMonth && mine && (
           <p className="text-sm text-[var(--ui-text-2)]">
             คะแนนทีมวันนี้ {mine.today}/{data.team?.perDay ?? 9}
@@ -2470,6 +2486,7 @@ function AdminCommandCenter({
   const [pointMember, setPointMember] = useState("");
   const [pointValue, setPointValue] = useState("");
   const [pointReason, setPointReason] = useState("");
+  const [pointShops, setPointShops] = useState("");
   const [review, setReview] = useState<{ items: any[]; start: number } | null>(null);
   const [editingAward, setEditingAward] = useState<any>(null);
   useEffect(() => {
@@ -2746,11 +2763,13 @@ function AdminCommandCenter({
                   memberId: Number(pointMember),
                   points: Number(pointValue),
                   reason: pointReason.trim(),
+                  shops: Number(pointValue) < 0 && pointShops ? Number(pointShops) : undefined,
                   name: member?.display_name,
                 }).then((saved) => {
                   if (saved) {
                     setPointValue("");
                     setPointReason("");
+                    setPointShops("");
                   }
                 });
               }}
@@ -2792,6 +2811,20 @@ function AdminCommandCenter({
                 className="ui-input"
                 aria-label="เหตุผล"
               />
+              {Number(pointValue) < 0 && (
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={50}
+                  step={1}
+                  value={pointShops}
+                  onChange={(event) => setPointShops(event.target.value)}
+                  placeholder="คืนแต้มเมื่องัดร้านครบ…ร้าน (ไม่ใส่ = ไม่คืน)"
+                  className="ui-input"
+                  aria-label="จำนวนร้านที่ต้องงัดเพื่อได้แต้มคืน"
+                />
+              )}
               <button disabled={busy} className="ui-btn ui-btn--primary">
                 บันทึกแต้ม
               </button>
@@ -2987,6 +3020,16 @@ function AdminCommandCenter({
             <EmptyState art="team" title="ไม่มีปาร์ตี้ที่กำลังใช้งาน" />
           ))}
 
+        {tab === "points" &&
+          (data.openPenalties || []).map((penalty: any) => (
+            <Row
+              key={`penalty-${penalty.id}`}
+              inset={false}
+              title={`−${penalty.points} · ${penalty.name} · รอคืนแต้ม`}
+              subtitle={`${penalty.reason} · งัดร้านแล้ว ${penalty.done}/${penalty.shops} ร้าน ครบแล้วคืนอัตโนมัติ · โดย ${penalty.adminName}`}
+              trailing={<b className="rank-score">{penalty.done}/{penalty.shops}</b>}
+            />
+          ))}
         {tab === "points" &&
           (visibleLedger.length ? (
             visibleLedger.map((entry: any) => (
@@ -3527,7 +3570,7 @@ export default function Home() {
       member_reactivate: `ยืนยันเอา “${body.name}” กลับเข้าแก๊งใช่หรือไม่? แต้มและประวัติเดิมจะกลับมาด้วย`,
       admin_party_dissolve: `ยืนยันยุบปาร์ตี้ “${body.name}” ใช่หรือไม่? สมาชิกทุกคนจะออกจากทีมทันที`,
       admin_party_remove_member: `ยืนยันนำ “${body.name}” ออกจากปาร์ตี้ “${body.partyName}” ใช่หรือไม่? ถ้าเป็นหัวหน้า ตำแหน่งจะส่งต่อให้สมาชิกคนถัดไป`,
-      points_adjust: `ยืนยัน${Number(body.points) > 0 ? "เพิ่ม" : "หัก"} ${Math.abs(Number(body.points))} แต้ม ${Number(body.points) > 0 ? "ให้" : "จาก"} “${body.name}” ใช่หรือไม่?\n\nเหตุผล: ${body.reason}`,
+      points_adjust: `ยืนยัน${Number(body.points) > 0 ? "เพิ่ม" : "หัก"} ${Math.abs(Number(body.points))} แต้ม ${Number(body.points) > 0 ? "ให้" : "จาก"} “${body.name}” ใช่หรือไม่?\n\nเหตุผล: ${body.reason}${body.shops ? `\nงัดร้านผ่านครบ ${body.shops} ร้าน ระบบคืน ${Math.abs(Number(body.points))} แต้มให้อัตโนมัติ` : ""}`,
       points_undo:
         body.source === "adjustment"
           ? `ยืนยันยกเลิกการปรับแต้มของ “${body.names}” ใช่หรือไม่?`
@@ -3869,6 +3912,14 @@ export default function Home() {
                   <Meter value={data.team.mine.today} max={data.team.perDay} label="คะแนนทีมวันนี้" />
                 </button>
               )}
+              {(data.myPenalties || []).slice(0, 1).map((penalty: any) => (
+                <button key={penalty.id} type="button" onClick={() => setView("mine")} className="topbar-stat topbar-stat--extra topbar-stat--warn">
+                  <b>
+                    {penalty.done}/{penalty.shops}
+                  </b>
+                  <span>งัดร้านคืน {penalty.points} แต้ม</span>
+                </button>
+              ))}
               {data.team?.mine && data.team.mine.debt > 0 && (
                 <button type="button" onClick={() => setView("mine")} className="topbar-stat topbar-stat--extra topbar-stat--warn">
                   <b>{data.team.mine.debt}</b>

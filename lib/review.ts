@@ -4,6 +4,7 @@ import { notifyApproval, notifyRejection, discordUserId } from "./notify";
 import { audit } from "./audit";
 import { pointsByDaySql, pointsFor } from "./points";
 import { storage } from "./storage";
+import { settlePenalties } from "./penalty";
 
 // Approving and rejecting evidence, shared by the admin page and the Discord
 // review buttons so both behave exactly the same.
@@ -104,6 +105,8 @@ export async function approveEvidence(admin: { id: unknown; display_name: string
       },
     });
   } catch {}
+  // A shop run may finish paying back a penalty: give those points back now.
+  if (type === "party" && updated.kind === "shop") await settlePenalties(credited.map((r: any) => r.member_id)).catch(() => {});
   // Evidence is only needed until it's verified — delete it once approved
   // so storage doesn't fill up. Best-effort: never fail the approval over it.
   if (updated.image_key) await storage.delete(updated.image_key).catch(() => {});

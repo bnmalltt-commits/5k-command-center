@@ -1855,3 +1855,8 @@ html[data-scene="on"] *::after { -webkit-backdrop-filter: none !important; backd
 .ui-btn--primary:focus-visible,
 .topbar-stat:focus-visible,
 .hud-tile:focus-visible { -webkit-mask-box-image-source: none; }
+
+/* A penalty being paid back with shop runs, on "แต้มของฉัน". */
+.penalty-note { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid rgba(227, 20, 27, 0.4); border-radius: 12px; background: rgba(227, 20, 27, 0.08); }
+.penalty-note p { margin: 0; color: var(--ui-text-2); font-size: 13.5px; }
+.penalty-note b { color: var(--ui-red-light); }

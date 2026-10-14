@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { now, thaiDate } from "@/lib/auth";
 import { postCard, discordUserId } from "@/lib/notify";
 import { ABSENT_REASON } from "@/lib/party";
+import { settlePenalties } from "@/lib/penalty";
 import { pointsByDaySql, teamStatusSql, teamDayResultSql, TEAM_PER_DAY, TEAM_RULE_START, KIND_POINTS } from "@/lib/points";
 
 export const maxDuration = 30;
@@ -349,6 +350,8 @@ export async function GET(request: Request) {
     ["team", teamSummary],
     ["week", weeklySummary],
     ["leader", leaderWatch],
+    // Backup for the refund that normally happens on the approval itself.
+    ["penalty", async () => (await settlePenalties()).map((p) => `penalty refunded: ${p.name} +${p.points}`)],
   ];
   const ran: string[] = [];
   const failed: string[] = [];

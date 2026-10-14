@@ -4,6 +4,7 @@ import { discordUserId, discordAvatarUrl, postCard } from "@/lib/notify";
 import { pointsByDaySql, pointsDetailSql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
 import { approveEvidence, rejectEvidence, validType } from "@/lib/review";
 import { audit } from "@/lib/audit";
+import { adjustmentId, createPenalty, openPenalties } from "@/lib/penalty";
 import { buildSummary } from "@/lib/summary";
 import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, json, sameId, discordLinked, NEEDS_DISCORD } from "@/lib/auth";
 
@@ -13,11 +14,10 @@ import { now, thaiDate, onlineSince, requireMember, requireAdmin, requireSam, js
 // reads the response) and starve the connection pool for later requests.
 export const maxDuration = 30;
 
-// Unique, never-reused id for a manual adjustment. MAX(source_id)+1 let two
-// admins saving at once share an id (so one undo removed both) and reused an
-// undone id, so a stale undo could delete someone else's newer adjustment.
-// ms timestamp * 1000 + random stays under Number.MAX_SAFE_INTEGER.
-const adjustmentId = () => Date.now() * 1000 + Math.floor(Math.random() * 1000);
+// adjustmentId (lib/penalty): a unique, never-reused id for a manual
+// adjustment. MAX(source_id)+1 let two admins saving at once share an id (so
+// one undo removed both) and reused an undone id, so a stale undo could
+// delete someone else's newer adjustment.
 
 // First Bangkok date of today / this week (Monday), as YYYY-MM-DD so it
 // compares directly against activity_date text.
@@ -123,6 +123,8 @@ export async function GET(request: Request) {
     // The member's own team-quota standing, for the home screen (null before
     // the rule starts or for a member it doesn't cover yet).
     const myTeam = await db.prepare(`SELECT * FROM (${teamStatusSql(date)}) s WHERE member_id=?`).bind(me.id).first<any>();
+    // Penalties still being paid back with shop runs (mine; everyone's for admins).
+    const [myPenalties, allPenalties] = await Promise.all([openPenalties(me.id), wants.admin ? openPenalties() : null]);
     const [adminParties, ledger, adminLeaves, pointAudit] = wants.admin
       ? await Promise.all([
           db.prepare("SELECT p.id,p.name,p.status,owner.display_name AS owner_name,COALESCE(json_agg(json_build_object('id',m.id,'name',m.display_name) ORDER BY pm.id) FILTER (WHERE m.id IS NOT NULL),'[]') AS members FROM parties p LEFT JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id LEFT JOIN members m ON m.id=pm.member_id WHERE p.status IN ('open','locked') GROUP BY p.id,owner.display_name ORDER BY p.id DESC").bind().all(),
@@ -221,6 +223,7 @@ export async function GET(request: Request) {
         adminParties: adminParties!.results,
         ledger: ledger!.results,
         pointAudit: pointAudit!.results,
+        openPenalties: allPenalties,
         adminLeaves: adminLeaves!.results,
         attendance: attendance!.results,
         attendanceLeaves: attendanceLeaves!.results,
@@ -231,6 +234,7 @@ export async function GET(request: Request) {
       ...(wants.leave && { leaveRequests: leaveRequests.results }),
       ...(wants.log && { submissionLog: submissionLog.results }),
       ...(myPoints && { myPoints }),
+      myPenalties,
       ...(summary && { summary }),
     });
   } catch (error) {
@@ -379,6 +383,15 @@ export async function POST(request: Request) {
       const memberId = Number(body.memberId), points = Number(body.points), reason = String(body.reason || "").trim();
       if (!Number.isInteger(points) || points === 0 || Math.abs(points) > 100) throw Error("ใส่แต้มเป็นจำนวนเต็ม -100 ถึง 100 และไม่เป็น 0");
       if (reason.length < 2 || reason.length > 100) throw Error("กรอกเหตุผล 2–100 ตัวอักษร");
+      // A deduction can be made payable with shop runs: the points come back
+      // once the member has that many shop runs approved.
+      const shops = body.shops === undefined || body.shops === "" || body.shops === null ? 0 : Number(body.shops);
+      if (shops) {
+        if (points >= 0) throw Error("คืนแต้มด้วยงัดร้านได้เฉพาะตอนหักแต้ม");
+        if (!Number.isInteger(shops) || shops < 1 || shops > 50) throw Error("จำนวนร้านต้องเป็น 1–50");
+        await createPenalty(admin, memberId, -points, shops, reason);
+        return json({ ok: true });
+      }
       const target = await db.prepare("SELECT id,display_name FROM members WHERE id=? AND active=1").bind(memberId).first<any>();
       if (!target) throw Error("ไม่พบสมาชิกที่ใช้งานอยู่");
       await db.prepare(
