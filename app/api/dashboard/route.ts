@@ -1,6 +1,7 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
-import { discordUserId, discordAvatarUrl, postCard } from "@/lib/notify";
+import { discordUserId, discordAvatarUrl, postCard, notifyEvidence } from "@/lib/notify";
+import { storage } from "@/lib/storage";
 import { pointsByDaySql, pointsDetailSql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
 import { approveEvidence, rejectEvidence, validType } from "@/lib/review";
 import { audit } from "@/lib/audit";
@@ -403,6 +404,33 @@ export async function POST(request: Request) {
       ).bind(memberId, adjustmentId(), points,`${reason} · โดย ${admin.display_name}`, now()).run();
       await audit(admin, "adjust", `${points > 0 ? "เพิ่ม" : "ลด"}แต้ม ${target.display_name} · ${reason}`, points);
       return json({ ok: true });
+    }
+    // Posts a waiting item's card to Discord again (with the review buttons
+    // when the bot is set up), e.g. after the bot was added or a post failed.
+    if (body.action === "evidence_resend") {
+      const admin = await requireAdmin(request);
+      const type = validType(body.type), id = Number(body.id);
+      const item = type === "airdrop"
+        ? await db.prepare("SELECT s.image_key,s.activity_date,s.round_time,s.status,m.display_name FROM airdrop_submissions s JOIN members m ON m.id=s.member_id WHERE s.id=?").bind(id).first<any>()
+        : await db.prepare("SELECT pa.image_key,pa.activity_date,pa.kind,pa.status,m.display_name,(SELECT STRING_AGG(x.display_name,', ' ORDER BY x.display_name) FROM party_activity_members pam JOIN members x ON x.id=pam.member_id WHERE pam.party_activity_id=pa.id) AS names FROM party_activities pa JOIN members m ON m.id=pa.submitted_by_member_id WHERE pa.id=?").bind(id).first<any>();
+      if (!item || item.status !== "pending") throw Error("รายการนี้ตรวจไปแล้วหรือไม่พบข้อมูล");
+      const object = item.image_key ? await storage.get(item.image_key) : null;
+      if (!object) throw Error("ไม่พบรูปหลักฐานของรายการนี้");
+      const kindLabel = type === "airdrop" ? "แอร์ดรอป" : item.kind === "loop" ? "ลูป" : "งัดร้าน";
+      const via = await notifyEvidence({
+        title: `${item.display_name} ส่งหลักฐาน${kindLabel} (ส่งซ้ำโดย ${admin.display_name})`,
+        lines: [
+          ["ประเภท", kindLabel],
+          ...(type === "airdrop" ? [["รอบ", item.round_time] as [string, unknown]] : [["สมาชิก", item.names || "-"] as [string, unknown]]),
+          ["วันที่", item.activity_date],
+          ["สถานะ", "รอตรวจ"],
+        ],
+        image: await new Response(object.body).blob(),
+        ext: String(item.image_key).split(".").pop() || "png",
+        review: { type, id },
+      });
+      if (!via) throw Error("ส่งเข้า Discord ไม่สำเร็จ");
+      return json({ ok: true, via });
     }
     if (body.action === "points_undo") {
       const admin = await requireAdmin(request);

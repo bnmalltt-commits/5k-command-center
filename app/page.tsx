@@ -2856,13 +2856,24 @@ function AdminCommandCenter({
                   }
                   subtitle={`ส่งโดย ${item.submitted_by} · ได้แต้ม ${Number(item.member_count) || 1} คน คนละ +${item.points}`}
                   trailing={
-                    <button
-                      type="button"
-                      onClick={() => setReview({ items: visiblePending, start: index })}
-                      className="ui-btn ui-btn--ghost ui-btn--sm"
-                    >
-                      ตรวจ
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void call({ action: "evidence_resend", type: item.type, id: item.id })}
+                        className="ui-btn ui-btn--ghost ui-btn--sm"
+                        title="ส่งการ์ดรายการนี้เข้า Discord อีกครั้ง พร้อมปุ่มตรวจ"
+                      >
+                        ส่งเข้า Discord
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReview({ items: visiblePending, start: index })}
+                        className="ui-btn ui-btn--ghost ui-btn--sm"
+                      >
+                        ตรวจ
+                      </button>
+                    </div>
                   }
                 />
               ))}

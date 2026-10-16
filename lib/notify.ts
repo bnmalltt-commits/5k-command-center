@@ -136,7 +136,7 @@ async function pendingCount() {
 // New evidence waiting for review, with the photo attached.
 // With a bot set up (DISCORD_BOT_TOKEN + DISCORD_EVIDENCE_CHANNEL_ID) the card
 // is posted by the bot with ✅/❌ review buttons; otherwise (or if that fails)
-// through the evidence webhook as before.
+// through the evidence webhook as before. Says which way it went out.
 export async function notifyEvidence({
   title,
   lines,
@@ -158,10 +158,11 @@ export async function notifyEvidence({
   };
   const channel = process.env.DISCORD_EVIDENCE_CHANNEL_ID;
   if (review && channel && process.env.DISCORD_BOT_TOKEN) {
-    if (await postCard(`bot:${channel}`, { ...card, components: reviewButtons(review.type, review.id) })) return;
+    if (await postCard(`bot:${channel}`, { ...card, components: reviewButtons(review.type, review.id) })) return "bot" as const;
   }
   const url = process.env.DISCORD_WEBHOOK_URL;
-  if (url) await postCard(url, card);
+  if (url && (await postCard(url, card))) return "webhook" as const;
+  return null;
 }
 
 // An approval that just credited points: each member's total before and after.
