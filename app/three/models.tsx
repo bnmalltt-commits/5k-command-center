@@ -5,6 +5,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from "react";
 import * as THREE from "three";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { canvasTexture as paintCanvas, grain, seeded, splat, splatTexture, swipe } from "./paint";
 
 // The site's 3D props, modelled in plain units (a crate is 1 wide) so the
 // same piece can sit in a 56px header icon or fall across the whole page.
@@ -14,11 +15,11 @@ export const METAL: Record<Tone, string> = {
   gold: "#f5c542",
   silver: "#d5dbe2",
   bronze: "#db8f52",
-  red: "#ff4655",
+  red: "#e3141b",
   steel: "#9aa0aa",
 };
-const RED = "#ff4655";
-const RED_GLOW = "#ff2e44";
+const RED = "#e3141b";
+const RED_GLOW = "#ff2a2a";
 const DARK = "#26262d";
 
 // Studio reflections for metal, made once per renderer from three's built-in
@@ -102,32 +103,68 @@ export function Motion({
 }
 
 // ---------- Supply crate and parachute ----------
+// Painted like the 5000 art: a logo-red crate dragged over with dry white
+// brush strokes and splatters, black-edged panels, red-and-white canopy.
 
-// `strap` swaps the red straps for another material (the mission crate
-// tints and pulses them to show a round's status).
+// Shared painted surfaces, drawn once (every crate on the page uses them).
+let crateSkin: { side: THREE.Texture; lid: THREE.Texture } | null = null;
+function useCrateSkin() {
+  if (!crateSkin && typeof document !== "undefined") {
+    const paint = (seed: number, base: string) => {
+      const rand = seeded(seed);
+      const size = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext("2d")!;
+      grain(ctx, rand, size, size, base, 2500);
+      // Black panel frame, painted rough rather than ruled.
+      for (let i = 0; i < 4; i++) {
+        const along = i % 2 === 0;
+        const at = i < 2 ? 14 : size - 14;
+        ctx.save();
+        ctx.translate(along ? 0 : at, along ? at : 0);
+        ctx.rotate(along ? 0 : Math.PI / 2);
+        swipe(ctx, rand, -10, 0, size + 20, 26, (rand() - 0.5) * 0.02, "#0d0a0b");
+        ctx.restore();
+      }
+      // Dry white strokes across the face and a few splatters.
+      swipe(ctx, rand, 30, 70 + rand() * 40, 200, 30, -0.35 + rand() * 0.15, "#f4efec");
+      swipe(ctx, rand, 60, 170 + rand() * 30, 150, 16, -0.3 + rand() * 0.2, "#f4efec");
+      splat(ctx, rand, 60 + rand() * 140, 60 + rand() * 140, 10 + rand() * 8, "#f4efec");
+      splat(ctx, rand, 40 + rand() * 170, 40 + rand() * 170, 8 + rand() * 6, "#7a0a10", 1);
+      return paintCanvas(canvas);
+    };
+    crateSkin = { side: paint(301, "#c8101a"), lid: paint(307, "#a80d16") };
+  }
+  return crateSkin;
+}
+
+// `strap` swaps the straps for another material (the mission crate tints
+// and pulses them to show a round's status).
 export function Crate({ open = 0, lidRef, strap }: { open?: number; lidRef?: Ref<THREE.Group>; strap?: THREE.Material }) {
+  const skin = useCrateSkin();
   return (
     <group>
-      <RoundedBox args={[1, 0.82, 1]} radius={0.08} smoothness={3}>
-        <meshStandardMaterial color={DARK} metalness={0.6} roughness={0.42} />
+      <RoundedBox args={[1, 0.82, 1]} radius={0.06} smoothness={3}>
+        <meshStandardMaterial map={skin?.side} emissive="#ffffff" emissiveMap={skin?.side} emissiveIntensity={0.18} roughness={0.85} metalness={0} />
       </RoundedBox>
       <mesh material={strap}>
-        <boxGeometry args={[0.17, 0.84, 1.016]} />
-        {!strap && <meshStandardMaterial color={RED} emissive="#8f0d1d" emissiveIntensity={0.7} roughness={0.5} />}
+        <boxGeometry args={[0.15, 0.84, 1.016]} />
+        {!strap && <meshStandardMaterial color="#f1ecea" emissive="#6a6462" emissiveIntensity={0.35} roughness={0.8} />}
       </mesh>
       <mesh material={strap}>
-        <boxGeometry args={[1.016, 0.84, 0.17]} />
-        {!strap && <meshStandardMaterial color="#e3283b" emissive="#8f0d1d" emissiveIntensity={0.7} roughness={0.5} />}
+        <boxGeometry args={[1.016, 0.84, 0.15]} />
+        {!strap && <meshStandardMaterial color="#f1ecea" emissive="#6a6462" emissiveIntensity={0.35} roughness={0.8} />}
       </mesh>
       {/* The lid hinges on its back edge. */}
       <group ref={lidRef} position={[0, 0.41, -0.54]} rotation={[-open * 1.9, 0, 0]}>
         <group position={[0, 0.085, 0.54]}>
-          <RoundedBox args={[1.08, 0.17, 1.08]} radius={0.05} smoothness={3}>
-            <meshStandardMaterial color="#34343c" metalness={0.6} roughness={0.38} />
+          <RoundedBox args={[1.08, 0.17, 1.08]} radius={0.04} smoothness={3}>
+            <meshStandardMaterial map={skin?.lid} emissive="#ffffff" emissiveMap={skin?.lid} emissiveIntensity={0.15} roughness={0.85} metalness={0} />
           </RoundedBox>
           <mesh material={strap}>
-            <boxGeometry args={[0.17, 0.18, 1.09]} />
-            {!strap && <meshStandardMaterial color={RED} emissive="#8f0d1d" emissiveIntensity={0.7} />}
+            <boxGeometry args={[0.15, 0.18, 1.09]} />
+            {!strap && <meshStandardMaterial color="#f1ecea" emissive="#6a6462" emissiveIntensity={0.35} roughness={0.8} />}
           </mesh>
         </group>
       </group>
@@ -143,11 +180,14 @@ export function Parachute() {
     const g = new THREE.SphereGeometry(CANOPY_R, 36, 10, 0, Math.PI * 2, 0, CANOPY_ARC);
     const pos = g.attributes.position;
     const colors = new Float32Array(pos.count * 3);
-    const a = new THREE.Color("#ff3d4f");
-    const b = new THREE.Color("#a90f22");
+    // Logo red panels with thin white ones, like the painted canopy.
+    const red = new THREE.Color("#e3141b");
+    const deep = new THREE.Color("#a80d16");
+    const white = new THREE.Color("#f4efec");
     for (let i = 0; i < pos.count; i++) {
       const angle = Math.atan2(pos.getZ(i), pos.getX(i)) + Math.PI;
-      const c = Math.floor((angle / (Math.PI * 2)) * 12) % 2 ? a : b;
+      const panel = Math.floor((angle / (Math.PI * 2)) * 12);
+      const c = panel % 3 === 0 ? white : panel % 2 ? red : deep;
       colors.set([c.r, c.g, c.b], i * 3);
     }
     g.setAttribute("color", new THREE.BufferAttribute(colors, 3));
@@ -176,10 +216,10 @@ export function Parachute() {
   return (
     <group>
       <mesh geometry={canopy} position={[0, CANOPY_Y, 0]}>
-        <meshStandardMaterial vertexColors flatShading side={THREE.DoubleSide} roughness={0.6} />
+        <meshStandardMaterial vertexColors flatShading side={THREE.DoubleSide} roughness={0.85} emissive="#3a0306" emissiveIntensity={0.4} />
       </mesh>
       <lineSegments geometry={cords}>
-        <lineBasicMaterial color="#f4f4f6" transparent opacity={0.65} />
+        <lineBasicMaterial color="#f4f4f6" transparent opacity={0.75} />
       </lineSegments>
     </group>
   );
@@ -193,20 +233,22 @@ export function Parachute() {
 //   done      — all four rounds approved: wide open in a beam of light
 export type DropState = "idle" | "pending" | "rejected" | "approved" | "done";
 const STRAP: Record<DropState, { color: string; glow: string; level: number }> = {
-  idle: { color: RED, glow: "#8f0d1d", level: 0.7 },
+  idle: { color: "#f1ecea", glow: "#6a6462", level: 0.35 },
   pending: { color: "#ffb547", glow: "#ff9a1a", level: 1.2 },
   rejected: { color: "#6b1420", glow: "#2a0308", level: 0.3 },
   approved: { color: "#3ddc84", glow: "#14a352", level: 0.8 },
-  done: { color: RED, glow: "#8f0d1d", level: 0.7 },
+  done: { color: "#f1ecea", glow: "#6a6462", level: 0.35 },
 };
 export function SupplyDrop({ calm, state = "idle", chute = true }: { calm: boolean; state?: DropState; chute?: boolean }) {
   const swing = useRef<THREE.Group>(null);
   const beam = useRef<THREE.Mesh>(null);
   const tone = STRAP[state];
   const strap = useDisposable(
-    () => new THREE.MeshStandardMaterial({ color: tone.color, emissive: tone.glow, emissiveIntensity: tone.level, roughness: 0.5 }),
+    () => new THREE.MeshStandardMaterial({ color: tone.color, emissive: tone.glow, emissiveIntensity: tone.level, roughness: 0.6 }),
     [state],
   );
+  // A paint splash under a landed crate, in the round's status colour.
+  const puddle = useDisposable(() => splatTexture(state.length * 31 + 7, state === "idle" || state === "done" ? "#e3141b" : tone.color), [state]);
   const hanging = chute && (state === "idle" || state === "pending");
   const done = state === "done";
   useFrame(({ clock }) => {
@@ -224,20 +266,20 @@ export function SupplyDrop({ calm, state = "idle", chute = true }: { calm: boole
       <group rotation={[0.38, Math.PI / 4, 0]}>
         <Crate open={open} strap={strap} />
       </group>
-      {state === "approved" && !calm && <Sparkles count={10} scale={[0.9, 1, 0.9]} position={[0, 0.8, 0]} size={2.5} speed={0.4} color="#9dffc6" />}
+      {state === "approved" && !calm && <Sparkles count={10} scale={[0.9, 1, 0.9]} position={[0, 0.8, 0]} size={2.5} speed={0.4} color="#f4efec" />}
       {done && (
         <>
           <mesh ref={beam} position={[0, 1.25, 0]}>
             <cylinderGeometry args={[0.85, 0.42, 1.9, 32, 1, true]} />
             <meshBasicMaterial color="#ff7a5c" transparent opacity={0.3} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
           </mesh>
-          {!calm && <Sparkles count={24} scale={[1.2, 2.4, 1.2]} position={[0, 1.4, 0]} size={3} speed={0.6} color="#ffb08a" />}
+          {!calm && <Sparkles count={24} scale={[1.2, 2.4, 1.2]} position={[0, 1.4, 0]} size={3} speed={0.6} color="#ff5a5f" />}
         </>
       )}
       {!hanging && (
-        <mesh position={[0, -0.52, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[0.9, 1.02, 6]} />
-          <meshBasicMaterial color={tone.color} toneMapped={false} side={THREE.DoubleSide} />
+        <mesh position={[0, -0.53, 0]} rotation={[-Math.PI / 2, 0, 0.6]}>
+          <planeGeometry args={[2.3, 2.3]} />
+          <meshBasicMaterial map={puddle} transparent depthWrite={false} toneMapped={false} />
         </mesh>
       )}
     </group>
