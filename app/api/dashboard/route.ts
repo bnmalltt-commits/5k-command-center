@@ -1,6 +1,6 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
-import { discordUserId, discordAvatarUrl, postCard, notifyEvidence } from "@/lib/notify";
+import { discordUserId, discordAvatarUrl, postCard, notifyEvidence, lastBotError } from "@/lib/notify";
 import { storage } from "@/lib/storage";
 import { pointsByDaySql, pointsDetailSql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
 import { approveEvidence, rejectEvidence, validType } from "@/lib/review";
@@ -430,7 +430,7 @@ export async function POST(request: Request) {
         review: { type, id },
       });
       if (!via) throw Error("ส่งเข้า Discord ไม่สำเร็จ");
-      return json({ ok: true, via });
+      return json({ ok: true, via, ...(via !== "bot" && lastBotError && { botError: lastBotError }) });
     }
     if (body.action === "points_undo") {
       const admin = await requireAdmin(request);

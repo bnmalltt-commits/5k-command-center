@@ -40,6 +40,9 @@ export const reviewButtons = (type: "airdrop" | "party", id: unknown) => [
   },
 ];
 
+// Why the bot's last post failed (Discord's status and error), for admins.
+export let lastBotError = "";
+
 // `url` is a webhook URL, or "bot:<channel id>" to post as the bot (needed
 // for buttons; uses DISCORD_BOT_TOKEN).
 export async function postCard(url: string, {
@@ -119,7 +122,10 @@ export async function postCard(url: string, {
       signal: AbortSignal.timeout(8000),
     });
     // Discord's reason (e.g. 50001 Missing Access) when the bot can't post.
-    if (!res.ok && bot) console.error("discord bot post failed", res.status, (await res.text().catch(() => "")).slice(0, 300));
+    if (!res.ok && bot) {
+      lastBotError = `${res.status} ${(await res.text().catch(() => "")).slice(0, 200)}`;
+      console.error("discord bot post failed", lastBotError);
+    }
     return res.ok;
   } catch {
     // Notification is optional; the action that triggered it already succeeded.
