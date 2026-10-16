@@ -1,6 +1,6 @@
 import { db, partyLock } from "@/lib/db";
 import { leaveStatements } from "@/lib/party";
-import { discordUserId, discordAvatarUrl, postCard, notifyEvidence, lastBotError } from "@/lib/notify";
+import { discordUserId, discordAvatarUrl, postCard, notifyEvidence, lastBotError, BRAND_RED } from "@/lib/notify";
 import { storage } from "@/lib/storage";
 import { pointsByDaySql, pointsDetailSql, teamStatusSql, teamPointsByDaySql, pointsFor, POINTS_START, TEAM_RULE_START, TEAM_PER_DAY, TEAM_PENALTY, KIND_POINTS, AIRDROP_POINTS } from "@/lib/points";
 import { approveEvidence, rejectEvidence, validType } from "@/lib/review";
@@ -509,7 +509,7 @@ export async function POST(request: Request) {
               row.after ? `${Number(row.points)} → ${row.after} แต้ม` : `เอาออก (-${Number(row.points)} แต้ม)`,
             ]),
           ],
-          color: 0x60a5fa,
+          color: BRAND_RED,
           mention: affected.map((row: any) => discordUserId(row.external_user_id)).filter(Boolean) as string[],
         });
       return json({ ok: true, notice: `แก้แล้ว · ${label} คนละ +${points} · ${keep.length} คน` });

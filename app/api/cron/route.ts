@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { now, thaiDate } from "@/lib/auth";
-import { postCard, discordUserId } from "@/lib/notify";
+import { postCard, discordUserId, BRAND_RED } from "@/lib/notify";
 import { ABSENT_REASON } from "@/lib/party";
 import { settlePenalties } from "@/lib/penalty";
 import { pointsByDaySql, teamStatusSql, teamDayResultSql, TEAM_PER_DAY, TEAM_RULE_START, KIND_POINTS } from "@/lib/points";
@@ -147,6 +147,8 @@ async function monthlyWinners(nowMs: number) {
       ["เดือนใหม่", "เริ่มนับแต้มใหม่แล้ว สู้ๆ!"],
     ],
     color: 0xfbbf24,
+    // The big 5000 banner under the winners.
+    banner: "https://airdrop-party-check-v2.vercel.app/og.png",
     mention: mentions(winners.map((w) => w.row)),
   });
   return sent ? [`winners ${prev}`] : [];
@@ -199,7 +201,7 @@ async function autoAbsence(nowMs: number) {
         ...nameLines("รายชื่อ", absent.map((m: any) => m.display_name)),
         ["หมายเหตุ", "ติดธุระวันไหน แจ้งลาในเว็บล่วงหน้าได้ที่ เพิ่มเติม → ห้องลา"],
       ],
-      color: 0xef4444,
+      color: BRAND_RED,
       mention: mentions(absent),
     });
     if (!ok) await release(key); // leave rows are idempotent; retry the post
@@ -290,7 +292,7 @@ async function weeklySummary(nowMs: number) {
       ["ขาดคะแนนทีมเดือนนี้", owing.length ? `${owing.length} คน · รวม ${owing.reduce((s: number, m: any) => s + Number(m.debt), 0)} คะแนน` : "ไม่มี 🎉"],
       ...groupedLines(owing, (m) => Number(m.debt), (n) => `ขาด ${n}`),
     ],
-    color: 0x60a5fa,
+    color: BRAND_RED,
     mention: mentions(top.slice(0, 3)),
   });
   if (!ok) await release(key);

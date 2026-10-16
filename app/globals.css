@@ -493,7 +493,7 @@ body > main { position: relative; z-index: 1; background-color: transparent !imp
   width: 64px;
   height: 64px;
   margin: 0 auto 12px;
-  background: url("/art/radar.svg") center / contain no-repeat;
+  background: url("/art/gen/empty/check.webp") center / contain no-repeat;
   opacity: 0.9;
 }
 /* With rendered art, the art replaces the radar mark. Its black ground melts
@@ -504,9 +504,6 @@ body > main { position: relative; z-index: 1; background-color: transparent !imp
   width: 132px;
   height: 132px;
   margin: -12px auto 6px;
-  mix-blend-mode: lighten;
-  -webkit-mask-image: radial-gradient(closest-side, #000 72%, transparent);
-  mask-image: radial-gradient(closest-side, #000 72%, transparent);
   animation: drift 6s ease-in-out infinite;
 }
 .ui-empty__title { margin: 0; color: var(--ui-text); font-size: 15px; font-weight: 600; }
@@ -1860,3 +1857,46 @@ html[data-scene="on"] *::after { -webkit-backdrop-filter: none !important; backd
 .penalty-note { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid rgba(227, 20, 27, 0.4); border-radius: 12px; background: rgba(227, 20, 27, 0.08); }
 .penalty-note p { margin: 0; color: var(--ui-text-2); font-size: 13.5px; }
 .penalty-note b { color: var(--ui-red-light); }
+
+/* First load: the 5000 logo painted in left to right with a ragged brush
+   edge, a red brush sweep wiping in under it, then a slow breath. */
+.boot { position: relative; z-index: 1; display: grid; min-height: 100vh; min-height: 100dvh; place-content: center; justify-items: center; gap: 18px; padding: 24px 16px; }
+.boot__mark { position: relative; width: min(360px, 78vw); }
+/* A dark wash behind the logo so the red letters stand off the red ensō. */
+.boot__mark::before { content: ""; position: absolute; inset: -45% -30%; background: radial-gradient(closest-side, rgba(8, 6, 7, 0.88), rgba(8, 6, 7, 0.6) 55%, transparent); }
+.boot__logo {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 10px 30px rgba(227, 20, 27, 0.3));
+  -webkit-mask-image: linear-gradient(100deg, #000 40%, rgba(0, 0, 0, 0.35) 47%, transparent 52%);
+  mask-image: linear-gradient(100deg, #000 40%, rgba(0, 0, 0, 0.35) 47%, transparent 52%);
+  -webkit-mask-size: 260% 100%;
+  mask-size: 260% 100%;
+  -webkit-mask-position: 100% 0;
+  mask-position: 100% 0;
+  animation: boot-paint 1.1s cubic-bezier(0.6, 0.05, 0.3, 1) 0.15s forwards, boot-breathe 2.4s ease-in-out 1.4s infinite;
+}
+.boot__sweep {
+  position: absolute;
+  left: -6%;
+  bottom: 4%;
+  width: 112%;
+  height: 26%;
+  background: url("/art/brush.png") left center / 100% 100% no-repeat;
+  opacity: 0.55;
+  clip-path: inset(0 100% 0 0);
+  animation: boot-sweep 0.7s cubic-bezier(0.5, 0, 0.2, 1) 0.9s forwards;
+}
+.boot__label { margin: 0; color: var(--ui-text-3); font-size: 13.5px; letter-spacing: 0.04em; animation: fade-in 0.4s ease 1.2s both; }
+@keyframes boot-paint { to { -webkit-mask-position: 0 0; mask-position: 0 0; } }
+@keyframes boot-sweep { to { clip-path: inset(0 0 0 0); } }
+@keyframes boot-breathe { 50% { transform: scale(1.025); filter: drop-shadow(0 12px 40px rgba(227, 20, 27, 0.45)); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .boot__logo { -webkit-mask-image: none; mask-image: none; animation: none; }
+  .boot__sweep { clip-path: none; animation: none; }
+  .boot__label { animation: none; }
+}

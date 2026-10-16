@@ -33,6 +33,7 @@ import { Picker, shrinkImage } from "./picker";
 import { playFx } from "./three/prefs";
 import { Podium3D } from "./three/podium";
 import { SceneToggle } from "./three/toggle";
+import { brush } from "./three/sound";
 import { Widget3D, WidgetStage, useWidgets3D } from "./three/widget";
 import {
   Chips,
@@ -561,7 +562,7 @@ function MissionCard({
         className="mission__art mission__art--3d"
         fallback={
           <div className="mission__art" aria-hidden="true">
-            <img src="/art/airdrop.svg" alt="" />
+            <img src="/art/gen/empty/crate.webp" alt="" />
           </div>
         }
       />
@@ -3698,6 +3699,15 @@ export default function Home() {
         }}
       />
     );
+  // A short brush stroke sound on the main (red) buttons, when sound is on.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const button = (event.target as Element | null)?.closest?.(".ui-btn--primary");
+      if (button && !(button as HTMLButtonElement).disabled) brush();
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
   if (!data && authNeeded)
     return (
       <main className="login-stage">
@@ -3735,20 +3745,14 @@ export default function Home() {
     );
   if (!data && (loading || !notice))
     return (
-      // The layout's outline while the first load is in flight.
-      <main className="command-shell" aria-busy="true" aria-label="กำลังเปิดศูนย์บัญชาการ">
-        <div className="skel-shell">
-          <span className="skel skel-shell__side" />
-          <div className="skel-shell__main">
-            <span className="skel skel-shell__top" />
-            <span className="skel skel-shell__hero" />
-            <div className="skel-shell__tiles">
-              <span className="skel" />
-              <span className="skel" />
-              <span className="skel" />
-            </div>
-          </div>
+      // While the first load is in flight the 5000 logo is painted in, stroke
+      // by stroke, with a red brush sweep under it.
+      <main className="boot" aria-busy="true" aria-label="กำลังเปิดศูนย์บัญชาการ">
+        <div className="boot__mark">
+          <img src="/art/5000.svg" alt="5000 Fivethousand" className="boot__logo" width={2054} height={1178} />
+          <span className="boot__sweep" aria-hidden="true" />
         </div>
+        <p className="boot__label">กำลังเปิดศูนย์บัญชาการ…</p>
       </main>
     );
   if (!data)

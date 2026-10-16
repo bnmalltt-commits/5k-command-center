@@ -120,3 +120,18 @@ export function splash(delay = 0, pitch = 1) {
   body.start(at);
   body.stop(at + 0.2);
 }
+
+// A quick dry brush stroke across paper, for the main buttons.
+export function brush(delay = 0) {
+  const a = audio();
+  if (!a) return;
+  const at = a.currentTime + delay;
+  const src = noise(a, 0.25);
+  const filter = a.createBiquadFilter();
+  filter.type = "bandpass";
+  filter.Q.value = 0.9;
+  filter.frequency.setValueAtTime(900, at);
+  filter.frequency.exponentialRampToValueAtTime(3800, at + 0.16);
+  src.connect(filter).connect(envelope(a, at, 0.12, 0.03, 0.16));
+  src.start(at);
+}

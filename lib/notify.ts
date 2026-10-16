@@ -40,6 +40,9 @@ export const reviewButtons = (type: "airdrop" | "party", id: unknown) => [
   },
 ];
 
+// The red of the 5000 logo, for every card that isn't a good/bad signal.
+export const BRAND_RED = 0xe3141b;
+
 // Why the bot's last post failed (Discord's status and error), for admins.
 export let lastBotError = "";
 
@@ -53,6 +56,7 @@ export async function postCard(url: string, {
   mention = [],
   mentionRoles = [],
   components,
+  banner,
 }: {
   title: string;
   lines: Line[];
@@ -65,6 +69,9 @@ export async function postCard(url: string, {
   mentionRoles?: string[];
   // Message components (buttons); only honoured on bot messages.
   components?: unknown[];
+  // A big picture under the card when there is no attachment (e.g. the
+  // 5000 banner on the monthly winners card).
+  banner?: string;
 }) {
   try {
     const filename = image ? `evidence.${image.ext}` : "";
@@ -95,12 +102,14 @@ export async function postCard(url: string, {
         ...(components && { components }),
         embeds: [
           {
+            // Every card carries the 5000 brand across the top.
+            author: { name: "5000 FIVETHOUSAND", url: SITE_URL, icon_url: `${SITE_URL}/icon-192.png` },
             title: clean(title),
             url: SITE_URL,
             color,
             // One code box per line, like the gang's other bot cards.
             description,
-            ...(image && { image: { url: `attachment://${filename}` } }),
+            ...(image ? { image: { url: `attachment://${filename}` } } : banner ? { image: { url: banner } } : {}),
             footer: { text: "5000 Fivethousand", icon_url: `${SITE_URL}/icon-192.png` },
             timestamp: new Date().toISOString(),
           },
@@ -161,7 +170,7 @@ export async function notifyEvidence({
   const card = {
     title,
     lines: [...lines, ["คิวรอตรวจ", `${await pendingCount().catch(() => 0)} รายการ`]] as Line[],
-    color: 0xd00404,
+    color: BRAND_RED,
     image: { blob: image, ext },
   };
   const channel = process.env.DISCORD_EVIDENCE_CHANNEL_ID;
