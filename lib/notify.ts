@@ -118,6 +118,8 @@ export async function postCard(url: string, {
       headers: bot ? { authorization: `Bot ${process.env.DISCORD_BOT_TOKEN}` } : undefined,
       signal: AbortSignal.timeout(8000),
     });
+    // Discord's reason (e.g. 50001 Missing Access) when the bot can't post.
+    if (!res.ok && bot) console.error("discord bot post failed", res.status, (await res.text().catch(() => "")).slice(0, 300));
     return res.ok;
   } catch {
     // Notification is optional; the action that triggered it already succeeded.
