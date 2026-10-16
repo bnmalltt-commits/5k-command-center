@@ -1404,7 +1404,7 @@ function MyPoints({ data }: { data: Data }) {
         {month === thisMonth && mine && (
           <p className="text-sm text-[var(--ui-text-2)]">
             คะแนนทีมวันนี้ {mine.today}/{data.team?.perDay ?? 9}
-            {mine.debt > 0 ? ` · เดือนนี้ขาดรวม ${mine.debt} คะแนน (หักไปแล้ว)` : ""}
+            {mine.debt > 0 ? ` · เดือนนี้ขาดรวม ${mine.debt} คะแนน (หักไปแล้ว ทำเกินชดแล้วได้คืน)` : ""}
           </p>
         )}
       </div>
@@ -1527,7 +1527,7 @@ function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
             label: "ขาดคะแนนทีมเดือนนี้",
             value: `${t.owing} คน`,
             tone: t.owing ? "bad" : "good",
-            sub: t.owing ? `ขาดรวม ${t.owingTotal} คะแนน · หักไปแล้ว ไม่ได้คืน` : undefined,
+            sub: t.owing ? `ขาดรวม ${t.owingTotal} คะแนน · ทำเกินชดแล้วได้คืน` : undefined,
           },
         ]
       : []),
@@ -2042,7 +2042,7 @@ function AdminTodo({ data, summary, onGo }: { data: Data; summary: any; onGo: (v
         {onLeave.size ? ` · ลาวันนี้ ${onLeave.size} คน` : ""}
       </p>
       <p className="todo-legend">
-        ทีมวันนี้ = ขาดเท่าไหร่ โดนหักเท่านั้นตอนเที่ยงคืน ไม่ได้คืน · ขาดทีม = คะแนนทีมที่ขาดรวมทั้งเดือน · รอบที่ยังไม่ส่ง ไม่นับคนที่ลา ·
+        ทีมวันนี้ = นับรวมทั้งเดือน ทำเกินวันไหนก็ชดวันที่ขาดได้ ทำชดแล้วได้คืน · ขาดทีม = คะแนนทีมที่ขาดรวมทั้งเดือน · รอบที่ยังไม่ส่ง ไม่นับคนที่ลา ·
         ขาดเมื่อวานบันทึกผิด ลบได้ที่ จัดการแก๊ง → การลา
       </p>
     </div>
@@ -4023,8 +4023,8 @@ export default function Home() {
                         <span className="hud-tile__sub">
                           {data.team.mine.neededToday > 0
                             ? `ต้องได้อีก ${data.team.mine.neededToday} คะแนนก่อนจบวัน · งัดร้าน +${data.team.points.shop} ลูป +${data.team.points.loop}`
-                            : data.team.mine.bank > 0
-                              ? `ครบแล้ว · ทำเกินไม่เก็บไปวันอื่น`
+                            : data.team.mine.today > data.team.perDay
+                              ? `ครบแล้ว · ส่วนที่เกินเก็บไว้ชดวันอื่นในเดือนนี้`
                               : "ครบแล้ววันนี้"}
                         </span>
                         {data.team.mine.debt > 0 && (

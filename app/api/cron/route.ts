@@ -244,7 +244,7 @@ async function teamSummary(nowMs: number) {
       ...nameLines("ยังไม่มีทีม (สร้างทีมก่อน ไม่งั้นโดนหักทุกคืน)", docked.filter((m: any) => !m.in_team).map((m: any) => m.display_name)),
       ...(docked.length
         ? [
-            ["กติกา", `ขาดวันไหนหักวันนั้น ทำทีหลังไม่ได้คืน · งัดร้าน +${KIND_POINTS.shop} · ลูป +${KIND_POINTS.loop}`] as [string, unknown],
+            ["กติกา", `นับรวมทั้งเดือน วันละ ${TEAM_PER_DAY} · ทำเกินวันไหนก็ชดวันที่ขาดได้ ทำชดแล้วได้แต้มคืน · งัดร้าน +${KIND_POINTS.shop} · ลูป +${KIND_POINTS.loop}`] as [string, unknown],
             ["ดูแต้มที่โดนหัก", "เว็บ → เพิ่มเติม → แต้มของฉัน"] as [string, unknown],
           ]
         : []),

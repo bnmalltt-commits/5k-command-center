@@ -18,12 +18,13 @@ export function pointsFor(type: "airdrop" | "party", kind: unknown, activityDate
 }
 
 // Team quota: every active member must earn TEAM_PER_DAY team points (shops +
-// loops, not airdrops) each Bangkok day from TEAM_RULE_START. Each day stands
-// alone: whatever that day falls short is docked (TEAM_PENALTY a point,
-// leave days included), extra points don't carry to other days, and a
-// docked day is never refunded by later work. Nothing is written to the
-// ledger: the penalty is derived from approved evidence whenever scores are
-// read, so approving evidence for a day late still fills that day.
+// loops, not airdrops) each Bangkok day from TEAM_RULE_START, counted over the
+// month as a whole: extra points on any day cover a short day, before or
+// after it. What is docked (TEAM_PENALTY a point, leave days included) is
+// how far the month's total trails TEAM_PER_DAY × finished days; a short day
+// docks at once, and later extra work gives it back. Nothing is written to
+// the ledger: the penalty is derived from approved evidence whenever scores
+// are read, so approving evidence for a day late still fills that day.
 export const TEAM_PER_DAY = 9;
 export const TEAM_PENALTY = 1;
 
@@ -33,9 +34,10 @@ const isDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
 const kindPointsSql = `CASE pa.kind WHEN 'loop' THEN ${KIND_POINTS.loop} ELSE ${KIND_POINTS.shop} END`;
 
 // Per member, per day since they became subject to the rule: that day's team
-// points, cumulative points, cumulative requirement (today's quota isn't due
-// until the day ends; days before TEAM_RULE_START only bank points) and the
-// resulting debt. Dates are inlined after
+// points (n), the month's running balance of points minus quota (today's
+// quota isn't due until the day ends), the resulting debt (how far the month
+// trails) and the change in debt that day (inc: docked when > 0, given back
+// when < 0). Dates are inlined after
 // validation so this text can be embedded in queries that bind their own `?`
 // parameters.
 function teamDebtCte(today: string) {
@@ -52,16 +54,23 @@ function teamDebtCte(today: string) {
     FROM party_activities pa JOIN party_activity_members pam ON pam.party_activity_id=pa.id
     WHERE pa.status='approved' AND pa.activity_date>='${TEAM_RULE_START}'
     GROUP BY 1,2),
-  team_short AS (
+  team_net AS (
     SELECT td.member_id, td.day, COALESCE(tc.n,0) AS n,
-      CASE WHEN td.day<>'${today}'::date THEN GREATEST(0, ${TEAM_PER_DAY}-COALESCE(tc.n,0)) ELSE 0 END AS short
+      COALESCE(tc.n,0) - CASE WHEN td.day<>'${today}'::date THEN ${TEAM_PER_DAY} ELSE 0 END AS net
     FROM team_days td
     LEFT JOIN team_counts tc ON tc.member_id=td.member_id AND tc.day=to_char(td.day,'YYYY-MM-DD')),
+  team_balance AS (
+    -- The month's running balance, and what it stood at before this day.
+    SELECT member_id, day, n,
+      SUM(net) OVER w AS balance,
+      COALESCE(SUM(net) OVER (w ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), 0) AS before
+    FROM team_net
+    WINDOW w AS (PARTITION BY member_id, date_trunc('month', day) ORDER BY day)),
   team_debt AS (
-    -- debt: points short so far this month (today isn't due until it ends).
-    SELECT member_id, day, n, short,
-      SUM(short) OVER (PARTITION BY member_id, date_trunc('month', day) ORDER BY day) AS debt
-    FROM team_short)`;
+    SELECT member_id, day, n, before,
+      GREATEST(0, -balance) AS debt,
+      GREATEST(0, -balance) - GREATEST(0, -before) AS short
+    FROM team_balance)`;
 }
 
 // Every point movement with where it came from: ledger rows dated by the
@@ -76,7 +85,7 @@ export function pointsDetailSql(today: string) {
     LEFT JOIN party_activities pa ON pl.source='party' AND pa.id=pl.source_id
   UNION ALL
   (WITH ${teamDebtCte(today)}
-    SELECT member_id, -short*${TEAM_PENALTY} AS points, to_char(day,'YYYY-MM-DD') AS day, 'penalty' AS category FROM team_debt WHERE short>0)`;
+    SELECT member_id, -short*${TEAM_PENALTY} AS points, to_char(day,'YYYY-MM-DD') AS day, CASE WHEN short>0 THEN 'penalty' ELSE 'refund' END AS category FROM team_debt WHERE short<>0)`;
 }
 
 // Every point movement as (member_id, points, day). Built on pointsDetailSql
@@ -95,11 +104,12 @@ export function teamDayResultSql(today: string, day: string) {
 }
 
 // Where each member stands today: team points earned today, points short so
-// far this month, and how many more they need before today ends. (bank stays
-// 0: extra points no longer carry over.)
+// far this month, extra points banked from earlier days (bank), and how
+// many more they need before today ends to not be docked for today.
 export function teamStatusSql(today: string) {
   return `WITH ${teamDebtCte(today)}
-    SELECT member_id, n AS today, debt, 0 AS bank, GREATEST(0, ${TEAM_PER_DAY}-n) AS needed_today
+    SELECT member_id, n AS today, debt, GREATEST(0, before) AS bank,
+      GREATEST(0, ${TEAM_PER_DAY}-n-GREATEST(0, before)) AS needed_today
     FROM team_debt WHERE day='${today}'::date`;
 }
 
