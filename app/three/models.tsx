@@ -20,7 +20,6 @@ export const METAL: Record<Tone, string> = {
 };
 const RED = "#e3141b";
 const RED_GLOW = "#ff2a2a";
-const DARK = "#26262d";
 
 // Studio reflections for metal, made once per renderer from three's built-in
 // room (nothing is fetched).
@@ -44,10 +43,87 @@ export function useStudioEnv(intensity = 0.9) {
   }, [gl, scene, intensity]);
 }
 
-// next/font gives Chakra Petch a generated family name; read it off the page.
-export const displayFont = () =>
-  (getComputedStyle(document.documentElement).getPropertyValue("--font-chakra").trim() || '"Chakra Petch"') +
-  ", system-ui, sans-serif";
+// next/font gives each face a generated family name; read it off the page.
+// Kanit is the heading face, Permanent Marker the brush face for numbers.
+const pageFont = (variable: string, fallback: string) =>
+  (getComputedStyle(document.documentElement).getPropertyValue(variable).trim() || fallback) + ", system-ui, sans-serif";
+export const displayFont = () => pageFont("--font-kanit", '"Kanit"');
+export const brushFont = () => pageFont("--font-brush", '"Permanent Marker"');
+
+// Painted surfaces shared by every prop, drawn once per page: logo red with
+// dry white strokes, ink black with faint red swipes, and off-white paper.
+// Matte (no metal), like the 5000 artwork.
+type Skin = "red" | "redDeep" | "ink" | "paper";
+const skins: Partial<Record<Skin, THREE.Texture>> = {};
+export function paintSkin(kind: Skin) {
+  if (skins[kind] || typeof document === "undefined") return skins[kind];
+  const rand = seeded({ red: 301, redDeep: 307, ink: 313, paper: 331 }[kind]);
+  const size = 256;
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  if (kind === "red" || kind === "redDeep") {
+    grain(ctx, rand, size, size, kind === "red" ? "#c8101a" : "#a80d16", 2500);
+    // Black panel frame, painted rough rather than ruled.
+    for (let i = 0; i < 4; i++) {
+      const along = i % 2 === 0;
+      const at = i < 2 ? 14 : size - 14;
+      ctx.save();
+      ctx.translate(along ? 0 : at, along ? at : 0);
+      ctx.rotate(along ? 0 : Math.PI / 2);
+      swipe(ctx, rand, -10, 0, size + 20, 26, (rand() - 0.5) * 0.02, "#0d0a0b");
+      ctx.restore();
+    }
+    swipe(ctx, rand, 30, 70 + rand() * 40, 200, 30, -0.35 + rand() * 0.15, "#f4efec");
+    swipe(ctx, rand, 60, 170 + rand() * 30, 150, 16, -0.3 + rand() * 0.2, "#f4efec");
+    splat(ctx, rand, 60 + rand() * 140, 60 + rand() * 140, 10 + rand() * 8, "#f4efec");
+    splat(ctx, rand, 40 + rand() * 170, 40 + rand() * 170, 8 + rand() * 6, "#7a0a10", 1);
+  } else if (kind === "ink") {
+    grain(ctx, rand, size, size, "#151214", 4000);
+    swipe(ctx, rand, 10, 60 + rand() * 60, 230, 22, -0.25, "rgba(227,20,27,0.55)");
+    swipe(ctx, rand, 40, 170 + rand() * 50, 180, 10, -0.2, "rgba(244,239,236,0.25)");
+    for (let i = 0; i < 30; i++) {
+      ctx.fillStyle = rand() > 0.5 ? "rgba(227,20,27,0.7)" : "rgba(244,239,236,0.5)";
+      ctx.beginPath();
+      ctx.arc(rand() * size, rand() * size, 0.6 + rand() * 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    grain(ctx, rand, size, size, "#eee9e5", 1500);
+    swipe(ctx, rand, 0, 40 + rand() * 40, 256, 40, -0.05, "rgba(170,160,156,0.25)");
+    splat(ctx, rand, 200, 210, 6, "#e3141b");
+  }
+  skins[kind] = paintCanvas(canvas);
+  return skins[kind];
+}
+
+// A painted material: one of the skins, matte, with a little self-light so
+// it reads on the dark page.
+function Painted({ skin, tint = "#ffffff", glow = 0.16, attach, side }: { skin: Skin; tint?: string; glow?: number; attach?: string; side?: THREE.Side }) {
+  const map = paintSkin(skin);
+  return <meshStandardMaterial attach={attach} map={map} color={tint} emissive="#ffffff" emissiveMap={map} emissiveIntensity={glow} roughness={0.88} metalness={0} side={side} />;
+}
+
+// A single dry brush stroke across a strip, for trims and light lines.
+let strokeTexture: THREE.Texture | null = null;
+function brushStroke() {
+  if (!strokeTexture && typeof document !== "undefined") {
+    const canvas = document.createElement("canvas");
+    canvas.width = 512;
+    canvas.height = 64;
+    swipe(canvas.getContext("2d")!, seeded(41), 0, 32, 512, 48, 0, "#e3141b");
+    strokeTexture = paintCanvas(canvas);
+  }
+  return strokeTexture;
+}
+function StrokeStrip({ width, height = 0.1, position, rotation }: { width: number; height?: number; position: [number, number, number]; rotation?: [number, number, number] }) {
+  return (
+    <mesh position={position} rotation={rotation}>
+      <planeGeometry args={[width, height]} />
+      <meshBasicMaterial map={brushStroke()} transparent depthWrite={false} toneMapped={false} side={THREE.DoubleSide} />
+    </mesh>
+  );
+}
 
 function canvasTexture(w: number, h: number, draw: (ctx: CanvasRenderingContext2D) => void) {
   const canvas = document.createElement("canvas");
@@ -106,47 +182,13 @@ export function Motion({
 // Painted like the 5000 art: a logo-red crate dragged over with dry white
 // brush strokes and splatters, black-edged panels, red-and-white canopy.
 
-// Shared painted surfaces, drawn once (every crate on the page uses them).
-let crateSkin: { side: THREE.Texture; lid: THREE.Texture } | null = null;
-function useCrateSkin() {
-  if (!crateSkin && typeof document !== "undefined") {
-    const paint = (seed: number, base: string) => {
-      const rand = seeded(seed);
-      const size = 256;
-      const canvas = document.createElement("canvas");
-      canvas.width = canvas.height = size;
-      const ctx = canvas.getContext("2d")!;
-      grain(ctx, rand, size, size, base, 2500);
-      // Black panel frame, painted rough rather than ruled.
-      for (let i = 0; i < 4; i++) {
-        const along = i % 2 === 0;
-        const at = i < 2 ? 14 : size - 14;
-        ctx.save();
-        ctx.translate(along ? 0 : at, along ? at : 0);
-        ctx.rotate(along ? 0 : Math.PI / 2);
-        swipe(ctx, rand, -10, 0, size + 20, 26, (rand() - 0.5) * 0.02, "#0d0a0b");
-        ctx.restore();
-      }
-      // Dry white strokes across the face and a few splatters.
-      swipe(ctx, rand, 30, 70 + rand() * 40, 200, 30, -0.35 + rand() * 0.15, "#f4efec");
-      swipe(ctx, rand, 60, 170 + rand() * 30, 150, 16, -0.3 + rand() * 0.2, "#f4efec");
-      splat(ctx, rand, 60 + rand() * 140, 60 + rand() * 140, 10 + rand() * 8, "#f4efec");
-      splat(ctx, rand, 40 + rand() * 170, 40 + rand() * 170, 8 + rand() * 6, "#7a0a10", 1);
-      return paintCanvas(canvas);
-    };
-    crateSkin = { side: paint(301, "#c8101a"), lid: paint(307, "#a80d16") };
-  }
-  return crateSkin;
-}
-
 // `strap` swaps the straps for another material (the mission crate tints
 // and pulses them to show a round's status).
 export function Crate({ open = 0, lidRef, strap }: { open?: number; lidRef?: Ref<THREE.Group>; strap?: THREE.Material }) {
-  const skin = useCrateSkin();
   return (
     <group>
       <RoundedBox args={[1, 0.82, 1]} radius={0.06} smoothness={3}>
-        <meshStandardMaterial map={skin?.side} emissive="#ffffff" emissiveMap={skin?.side} emissiveIntensity={0.18} roughness={0.85} metalness={0} />
+        <Painted skin="red" glow={0.18} />
       </RoundedBox>
       <mesh material={strap}>
         <boxGeometry args={[0.15, 0.84, 1.016]} />
@@ -160,7 +202,7 @@ export function Crate({ open = 0, lidRef, strap }: { open?: number; lidRef?: Ref
       <group ref={lidRef} position={[0, 0.41, -0.54]} rotation={[-open * 1.9, 0, 0]}>
         <group position={[0, 0.085, 0.54]}>
           <RoundedBox args={[1.08, 0.17, 1.08]} radius={0.04} smoothness={3}>
-            <meshStandardMaterial map={skin?.lid} emissive="#ffffff" emissiveMap={skin?.lid} emissiveIntensity={0.15} roughness={0.85} metalness={0} />
+            <Painted skin="redDeep" glow={0.15} />
           </RoundedBox>
           <mesh material={strap}>
             <boxGeometry args={[0.15, 0.18, 1.09]} />
@@ -313,11 +355,11 @@ export function Trophy({ tone = "gold" }: { tone?: Tone }) {
     <group position={[0, -0.76, 0]}>
       <mesh position={[0, 0.12, 0]}>
         <cylinderGeometry args={[0.62, 0.66, 0.24, 6]} />
-        <meshStandardMaterial color="#141418" metalness={0.7} roughness={0.4} />
+        <Painted skin="ink" />
       </mesh>
       <mesh position={[0, 0.12, 0]}>
-        <cylinderGeometry args={[0.668, 0.668, 0.05, 6, 1, true]} />
-        <meshBasicMaterial color={RED} toneMapped={false} side={THREE.DoubleSide} />
+        <cylinderGeometry args={[0.668, 0.668, 0.07, 6, 1, true]} />
+        <Painted skin="red" glow={0.3} side={THREE.DoubleSide} />
       </mesh>
       <mesh geometry={cup} position={[0, 0.24, 0]}>
         <meshStandardMaterial color={color} metalness={1} roughness={0.18} side={THREE.DoubleSide} />
@@ -376,7 +418,11 @@ function SeatFigure({ member }: { member: SeatMember }) {
     <group position={[0, 0.2, 0]}>
       <mesh position={[0, 0.2, 0]}>
         <capsuleGeometry args={[0.1, 0.16, 4, 12]} />
-        <meshStandardMaterial color={body} metalness={member.leader ? 1 : 0.2} roughness={0.3} emissive={member.leader ? "#3a2a00" : "#2a0a0e"} />
+        {member.leader ? (
+          <meshStandardMaterial color={body} metalness={1} roughness={0.3} emissive="#3a2a00" />
+        ) : (
+          <Painted skin="paper" glow={0.2} />
+        )}
       </mesh>
       {face ? (
         // Their own picture as the head, always turned to the viewer.
@@ -419,20 +465,20 @@ export function Squad({ filled, calm, members }: { filled: number; calm: boolean
     <group ref={deck} position={[0, -0.35, 0]}>
       <mesh position={[0, -0.04, 0]}>
         <cylinderGeometry args={[1.7, 1.75, 0.08, 48]} />
-        <meshStandardMaterial color="#121216" metalness={0.6} roughness={0.5} />
+        <Painted skin="ink" />
       </mesh>
       <mesh position={[0, 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[1.6, 1.66, 64]} />
-        <meshBasicMaterial color={RED} toneMapped={false} />
+        <ringGeometry args={[1.56, 1.68, 64]} />
+        <Painted skin="red" glow={0.35} />
       </mesh>
       {/* The holo table in the middle. */}
       <mesh position={[0, 0.12, 0]}>
         <cylinderGeometry args={[0.42, 0.48, 0.24, 32]} />
-        <meshStandardMaterial color={DARK} metalness={0.7} roughness={0.35} emissive="#3d0810" />
+        <Painted skin="red" glow={0.2} />
       </mesh>
       <mesh ref={holo} position={[0, 0.62, 0]}>
         <cylinderGeometry args={[0.2, 0.4, 0.75, 32, 1, true]} />
-        <meshBasicMaterial color="#ff5a68" transparent opacity={0.25} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
+        <meshBasicMaterial color="#e3141b" transparent opacity={0.25} blending={THREE.AdditiveBlending} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>
       {Array.from({ length: 5 }, (_, i) => {
         const a = -Math.PI / 2 + (i / 5) * Math.PI * 2;
@@ -442,7 +488,7 @@ export function Squad({ filled, calm, members }: { filled: number; calm: boolean
           <group key={i} position={[Math.cos(a) * 1.15, 0, Math.sin(a) * 1.15]}>
             <mesh position={[0, 0.1, 0]}>
               <cylinderGeometry args={[0.26, 0.29, 0.2, 6]} />
-              <meshStandardMaterial color="#1b1b20" metalness={0.7} roughness={0.4} />
+              <Painted skin="ink" />
             </mesh>
             <mesh position={[0, 0.205, 0]} rotation={[-Math.PI / 2, 0, 0]}>
               <ringGeometry args={[0.2, 0.26, 6]} />
@@ -467,31 +513,32 @@ export function CalendarBlock({ date }: { date: string }) {
         const valid = !Number.isNaN(when.getTime());
         const day = valid ? String(when.getUTCDate()) : "";
         const month = valid ? new Intl.DateTimeFormat("th-TH", { month: "short", timeZone: "UTC" }).format(when) : "";
-        ctx.fillStyle = "#f4f4f6";
-        ctx.fillRect(0, 0, 256, 208);
-        ctx.fillStyle = "#1a1a1f";
+        const rand = seeded(date.length * 13 + Number(day || 0));
+        grain(ctx, rand, 256, 208, "#eee9e5", 1200);
+        swipe(ctx, rand, 20, 150, 220, 34, -0.04, "rgba(227,20,27,0.85)");
+        ctx.fillStyle = "#151214";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.font = `700 120px ${displayFont()}`;
-        ctx.fillText(day, 128, 92);
-        ctx.fillStyle = "#d4162b";
-        ctx.font = `700 40px ${displayFont()}`;
-        ctx.fillText(month, 128, 176);
+        ctx.font = `400 116px ${brushFont()}`;
+        ctx.fillText(day, 128, 86);
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `italic 800 38px ${displayFont()}`;
+        ctx.fillText(month, 128, 166);
       }),
     [date],
   );
   return (
     <group position={[0, -0.1, 0]}>
       <RoundedBox args={[1.2, 1.3, 0.4]} radius={0.06} smoothness={3}>
-        <meshStandardMaterial color="#e6e6ec" roughness={0.75} />
+        <Painted skin="paper" glow={0.12} />
       </RoundedBox>
       <RoundedBox args={[1.24, 0.36, 0.44]} radius={0.06} smoothness={3} position={[0, 0.6, 0]}>
-        <meshStandardMaterial color="#d4162b" metalness={0.3} roughness={0.35} />
+        <Painted skin="red" />
       </RoundedBox>
       {[-0.3, 0.3].map((x) => (
         <mesh key={x} position={[x, 0.8, 0]} rotation={[0, Math.PI / 2, 0]}>
           <torusGeometry args={[0.11, 0.03, 10, 24]} />
-          <meshStandardMaterial color="#1b1b20" metalness={0.9} roughness={0.25} />
+          <Painted skin="ink" />
         </mesh>
       ))}
       <mesh position={[0, -0.1, 0.205]}>
@@ -515,11 +562,12 @@ export function CoinStack({ calm }: { calm: boolean }) {
         g.addColorStop(1, "#8a6408");
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, 128, 128);
-        ctx.fillStyle = "#4a3200";
-        ctx.font = `700 38px ${displayFont()}`;
+        swipe(ctx, seeded(5), 6, 66, 116, 30, -0.12, "rgba(227,20,27,0.9)");
+        ctx.fillStyle = "#ffffff";
+        ctx.font = `400 34px ${brushFont()}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("5000", 64, 68);
+        ctx.fillText("5000", 64, 66);
       }),
     [],
   );
@@ -595,10 +643,10 @@ export function ShieldBadge() {
   return (
     <group>
       <mesh geometry={body}>
-        <meshStandardMaterial color="#1b1b20" metalness={0.85} roughness={0.3} />
+        <Painted skin="ink" />
       </mesh>
       <mesh geometry={inset} position={[0, 0, 0.17]} scale={0.8}>
-        <meshStandardMaterial color="#d4162b" metalness={0.4} roughness={0.35} emissive="#5a0611" />
+        <Painted skin="red" glow={0.22} />
       </mesh>
       <mesh geometry={check} position={[0, 0.02, 0.24]} scale={1.1}>
         <meshStandardMaterial color="#ffffff" emissive="#ffd6da" emissiveIntensity={0.4} roughness={0.3} />
@@ -612,14 +660,14 @@ export function Clipboard() {
   return (
     <group>
       <RoundedBox args={[1.1, 1.4, 0.08]} radius={0.04} smoothness={3}>
-        <meshStandardMaterial color="#1d1d22" metalness={0.5} roughness={0.45} />
+        <Painted skin="ink" />
       </RoundedBox>
       <RoundedBox args={[0.5, 0.18, 0.14]} radius={0.04} smoothness={3} position={[0, 0.7, 0.03]}>
         <meshStandardMaterial color="#b9bec6" metalness={1} roughness={0.25} />
       </RoundedBox>
       <mesh position={[0, -0.07, 0.045]}>
         <planeGeometry args={[0.92, 1.08]} />
-        <meshStandardMaterial color="#f1f1f4" roughness={0.8} />
+        <Painted skin="paper" glow={0.12} />
       </mesh>
       {[0.25, 0.05, -0.15, -0.35].map((y, i) => (
         <mesh key={y} position={[-0.08 + (i % 2) * 0.04, y, 0.05]}>
@@ -665,12 +713,9 @@ export function Bars({ values, today, calm }: { values: (number | null)[]; today
     <group>
       <mesh position={[0, -0.05, 0]}>
         <boxGeometry args={[width + 0.5, 0.1, 1.3]} />
-        <meshStandardMaterial color="#121216" metalness={0.5} roughness={0.55} />
+        <Painted skin="ink" />
       </mesh>
-      <mesh position={[0, 0.002, 0.66]}>
-        <boxGeometry args={[width + 0.5, 0.02, 0.02]} />
-        <meshBasicMaterial color={RED} toneMapped={false} />
-      </mesh>
+      <StrokeStrip width={width + 0.6} height={0.22} position={[0, 0.01, 0.67]} />
       {values.map((v, i) => {
         const future = v === null;
         const h = Math.max(0.04, (Math.abs(v || 0) / max) * tall);
@@ -683,13 +728,11 @@ export function Bars({ values, today, calm }: { values: (number | null)[]; today
           }}>
             <mesh position={[0, h / 2, 0]}>
               <boxGeometry args={[0.56, h, 0.56]} />
-              <meshStandardMaterial
-                color={future ? "#1c1c22" : !v ? "#2a2a31" : minus ? "#5b1830" : isToday ? "#ff6b78" : "#d4162b"}
-                emissive={future || !v ? "#000000" : minus ? "#3a0718" : "#c8132a"}
-                emissiveIntensity={future || !v ? 0 : isToday ? 0.8 : 0.15 + glow}
-                metalness={0.35}
-                roughness={0.35}
-              />
+              {future || !v ? (
+                <meshStandardMaterial color={future ? "#1c1a1b" : "#2a2729"} roughness={0.9} />
+              ) : (
+                <Painted skin={minus ? "redDeep" : "red"} tint={minus ? "#6a3a40" : isToday ? "#ffd0d2" : "#ffffff"} glow={isToday ? 0.45 : 0.12 + glow} />
+              )}
             </mesh>
             {isToday && (
               <mesh position={[0, h + 0.03, 0]}>
@@ -710,15 +753,13 @@ export type CabinetItem = { month: string; name: string; score: number };
 
 function namePlate(item: CabinetItem) {
   return canvasTexture(384, 128, (ctx) => {
-    ctx.fillStyle = "#16161b";
-    ctx.fillRect(0, 0, 384, 128);
-    ctx.strokeStyle = METAL.gold;
-    ctx.lineWidth = 4;
-    ctx.strokeRect(4, 4, 376, 120);
+    const rand = seeded(item.month.length * 7 + item.score);
+    grain(ctx, rand, 384, 128, "#151214", 1500);
+    swipe(ctx, rand, 40, 36, 300, 30, -0.02, "rgba(227,20,27,0.9)");
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillStyle = "#ffe17a";
-    ctx.font = `700 30px ${displayFont()}`;
+    ctx.font = `italic 800 30px ${displayFont()}`;
     ctx.fillText(item.month, 192, 36);
     ctx.fillStyle = "#f4f4f6";
     ctx.font = `700 34px ${displayFont()}`;
@@ -764,14 +805,11 @@ export function Cabinet({ items, calm }: { items: CabinetItem[]; calm: boolean }
       {/* Back wall with a red light strip, and the shelf. */}
       <mesh position={[0, 1.0, -0.62]}>
         <boxGeometry args={[width + 0.6, 2.2, 0.06]} />
-        <meshStandardMaterial color="#101014" metalness={0.4} roughness={0.6} />
+        <Painted skin="ink" glow={0.1} />
       </mesh>
-      <mesh position={[0, 2.06, -0.58]}>
-        <boxGeometry args={[width + 0.6, 0.03, 0.02]} />
-        <meshBasicMaterial color={RED} toneMapped={false} />
-      </mesh>
+      <StrokeStrip width={width + 0.7} height={0.3} position={[0, 1.96, -0.58]} />
       <RoundedBox args={[width + 0.6, 0.14, 1.3]} radius={0.04} smoothness={3} position={[0, -0.07, 0]}>
-        <meshStandardMaterial color="#1b1b20" metalness={0.7} roughness={0.35} />
+        <Painted skin="ink" />
       </RoundedBox>
       <mesh position={[0, -0.005, 0.66]}>
         <boxGeometry args={[width + 0.6, 0.02, 0.02]} />
@@ -804,8 +842,8 @@ function MedalCoin({ item, x, calm, index }: { item: MedalItem; x: number; calm:
         ctx.beginPath();
         ctx.arc(64, 64, 50, 0, Math.PI * 2);
         ctx.stroke();
-        ctx.fillStyle = item.done ? "#4a3200" : "#6b6b76";
-        ctx.font = `700 58px ${displayFont()}`;
+        ctx.fillStyle = item.done ? "#e3141b" : "#6b6b76";
+        ctx.font = `400 58px ${brushFont()}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(item.icon, 64, 68);
@@ -825,11 +863,11 @@ function MedalCoin({ item, x, calm, index }: { item: MedalItem; x: number; calm:
       {/* Ribbon from the rail. */}
       <mesh position={[-0.12, 0.62, 0]} rotation={[0, 0, 0.18]}>
         <boxGeometry args={[0.16, 0.62, 0.02]} />
-        <meshStandardMaterial color={item.done ? RED : "#2a2a30"} roughness={0.6} />
+        {item.done ? <Painted skin="red" /> : <meshStandardMaterial color="#2a2a30" roughness={0.8} />}
       </mesh>
       <mesh position={[0.12, 0.62, 0]} rotation={[0, 0, -0.18]}>
         <boxGeometry args={[0.16, 0.62, 0.02]} />
-        <meshStandardMaterial color={item.done ? "#c8132a" : "#24242a"} roughness={0.6} />
+        {item.done ? <Painted skin="redDeep" /> : <meshStandardMaterial color="#24242a" roughness={0.8} />}
       </mesh>
       <group ref={coin}>
         <mesh rotation={[Math.PI / 2, 0, 0]}>
@@ -857,7 +895,7 @@ export function MedalRack({ items, calm }: { items: MedalItem[]; calm: boolean }
     <group>
       <mesh position={[0, 0.95, -0.05]}>
         <boxGeometry args={[width + 0.4, 0.06, 0.06]} />
-        <meshStandardMaterial color="#b9bec6" metalness={1} roughness={0.25} />
+        <Painted skin="ink" glow={0.2} />
       </mesh>
       {items.map((item, i) => (
         <MedalCoin key={i} item={item} index={i} calm={calm} x={(i - (items.length - 1) / 2) * step} />

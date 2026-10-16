@@ -3,7 +3,7 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Crate, METAL, Parachute, displayFont, useStudioEnv } from "./models";
+import { Crate, METAL, Parachute, brushFont, useStudioEnv } from "./models";
 import { onFx, sceneTier, type FxKind } from "./prefs";
 import { dropletMaterial, splatTexture } from "./paint";
 import { chime, pop, splash, thud, whoosh } from "./sound";
@@ -390,7 +390,7 @@ function CoinRain({ anchor, amount, low }: { anchor: Anchor; amount: number; low
     canvas.width = 256;
     canvas.height = 128;
     const c = canvas.getContext("2d")!;
-    c.font = `700 84px ${displayFont()}`;
+    c.font = `400 84px ${brushFont()}`;
     c.textAlign = "center";
     c.textBaseline = "middle";
     c.lineWidth = 10;

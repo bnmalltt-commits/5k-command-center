@@ -4,7 +4,7 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, Lightformer, RoundedBox } from "@react-three/drei";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { corsUrl } from "./models";
+import { brushFont, corsUrl } from "./models";
 import { sceneTier } from "./prefs";
 
 // Pillars and medals for the top three, drawn in an orthographic camera
@@ -19,10 +19,6 @@ const METAL: Record<number, { color: string; glow: string; text: string }> = {
 };
 const metal = (rank: number) => METAL[rank] || METAL[3];
 const DEPTH_TILT = 0.34;
-// next/font gives Chakra Petch a generated family name; read it off the page.
-const displayFont = () =>
-  (getComputedStyle(document.documentElement).getPropertyValue("--font-chakra").trim() || '"Chakra Petch"') +
-  ", system-ui, sans-serif";
 
 function offsetWithin(el: HTMLElement, root: HTMLElement) {
   let x = 0;
@@ -87,7 +83,7 @@ function numberTexture(text: string, w: number, h: number, color: string) {
   canvas.height = Math.max(32, Math.round((256 * h) / Math.max(1, w)));
   const ctx = canvas.getContext("2d")!;
   ctx.fillStyle = color;
-  ctx.font = `700 ${Math.min(canvas.height * 0.62, 150)}px ${displayFont()}`;
+  ctx.font = `400 ${Math.min(canvas.height * 0.62, 150)}px ${brushFont()}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(text, canvas.width / 2, canvas.height / 2 + 4);
@@ -113,7 +109,7 @@ function coinTexture(rank: number) {
   ctx.arc(64, 64, 50, 0, Math.PI * 2);
   ctx.stroke();
   ctx.fillStyle = m.text;
-  ctx.font = `700 64px ${displayFont()}`;
+  ctx.font = `400 64px ${brushFont()}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(String(rank), 64, 68);
@@ -328,7 +324,7 @@ export default function PodiumScene({ calm, watch }: { calm: boolean; watch: str
         <directionalLight position={[160, 420, 520]} intensity={1.6} />
         <Environment resolution={64}>
           <Lightformer intensity={2.2} position={[0, 4, 6]} scale={[12, 2, 1]} />
-          <Lightformer intensity={1.4} color="#ff4655" position={[-6, 1, 3]} scale={[2, 8, 1]} />
+          <Lightformer intensity={1.4} color="#e3141b" position={[-6, 1, 3]} scale={[2, 8, 1]} />
           <Lightformer intensity={0.9} position={[6, 1, 3]} scale={[2, 8, 1]} />
         </Environment>
         {spots.map((spot) => (
