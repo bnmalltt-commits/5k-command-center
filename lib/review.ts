@@ -106,7 +106,8 @@ export async function approveEvidence(admin: { id: unknown; display_name: string
     });
   } catch {}
   // A shop run may finish paying back a penalty: give those points back now.
-  if (type === "party" && updated.kind === "shop") await settlePenalties(credited.map((r: any) => r.member_id)).catch(() => {});
+  if (type === "party" && updated.kind === "shop")
+    await settlePenalties(credited.map((r: any) => r.member_id)).catch((error) => console.error("penalty refund failed", error));
   // Evidence is only needed until it's verified — delete it once approved
   // so storage doesn't fill up. Best-effort: never fail the approval over it.
   if (updated.image_key) await storage.delete(updated.image_key).catch(() => {});

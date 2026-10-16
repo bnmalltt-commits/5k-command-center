@@ -6,8 +6,8 @@ import { audit } from "./audit";
 // and once the member has that many shop runs approved (sent after the
 // penalty) the same points go back on, automatically.
 //
-// A penalty whose deduction was undone in the admin page no longer counts:
-// it neither shows nor refunds.
+// Undoing the deduction in the admin page cancels the penalty (and takes back
+// a refund already given), so it neither shows nor refunds.
 
 // Unique, never-reused id for a manual adjustment (see the dashboard route).
 export const adjustmentId = () => Date.now() * 1000 + Math.floor(Math.random() * 1000);
@@ -18,7 +18,7 @@ const OPEN_SQL = `SELECT p.id,p.member_id,p.points,p.shops,p.reason,p.admin_name
     (SELECT COUNT(*) FROM party_activities pa JOIN party_activity_members pam ON pam.party_activity_id=pa.id
       WHERE pam.member_id=p.member_id AND pa.kind='shop' AND pa.status='approved' AND pa.created_at>p.created_at) AS done
   FROM point_penalties p JOIN members m ON m.id=p.member_id
-  WHERE p.refunded_at IS NULL
+  WHERE p.refunded_at IS NULL AND p.cancelled_at IS NULL
     AND EXISTS (SELECT 1 FROM point_ledger l WHERE l.source='adjustment' AND l.source_id=p.ledger_source_id AND l.member_id=p.member_id)`;
 
 export type OpenPenalty = { id: string; memberId: string; name: string; points: number; shops: number; done: number; reason: string; adminName: string; createdAt: string };
@@ -70,7 +70,8 @@ export async function settlePenalties(memberIds?: unknown[]) {
     const sourceId = adjustmentId();
     const at = now();
     const [claimed] = await db.batch([
-      db.prepare("UPDATE point_penalties SET refunded_at=?,refund_source_id=? WHERE id=? AND refunded_at IS NULL").bind(at, sourceId, p.id),
+      // Re-checked under the row lock: not cancelled, deduction still there.
+      db.prepare("UPDATE point_penalties SET refunded_at=?,refund_source_id=? WHERE id=? AND refunded_at IS NULL AND cancelled_at IS NULL AND EXISTS (SELECT 1 FROM point_ledger l WHERE l.source='adjustment' AND l.source_id=point_penalties.ledger_source_id)").bind(at, sourceId, p.id),
       db.prepare("INSERT INTO point_ledger (member_id,source,source_id,points,note,created_at) SELECT ?,'adjustment',?,?,?,? WHERE EXISTS (SELECT 1 FROM point_penalties WHERE id=? AND refund_source_id=?)")
         .bind(p.memberId, sourceId, p.points, `คืนแต้มโทษ · งัดร้านครบ ${p.shops} ร้าน`, at, p.id, sourceId),
     ]);

@@ -124,7 +124,10 @@ export async function GET(request: Request) {
     // the rule starts or for a member it doesn't cover yet).
     const myTeam = await db.prepare(`SELECT * FROM (${teamStatusSql(date)}) s WHERE member_id=?`).bind(me.id).first<any>();
     // Penalties still being paid back with shop runs (mine; everyone's for admins).
-    const [myPenalties, allPenalties] = await Promise.all([openPenalties(me.id), wants.admin ? openPenalties() : null]);
+    const [myPenalties, allPenalties] = await Promise.all([
+      openPenalties(me.id).catch(() => []),
+      wants.admin ? openPenalties().catch(() => []) : null,
+    ]);
     const [adminParties, ledger, adminLeaves, pointAudit] = wants.admin
       ? await Promise.all([
           db.prepare("SELECT p.id,p.name,p.status,owner.display_name AS owner_name,COALESCE(json_agg(json_build_object('id',m.id,'name',m.display_name) ORDER BY pm.id) FILTER (WHERE m.id IS NOT NULL),'[]') AS members FROM parties p LEFT JOIN members owner ON owner.id=p.owner_member_id LEFT JOIN party_members pm ON pm.party_id=p.id LEFT JOIN members m ON m.id=pm.member_id WHERE p.status IN ('open','locked') GROUP BY p.id,owner.display_name ORDER BY p.id DESC").bind().all(),
@@ -385,8 +388,9 @@ export async function POST(request: Request) {
       if (reason.length < 2 || reason.length > 100) throw Error("กรอกเหตุผล 2–100 ตัวอักษร");
       // A deduction can be made payable with shop runs: the points come back
       // once the member has that many shop runs approved.
-      const shops = body.shops === undefined || body.shops === "" || body.shops === null ? 0 : Number(body.shops);
-      if (shops) {
+      const hasShops = body.shops !== undefined && body.shops !== null && body.shops !== "";
+      const shops = hasShops ? Number(body.shops) : 0;
+      if (hasShops) {
         if (points >= 0) throw Error("คืนแต้มด้วยงัดร้านได้เฉพาะตอนหักแต้ม");
         if (!Number.isInteger(shops) || shops < 1 || shops > 50) throw Error("จำนวนร้านต้องเป็น 1–50");
         await createPenalty(admin, memberId, -points, shops, reason);
@@ -406,7 +410,16 @@ export async function POST(request: Request) {
       // What is about to be taken back, for the audit line (read before delete).
       const undone = await db.prepare("SELECT STRING_AGG(m.display_name,', ' ORDER BY m.display_name) AS names,MAX(pl.points) AS points,MAX(pl.note) AS note FROM point_ledger pl JOIN members m ON m.id=pl.member_id WHERE pl.source=? AND pl.source_id=?").bind(source, sourceId).first<any>();
       if (source === "adjustment") {
-        const r = await db.prepare("DELETE FROM point_ledger WHERE source='adjustment' AND source_id=?").bind(sourceId).run();
+        // A penalty paid back with shop runs goes with its deduction: it is
+        // cancelled (so it can never refund) and any refund already given is
+        // taken back, in the same transaction as the delete. Cancelling first
+        // takes the penalty's row lock, so a refund racing this waits and
+        // then sees it cancelled.
+        const [, , r] = await db.batch([
+          db.prepare("UPDATE point_penalties SET cancelled_at=? WHERE ledger_source_id=? AND cancelled_at IS NULL").bind(now(), sourceId),
+          db.prepare("DELETE FROM point_ledger WHERE source='adjustment' AND source_id IN (SELECT refund_source_id FROM point_penalties WHERE ledger_source_id=? AND refund_source_id IS NOT NULL)").bind(sourceId),
+          db.prepare("DELETE FROM point_ledger WHERE source='adjustment' AND source_id=?").bind(sourceId),
+        ]);
         if (!r.meta.changes) throw Error("ไม่พบรายการแต้มนี้");
         await audit(admin, "undo", `ย้อนการปรับแต้ม ${undone?.names || ""} · ${undone?.note || ""}`, -Number(undone?.points || 0));
         return json({ ok: true });
