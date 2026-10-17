@@ -1,0 +1,99 @@
+/* ============================================================
+   5K Command — design system
+   Night-ops dark: near-black ground with a red glow, frosted
+   surfaces, one red accent used sparingly, Chakra Petch for
+   headings and numbers, IBM Plex Sans Thai for reading.
+   ============================================================ */
+
+:root {
+  color-scheme: dark;
+
+  /* Ground and surfaces, darkest to lightest. */
+  --ui-bg: #08080a;
+  --ui-card: #111114;
+  --ui-glass: rgba(17, 17, 20, 0.9);
+  --ui-raised: #1d1d23;
+  --ui-hover: rgba(255, 255, 255, 0.045);
+  --ui-line: rgba(255, 255, 255, 0.075);
+  --ui-line-strong: rgba(255, 255, 255, 0.13);
+
+  /* Text, checked against --ui-card: 17:1, 10.6:1, 6.9:1. */
+  --ui-text: #f4f4f6;
+  --ui-text-2: #c5c5ce;
+  --ui-text-3: #9b9ba8;
+
+  /* Brand red, the red of the 5000 logo (#e3141b). It carries icons, bars,
+     strokes and bold display text; filled controls under white text use the
+     fill (5.4:1); small red text on dark uses the light tint (6.1:1). */
+  --ui-red: #e3141b;
+  --ui-red-fill: #d10f16;
+  --ui-red-deep: #8f0b10;
+  --ui-red-light: #ff6b70;
+  --ui-red-soft: rgba(227, 20, 27, 0.13);
+  --ui-green: #3ddc84;
+  --ui-amber: #ffb547;
+  --ui-gold: #f5c542;
+  --ui-silver: #cfd6de;
+  --ui-bronze: #db8f52;
+  --ui-discord: #5865f2;
+
+  /* Shape and depth. */
+  --ui-radius: 18px;
+  --ui-radius-sm: 12px;
+  --ui-radius-xs: 9px;
+  --ui-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 22px 44px -24px rgba(0, 0, 0, 0.75);
+  --ui-blur: blur(18px) saturate(130%);
+
+  /* Type. Families come from next/font (app/layout.tsx). */
+  --font-display: var(--font-kanit), "Noto Sans Thai", Tahoma, sans-serif;
+  --font-body: var(--font-plex), "Noto Sans Thai", Tahoma, sans-serif;
+  --font-hud: var(--font-display);
+
+  /* shadcn/Tailwind theme hooks (kept for the @theme mapping below). */
+  --background: var(--ui-bg);
+  --foreground: var(--ui-text);
+  --card: var(--ui-card);
+  --card-foreground: var(--ui-text);
+  --popover: var(--ui-card);
+  --popover-foreground: var(--ui-text);
+  --primary: var(--ui-red-fill);
+  --primary-foreground: #ffffff;
+  --secondary: var(--ui-raised);
+  --secondary-foreground: var(--ui-text);
+  --muted: var(--ui-raised);
+  --muted-foreground: var(--ui-text-3);
+  --accent: var(--ui-raised);
+  --accent-foreground: #ffffff;
+  --destructive: var(--ui-red-fill);
+  --border: var(--ui-line-strong);
+  --input: var(--ui-line-strong);
+  --ring: var(--ui-red);
+  --radius: 0.875rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-plex), "Noto Sans Thai", Tahoma, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}

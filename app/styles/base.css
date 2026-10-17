@@ -1,0 +1,39 @@
+/* ---- Base ---------------------------------------------------------------- */
+
+html { background: var(--ui-bg); }
+body {
+  min-height: 100vh;
+  /* Black grunge with dark-red brush sweeps and paint flecks, after the 5000
+     logo: shown while the 3D scene loads, and in its place when 3D is off or
+     WebGL is missing. */
+  background:
+    linear-gradient(180deg, rgba(8, 8, 10, 0.2), rgba(8, 8, 10, 0.55)),
+    var(--ui-bg) url("/art/gen/grunge.jpg") center / cover fixed no-repeat;
+  color: var(--ui-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+@media (max-width: 1023px) {
+  body { background-attachment: scroll; background-size: 1600px auto; }
+}
+::selection { background: rgba(227, 20, 27, 0.38); color: #fff; }
+* { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
+h1, h2, h3 { text-wrap: balance; }
+
+select option,
+select optgroup { background: #1b1b20; color: var(--ui-text); }
+select option:checked { background: var(--ui-red-deep); color: #fff; }
+
+/* One focus ring for everything that can take keyboard focus. */
+:where(a, button, input, select, textarea, [role="tab"], [tabindex]):focus-visible {
+  outline: 2px solid var(--ui-red-light);
+  outline-offset: 2px;
+}
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+/* The live 3D arena (desktop) sits between the backdrop and the app. */
+.command-scene { position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
+body > main { position: relative; z-index: 1; background-color: transparent !important; }

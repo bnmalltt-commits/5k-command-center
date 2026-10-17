@@ -1,0 +1,79 @@
+/* ---- 3D moments ------------------------------------------------------------ */
+
+/* Crate drop and fireworks play in a transparent layer over the whole page. */
+.fx-layer { position: fixed; inset: 0; z-index: 96; pointer-events: none; }
+/* The 3D fireworks replace the paper confetti while the scene is moving. */
+html[data-scene-motion="full"] .celebrate__burst { display: none; }
+
+.discord-btn {
+  display: flex;
+  width: 100%;
+  min-height: 50px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #6773f5, #4f5be6);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 12px 28px -14px rgba(88, 101, 242, 0.8), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 15.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+.discord-btn:hover { filter: brightness(1.08); }
+.discord-btn:focus-visible { outline: 2px solid var(--ui-red-light); outline-offset: 3px; }
+.discord-btn:active { transform: scale(0.985); }
+.discord-btn--sm { width: auto; min-height: 36px; padding: 0 16px; border-radius: 10px; font-size: 13.5px; }
+
+.claim-list { max-height: 42vh; overflow-y: auto; border: 1px solid var(--ui-line); border-radius: 14px; background: rgba(0, 0, 0, 0.2); text-align: left; }
+.claim-list__item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--ui-line);
+  background: none;
+  color: var(--ui-text);
+  font-size: 15px;
+  text-align: left;
+  word-break: break-word;
+}
+.claim-list__item:last-child { border-bottom: 0; }
+.claim-list__item:hover,
+.claim-list__item:focus-visible { background: rgba(255, 255, 255, 0.05); outline: none; }
+.claim-list__item svg { flex-shrink: 0; color: var(--ui-text-3); }
+.text-link { border: 0; background: none; color: var(--ui-text-3); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; }
+.text-link:hover { color: var(--ui-text); }
+
+/* Banner asking to link Discord. */
+.link-discord {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(88, 101, 242, 0.45);
+  border-radius: var(--ui-radius);
+  background: linear-gradient(90deg, rgba(88, 101, 242, 0.18), rgba(88, 101, 242, 0.06));
+}
+.link-discord__icon { display: grid; width: 42px; height: 42px; flex-shrink: 0; place-items: center; border-radius: 13px; background: var(--ui-discord); color: #fff; }
+.link-discord__title { margin: 0; color: var(--ui-text); font-size: 15px; font-weight: 600; }
+.link-discord__sub { margin: 2px 0 0; color: var(--ui-text-2); font-size: 13px; }
+.link-discord__actions { display: flex; gap: 8px; margin-left: auto; }
+
+.discord-gate {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed rgba(88, 101, 242, 0.6);
+  border-radius: 14px;
+  background: rgba(88, 101, 242, 0.08);
+  text-align: center;
+}
+.discord-gate p { margin: 0; color: var(--ui-text); font-size: 14.5px; }

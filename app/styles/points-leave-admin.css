@@ -1,0 +1,52 @@
+/* ---- Points, leave, admin ----------------------------------------------------- */
+
+/* Eight admin tabs: wrap onto a second row rather than hide past the edge. */
+.admin-tabs .ui-segmented { flex-wrap: wrap; }
+.admin-tabs .ui-segmented__item { flex: 0 1 auto; }
+
+.points-split { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
+.points-split__cell { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--ui-line); border-radius: 14px; background: rgba(255, 255, 255, 0.03); }
+.points-split__cell span { color: var(--ui-text-2); font-size: 13px; }
+.points-split__cell b { color: var(--ui-green); font-family: var(--font-display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.points-split__cell.is-minus b { color: var(--ui-red-light); }
+.points-total { display: flex; align-items: baseline; gap: 10px; }
+.points-total b { color: var(--ui-text); font-family: var(--font-display); font-size: 40px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.points-total span { color: var(--ui-text-2); font-size: 14px; }
+
+.admin-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 181, 71, 0.35);
+  border-radius: 14px;
+  background: rgba(255, 181, 71, 0.08);
+}
+.admin-warning p { margin: 0; flex: 1 1 200px; color: var(--ui-amber); font-size: 13.5px; line-height: 1.55; }
+.admin-points-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.admin-party { border-bottom: 1px solid var(--ui-line); }
+.admin-party:last-child { border-bottom: 0; }
+.admin-party__members { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 20px 14px; }
+.admin-party__member {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--ui-text-2);
+  font-size: 13px;
+}
+.admin-party__member:hover:not(:disabled) { border-color: var(--ui-red); color: var(--ui-text); }
+.admin-party__member span { color: var(--ui-red-light); }
+
+.att-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.att-summary__cell { display: flex; flex-direction: column; align-items: center; padding: 10px 6px; border: 1px solid var(--ui-line); border-radius: 14px; background: rgba(255, 255, 255, 0.03); }
+.att-summary__round { color: var(--ui-text-3); font-family: var(--font-display); font-size: 12.5px; }
+.att-summary__cell b { color: var(--ui-text); font-family: var(--font-display); font-size: 22px; line-height: 1.3; }
+.att-summary__of { color: var(--ui-text-3); font-size: 12px; }
+.att-rounds { display: inline-flex; flex-shrink: 0; gap: 10px; }
+.att-rounds__item { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ui-text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
