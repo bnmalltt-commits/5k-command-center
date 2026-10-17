@@ -11,7 +11,7 @@ body {
     var(--ui-bg) url("/art/gen/grunge.jpg") center / cover fixed no-repeat;
   color: var(--ui-text);
   font-family: var(--font-body);
-  font-size: 15px;
+  font-size: var(--ui-fs-15);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }

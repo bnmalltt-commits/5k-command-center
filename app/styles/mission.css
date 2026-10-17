@@ -40,7 +40,7 @@
 @keyframes drift { 50% { transform: translateY(6px); } }
 .mission__head { position: relative; display: flex; min-height: 132px; align-items: center; gap: 18px; max-width: calc(100% - 190px); margin-bottom: 16px; }
 .mission__title { margin: 2px 0 0; color: var(--ui-text); font-family: var(--font-display); font-size: 30px; font-weight: 700; line-height: 1.15; text-wrap: balance; }
-.mission__lead { margin: 6px 0 0; color: var(--ui-text-2); font-size: 14px; }
+.mission__lead { margin: 6px 0 0; color: var(--ui-text-2); font-size: var(--ui-fs-14); }
 .mission__count { flex-shrink: 0; }
 .mission__grid { position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 @container (min-width: 520px) { .mission__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
@@ -52,7 +52,7 @@
   gap: 6px;
   padding: 12px 14px;
   border: 1px solid var(--ui-line-strong);
-  border-radius: 14px;
+  border-radius: var(--ui-radius-md);
   background: rgba(10, 10, 12, 0.82);
   color: var(--ui-text-2);
   text-align: left;
@@ -60,8 +60,8 @@
 }
 .mission__tile:hover { border-color: rgba(255, 255, 255, 0.26); }
 .mission__tile-top { display: flex; align-items: center; justify-content: space-between; }
-.mission__tile-time { color: var(--ui-text); font-family: var(--font-display); font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.mission__tile-state { font-size: 12.5px; }
+.mission__tile-time { color: var(--ui-text); font-family: var(--font-display); font-size: var(--ui-fs-20); font-weight: 700; font-variant-numeric: tabular-nums; }
+.mission__tile-state { font-size: var(--ui-fs-13); }
 .mission__tile.is-done { border-color: color-mix(in srgb, var(--ui-green) 45%, transparent); background: color-mix(in srgb, var(--ui-green) 7%, transparent); box-shadow: 0 0 18px -6px color-mix(in srgb, var(--ui-green) 50%, transparent); }
 .mission__tile.is-done .mission__tile-top,
 .mission__tile.is-done .mission__tile-state { color: var(--ui-green); }
@@ -72,13 +72,13 @@
 .mission__tile.is-active { border-color: var(--ui-red); background: color-mix(in srgb, var(--ui-red) 12%, transparent); box-shadow: 0 0 0 1px var(--ui-red), 0 0 24px -4px color-mix(in srgb, var(--ui-red) 55%, transparent); }
 .mission__tile.is-active .mission__tile-time { color: #fff; }
 .mission__submit { position: relative; display: grid; gap: 12px; margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--ui-line); }
-.mission__note { position: relative; margin: 0; color: var(--ui-text-2); font-size: 14px; }
+.mission__note { position: relative; margin: 0; color: var(--ui-text-2); font-size: var(--ui-fs-14); }
 .mission > .mission__note { margin-top: 16px; }
 @container (max-width: 640px) {
   .mission { padding: 18px; }
   .mission__art { top: -24px; right: -40px; width: 150px; opacity: 0.32; }
   .mission__head { min-height: 0; max-width: none; gap: 14px; }
-  .mission__title { font-size: 24px; }
+  .mission__title { font-size: var(--ui-fs-24); }
   .mission__head { flex-wrap: wrap; align-items: flex-start; }
   .mission__head > .min-w-0 { flex: 1 1 180px; }
 }
@@ -104,10 +104,10 @@
 }
 .hud-tile:hover { border-color: var(--ui-line-strong); background: rgba(24, 24, 29, 0.86); }
 .hud-tile .ui-eyebrow { margin: 0; }
-.hud-tile__value { color: var(--ui-text); font-family: var(--font-display); font-size: 28px; font-weight: 700; line-height: 1.15; }
+.hud-tile__value { color: var(--ui-text); font-family: var(--font-display); font-size: var(--ui-fs-28); font-weight: 700; line-height: 1.15; }
 .hud-tile__value--text { max-width: 100%; overflow: hidden; font-size: 19px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
-.hud-tile__sub { color: var(--ui-text-2); font-size: 13.5px; }
-.hud-tile__warn { color: var(--ui-red-light); font-size: 13px; }
+.hud-tile__sub { color: var(--ui-text-2); font-size: var(--ui-fs-14); }
+.hud-tile__warn { color: var(--ui-red-light); font-size: var(--ui-fs-13); }
 .hud-tile--wide { grid-column: 1 / -1; }
 .tile-ring-row { display: flex; width: 100%; align-items: center; gap: 16px; margin-top: 6px; }
 .tile-ring-row__text { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
@@ -115,10 +115,10 @@
   display: inline-flex;
   margin-top: 8px;
   padding: 6px 14px;
-  border-radius: 99px;
+  border-radius: var(--ui-radius-pill);
   background: var(--ui-red-fill);
   box-shadow: 0 8px 18px -8px color-mix(in srgb, var(--ui-red) 90%, transparent);
   color: #fff;
-  font-size: 13px;
+  font-size: var(--ui-fs-13);
   font-weight: 600;
 }

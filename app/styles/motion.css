@@ -47,11 +47,11 @@ html[data-scene="on"] { --ui-glass: rgba(15, 15, 18, 0.93); }
 /* Leave history: one block per day, everyone off that day listed inside. */
 .leave-day { display: flex; gap: 14px; padding: 14px 20px; border-top: 1px solid var(--ui-line); }
 .leave-day__body { min-width: 0; flex: 1; }
-.leave-day__head { margin: 2px 0 8px; color: var(--ui-text); font-size: 14.5px; font-weight: 600; }
+.leave-day__head { margin: 2px 0 8px; color: var(--ui-text); font-size: var(--ui-fs-14); font-weight: 600; }
 .leave-day__list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .leave-day__list li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.leave-day__list b { color: var(--ui-text); font-size: 14px; font-weight: 600; }
-.leave-day__reason { min-width: 0; flex: 1; color: var(--ui-text-3); font-size: 13px; }
+.leave-day__list b { color: var(--ui-text); font-size: var(--ui-fs-14); font-weight: 600; }
+.leave-day__reason { min-width: 0; flex: 1; color: var(--ui-text-3); font-size: var(--ui-fs-13); }
 
 /* Cards lean towards the mouse while 3D is moving, even with reduced motion
    set at the system level (that setting turns 3D motion on by choice here). */
@@ -60,7 +60,7 @@ html[data-scene-motion="full"] .podium--3d .podium__slot.tilt { transform: none;
 .podium--face-1 .podium__slot--1 .avatar,
 .podium--face-2 .podium__slot--2 .avatar,
 .podium--face-3 .podium__slot--3 .avatar { opacity: 0; }
-.trophy-cabinet { width: 100%; height: 190px; border: 1px solid var(--ui-line); border-radius: 14px; background: radial-gradient(70% 90% at 50% 100%, color-mix(in srgb, var(--ui-gold) 12%, transparent), transparent 70%), rgba(0, 0, 0, 0.3); }
+.trophy-cabinet { width: 100%; height: 190px; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-md); background: radial-gradient(70% 90% at 50% 100%, color-mix(in srgb, var(--ui-gold) 12%, transparent), transparent 70%), rgba(0, 0, 0, 0.3); }
 .scene-toggle__sound { display: inline-grid; place-items: center; width: 34px; min-height: 34px; margin-left: 2px; border: 0; border-left: 1px solid var(--ui-line); background: transparent; color: var(--ui-text-2); }
 .scene-toggle__sound svg { width: 15px; height: 15px; }
 @media (pointer: coarse) {
@@ -75,6 +75,6 @@ html[data-scene-motion="full"] .podium--3d .podium__slot.tilt { transform: none;
 .w3d--drag:active { cursor: grabbing; }
 /* Countdown chips on the mission card. */
 .mission__clock { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 0; }
-.mission__clock span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--ui-line); border-radius: 999px; background: rgba(0, 0, 0, 0.3); color: var(--ui-text-2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.mission__clock span { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-pill); background: rgba(0, 0, 0, 0.3); color: var(--ui-text-2); font-size: var(--ui-fs-13); font-variant-numeric: tabular-nums; }
 .mission__clock span.is-urgent { border-color: color-mix(in srgb, var(--ui-amber) 55%, transparent); background: color-mix(in srgb, var(--ui-amber) 12%, transparent); color: #ffd28a; }
 .mission__clock svg { width: 13px; height: 13px; }

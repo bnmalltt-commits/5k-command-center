@@ -69,8 +69,8 @@
 .hud-tile:focus-visible { -webkit-mask-box-image-source: none; }
 
 /* A penalty being paid back with shop runs, on "แต้มของฉัน". */
-.penalty-note { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--ui-red) 40%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--ui-red) 8%, transparent); }
-.penalty-note p { margin: 0; color: var(--ui-text-2); font-size: 13.5px; }
+.penalty-note { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid color-mix(in srgb, var(--ui-red) 40%, transparent); border-radius: var(--ui-radius-sm); background: color-mix(in srgb, var(--ui-red) 8%, transparent); }
+.penalty-note p { margin: 0; color: var(--ui-text-2); font-size: var(--ui-fs-14); }
 .penalty-note b { color: var(--ui-red-light); }
 
 /* First load: the 5000 logo painted in left to right with a ragged brush
@@ -105,7 +105,7 @@
   clip-path: inset(0 100% 0 0);
   animation: boot-sweep 0.7s cubic-bezier(0.5, 0, 0.2, 1) 0.9s forwards;
 }
-.boot__label { margin: 0; color: var(--ui-text-3); font-size: 13.5px; letter-spacing: 0.04em; animation: fade-in 0.4s ease 1.2s both; }
+.boot__label { margin: 0; color: var(--ui-text-3); font-size: var(--ui-fs-14); letter-spacing: 0.04em; animation: fade-in 0.4s ease 1.2s both; }
 @keyframes boot-paint { to { -webkit-mask-position: 0 0; mask-position: 0 0; } }
 @keyframes boot-sweep { to { clip-path: inset(0 0 0 0); } }
 @keyframes boot-breathe { 50% { transform: scale(1.025); filter: drop-shadow(0 12px 40px color-mix(in srgb, var(--ui-red) 45%, transparent)); } }
