@@ -212,7 +212,7 @@ body > main { position: relative; z-index: 1; background-color: transparent !imp
 .side-brand__mark { width: 66px; height: auto; flex-shrink: 0; filter: drop-shadow(0 4px 14px rgba(227, 20, 27, 0.25)); }
 .side-brand__text { display: flex; min-width: 0; flex-direction: column; line-height: 1.2; }
 .side-brand__text b { color: var(--ui-text); font-family: var(--font-display); font-size: 15px; font-weight: 700; letter-spacing: 0.08em; }
-.side-brand__text span { color: var(--ui-text-3); font-size: 11px; letter-spacing: 0.16em; }
+.side-brand__text span { color: var(--ui-text-3); font-size: 12px; letter-spacing: 0.16em; }
 .side-nav { display: grid; gap: 3px; }
 .side-nav__item {
   position: relative;
@@ -843,7 +843,7 @@ a:hover > .round-pill { filter: brightness(1.25); }
 .score-ring--half .score-ring__fill { stroke: var(--ui-amber); filter: drop-shadow(0 0 5px rgba(255, 181, 71, 0.5)); }
 .score-ring--done .score-ring__fill { stroke: var(--ui-green); filter: drop-shadow(0 0 6px rgba(61, 220, 132, 0.6)); }
 .score-ring__label { position: relative; color: var(--ui-text); font-family: var(--font-display); font-size: 19px; font-weight: 700; font-variant-numeric: tabular-nums; }
-.score-ring__label small { color: var(--ui-text-3); font-size: 11.5px; font-weight: 600; }
+.score-ring__label small { color: var(--ui-text-3); font-size: 12px; font-weight: 600; }
 
 /* Monthly rank badge, coloured by tier. */
 .rank-badge {
@@ -1544,7 +1544,7 @@ html[data-scene-motion="full"] .celebrate__burst { display: none; }
 .att-summary__cell b { color: var(--ui-text); font-family: var(--font-display); font-size: 22px; line-height: 1.3; }
 .att-summary__of { color: var(--ui-text-3); font-size: 12px; }
 .att-rounds { display: inline-flex; flex-shrink: 0; gap: 10px; }
-.att-rounds__item { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ui-text-3); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.att-rounds__item { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; color: var(--ui-text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 /* ---- สรุป page ------------------------------------------------------------- */
 
@@ -1721,6 +1721,10 @@ html[data-scene-motion="full"] .podium--3d .podium__slot.tilt { transform: none;
 .scene-toggle__sound svg { width: 15px; height: 15px; }
 @media (pointer: coarse) {
   .scene-toggle__opt, .scene-toggle__sound { min-height: 44px; min-width: 44px; }
+  /* Small and icon-only controls get a full finger-sized hit area on touch screens. */
+  .ui-btn--sm { min-height: 40px; }
+  .party-remove, .picker__clear { width: 40px; height: 40px; }
+  .icon-btn, .topbar__icon { width: 44px; height: 44px; }
 }
 /* 3D pieces turn when dragged (sideways on touch screens, so scrolling still works). */
 .w3d--drag { pointer-events: auto; cursor: grab; touch-action: pan-y; }

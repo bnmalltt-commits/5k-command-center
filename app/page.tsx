@@ -3687,6 +3687,15 @@ export default function Home() {
     setLoading(false);
     setAuthNeeded(true);
   };
+  // A short brush stroke sound on the main (red) buttons, when sound is on.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      const button = (event.target as Element | null)?.closest?.(".ui-btn--primary");
+      if (button && !(button as HTMLButtonElement).disabled) brush();
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, []);
   if (claim)
     return (
       <ClaimScreen
@@ -3699,15 +3708,6 @@ export default function Home() {
         }}
       />
     );
-  // A short brush stroke sound on the main (red) buttons, when sound is on.
-  useEffect(() => {
-    const onClick = (event: MouseEvent) => {
-      const button = (event.target as Element | null)?.closest?.(".ui-btn--primary");
-      if (button && !(button as HTMLButtonElement).disabled) brush();
-    };
-    document.addEventListener("click", onClick, true);
-    return () => document.removeEventListener("click", onClick, true);
-  }, []);
   if (!data && authNeeded)
     return (
       <main className="login-stage">
