@@ -1,0 +1,107 @@
+/* ---- Ranking -------------------------------------------------------------- */
+
+.podium {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 14px;
+  padding: 26px 20px 4px;
+  perspective: 900px;
+  perspective-origin: 50% -20%;
+}
+.podium__slot { position: relative; display: flex; min-width: 0; flex-direction: column; align-items: center; gap: 6px; text-align: center; transform-style: preserve-3d; }
+.podium__medal { width: 34px; height: 34px; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.5)); }
+.podium__slot .avatar { position: relative; z-index: 1; filter: drop-shadow(0 8px 12px rgba(0, 0, 0, 0.55)); }
+.podium__slot--1 .avatar { box-shadow: 0 0 0 3px var(--ui-gold), 0 0 30px rgba(245, 197, 66, 0.45); }
+.podium__slot--2 .avatar { box-shadow: 0 0 0 3px var(--ui-silver); }
+.podium__slot--3 .avatar { box-shadow: 0 0 0 3px var(--ui-bronze); }
+.podium__name { max-width: 100%; overflow: hidden; color: var(--ui-text); font-size: 14.5px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.podium__score { color: var(--ui-text); font-family: var(--font-display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.podium__slot--1 .podium__score { color: var(--ui-gold); font-size: 28px; text-shadow: 0 0 18px rgba(245, 197, 66, 0.4); }
+.podium__base {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 0;
+  border-radius: 12px 12px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.02) 60%, rgba(0, 0, 0, 0.3));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 26px 30px -14px rgba(0, 0, 0, 0.85);
+  transform-style: preserve-3d;
+}
+.podium__base::before {
+  content: "";
+  position: absolute;
+  right: -1px;
+  bottom: 100%;
+  left: -1px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px 6px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.18));
+  transform: rotateX(72deg);
+  transform-origin: bottom;
+}
+.podium__base::after {
+  content: attr(data-rank);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.14);
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+}
+.podium__slot--1 .podium__base { height: 76px; border-color: rgba(245, 197, 66, 0.5); background: linear-gradient(180deg, rgba(245, 197, 66, 0.26), rgba(245, 197, 66, 0.05) 60%, rgba(0, 0, 0, 0.3)); }
+.podium__slot--1 .podium__base::before { border-color: rgba(245, 197, 66, 0.55); background: linear-gradient(180deg, rgba(245, 197, 66, 0.1), rgba(255, 225, 122, 0.45)); box-shadow: 0 0 24px rgba(245, 197, 66, 0.35); }
+.podium__slot--1 .podium__base::after { color: rgba(255, 225, 122, 0.35); font-size: 40px; }
+.podium__slot--2 .podium__base { height: 54px; }
+.podium__slot--2 .podium__base::before { background: linear-gradient(180deg, rgba(207, 214, 222, 0.08), rgba(226, 232, 240, 0.35)); }
+.podium__slot--3 .podium__base { height: 38px; }
+.podium__slot--3 .podium__base::before { background: linear-gradient(180deg, rgba(219, 143, 82, 0.08), rgba(240, 168, 104, 0.35)); }
+/* 3D podium: the canvas sits behind the avatars and names and draws the
+   pillars and medals; their HTML twins keep the layout but are not shown. */
+.podium__gl { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
+.podium__gl > div { width: 100% !important; height: 100% !important; }
+.podium--3d .podium__slot { z-index: 1; }
+.podium--3d .podium__base { visibility: hidden; }
+.podium--3d .podium__medal { opacity: 0; }
+.podium--3d .podium__slot.tilt { transform: none; }
+.podium--3d .podium__slot.tilt::after { display: none; }
+
+.rank-me {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 16px 20px 6px;
+  padding: 14px 16px;
+  border: 1px solid rgba(227, 20, 27, 0.4);
+  border-radius: 16px;
+  background: linear-gradient(90deg, rgba(227, 20, 27, 0.14), rgba(227, 20, 27, 0.03));
+}
+.rank-me__pos { color: var(--ui-red-light); font-family: var(--font-display); font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rank-me__label { color: var(--ui-text); font-size: 14.5px; font-weight: 600; }
+.rank-me__hint { margin-top: 1px; color: var(--ui-text-2); font-size: 13.5px; }
+.rank-me__score { color: var(--ui-text); font-family: var(--font-display); font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Full ranking: each row carries a bar against the leader's score. */
+.rank-list { margin: 0; padding: 8px 0 6px; list-style: none; }
+.rank-list__item { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 10px 20px; }
+.rank-list__item + .rank-list__item::before { content: ""; position: absolute; top: 0; right: 20px; left: 20px; height: 1px; background: var(--ui-line); }
+.rank-list__item.is-me { background: rgba(227, 20, 27, 0.07); }
+.rank-list__main { display: grid; min-width: 0; gap: 6px; }
+.rank-list__bar { display: block; height: 4px; overflow: hidden; border-radius: 99px; background: rgba(255, 255, 255, 0.06); }
+.rank-list__bar span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, rgba(227, 20, 27, 0.5), var(--ui-red)); }
+.rank-num { display: inline-block; width: 26px; color: var(--ui-text-3); font-family: var(--font-display); font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; text-align: center; }
+.rank-num--1 { color: var(--ui-gold); font-weight: 700; }
+.rank-num--2 { color: var(--ui-silver); font-weight: 700; }
+.rank-num--3 { color: var(--ui-bronze); font-weight: 700; }
+.rank-score { color: var(--ui-text); font-family: var(--font-display); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* Right rail. */
+.rail-scroll { max-height: 420px; overflow-y: auto; }
+.rail-toggle { display: block; width: 100%; padding: 11px 20px; border: 0; border-top: 1px solid var(--ui-line); background: none; color: var(--ui-text-2); font-size: 13.5px; text-align: center; }
+.rail-toggle:hover { color: var(--ui-text); }

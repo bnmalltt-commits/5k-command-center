@@ -1,0 +1,38 @@
+/* ---- Sign-in and first sign-in ----------------------------------------------- */
+
+.login-stage { display: grid; min-height: 100vh; place-items: center; padding: 24px 16px; }
+.auth-card {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  padding: 30px 28px 26px;
+  border: 1px solid var(--ui-line-strong);
+  border-radius: 26px;
+  background: linear-gradient(180deg, rgba(23, 23, 28, 0.96), rgba(14, 14, 17, 0.97));
+  box-shadow: 0 40px 90px -30px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(227, 20, 27, 0.06);
+  text-align: center;
+  -webkit-backdrop-filter: var(--ui-blur);
+  backdrop-filter: var(--ui-blur);
+}
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  right: 22%;
+  left: 22%;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--ui-red), transparent);
+}
+/* The 5000 FIVETHOUSAND logo heads the sign-in card. */
+.auth-logo { display: block; width: min(320px, 88%); height: auto; margin: -4px auto 12px; filter: drop-shadow(0 10px 26px rgba(227, 20, 27, 0.25)); }
+.auth-card .ui-eyebrow { color: var(--ui-text-2); }
+.auth-title { margin: 6px 0 0; color: var(--ui-text); font-family: var(--font-display); font-size: 26px; font-weight: 700; }
+.auth-lead { margin: 8px 0 0; color: var(--ui-text-2); font-size: 14.5px; line-height: 1.6; }
+.auth-foot { margin-top: 18px; color: var(--ui-text-3); font-size: 12.5px; }
+.auth-steps { display: flex; justify-content: center; gap: 18px; margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--ui-line); color: var(--ui-text-2); font-size: 13px; }
+.auth-steps span { display: inline-flex; align-items: center; gap: 6px; }
+.auth-steps svg { width: 15px; height: 15px; color: var(--ui-red); }
+/* The card waits for the camera to finish flying in, then rises into place. */
+.login-stage .auth-card { transition: opacity 0.6s ease, transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+html[data-flyin="1"] .login-stage .auth-card { opacity: 0; transform: translateY(18px); }
