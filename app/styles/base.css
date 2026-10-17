@@ -7,18 +7,18 @@ body {
      logo: shown while the 3D scene loads, and in its place when 3D is off or
      WebGL is missing. */
   background:
-    linear-gradient(180deg, rgba(8, 8, 10, 0.2), rgba(8, 8, 10, 0.55)),
+    linear-gradient(180deg, color-mix(in srgb, var(--ui-bg) 20%, transparent), color-mix(in srgb, var(--ui-bg) 55%, transparent)),
     var(--ui-bg) url("/art/gen/grunge.jpg") center / cover fixed no-repeat;
   color: var(--ui-text);
   font-family: var(--font-body);
-  font-size: 15px;
+  font-size: var(--ui-fs-15);
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 @media (max-width: 1023px) {
   body { background-attachment: scroll; background-size: 1600px auto; }
 }
-::selection { background: rgba(227, 20, 27, 0.38); color: #fff; }
+::selection { background: color-mix(in srgb, var(--ui-red) 38%, transparent); color: #fff; }
 * { scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, 0.16) transparent; }
 h1, h2, h3 { text-wrap: balance; }
 
