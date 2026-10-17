@@ -193,7 +193,7 @@
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--ui-text-2);
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -253,12 +253,19 @@
 .status-pill--quiet { background: rgba(255, 255, 255, 0.07); color: var(--ui-text-2); }
 
 /* Four round chips per day (airdrop history). */
+.form-hint { margin: -4px 0 0; color: var(--ui-text-2); font-size: 13px; text-align: center; }
+.form-field { display: grid; gap: 6px; }
+.form-field[hidden] { display: none; }
+.form-field__label { color: var(--ui-text-2); font-size: 13.5px; font-weight: 500; }
+
 .round-pills { display: inline-flex; gap: 6px; }
 .round-pill {
-  display: inline-grid;
+  display: inline-flex;
   min-width: 36px;
   height: 30px;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   padding: 0 6px;
   border: 1px solid var(--ui-line-strong);
   border-radius: 9px;
@@ -273,6 +280,7 @@
 .round-pill--pending { border-color: rgba(255, 181, 71, 0.45); background: rgba(255, 181, 71, 0.12); color: var(--ui-amber); }
 .round-pill--rejected { border-color: rgba(227, 20, 27, 0.5); background: var(--ui-red-soft); color: var(--ui-red-light); }
 a:hover > .round-pill { filter: brightness(1.25); }
+.round-pill svg { width: 12px; height: 12px; stroke-width: 3; }
 
 /* Date badge (leave, points, history rows). */
 .date-badge {

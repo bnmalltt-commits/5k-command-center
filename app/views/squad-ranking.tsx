@@ -177,7 +177,11 @@ export function SquadRanking({
             }
             title={
               <span className="name-with-avatar">
-                <Avatar url={avatars[String(member.id)]} name={member.display_name} size={24} />
+                <span className="avatar-status">
+                  <Avatar url={avatars[String(member.id)]} name={member.display_name} size={24} />
+                  {member.online ? <Dot tone="green" /> : null}
+                </span>
+                {member.online ? <span className="sr-only">ออนไลน์</span> : null}
                 {member.id === highlightId ? (
                   <span className="text-[var(--ui-red-light)] font-semibold">{member.display_name} · คุณ</span>
                 ) : (
@@ -185,7 +189,6 @@ export function SquadRanking({
                 )}
               </span>
             }
-            subtitle={member.online ? "ออนไลน์" : undefined}
             trailing={
               <span className="rank-score">{Number(member.score || 0)}</span>
             }

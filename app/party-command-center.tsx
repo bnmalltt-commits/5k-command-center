@@ -245,19 +245,21 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
                   })}
                 </div>
               </div>
-              <input
-                hidden={kind !== "shop"}
-                value={shopName}
-                maxLength={60}
-                onChange={(event) => setShopName(event.target.value)}
-                placeholder="ชื่อร้านที่งัด (ไม่บังคับ)"
-                aria-label="ชื่อร้านที่งัด"
-                className="ui-input"
-              />
+              <label hidden={kind !== "shop"} className="form-field">
+                <span className="form-field__label">ชื่อร้านที่งัด (ไม่บังคับ)</span>
+                <input
+                  value={shopName}
+                  maxLength={60}
+                  onChange={(event) => setShopName(event.target.value)}
+                  placeholder="เช่น ร้านปืนกลางเมือง"
+                  className="ui-input"
+                />
+              </label>
               <Picker onChange={setActivityFile} resetToken={activityPickerReset} />
               <button disabled={busy || !activityFile} className="ui-btn ui-btn--primary ui-btn--block ui-btn--lg">
                 ส่งเข้าคิวตรวจ
               </button>
+              {!activityFile && <p className="form-hint">เลือกรูปหลักฐานก่อน แล้วปุ่มส่งจะกดได้</p>}
             </form>
           </Panel>
 

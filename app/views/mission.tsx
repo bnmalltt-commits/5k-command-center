@@ -1,6 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
-import { Check, Clock, Upload } from "lucide-react";
+import { Check, Clock, Upload, X } from "lucide-react";
 import { bangkokHour, LATE_ROUND_UNTIL_HOUR } from "@/lib/rounds";
 import { Picker, shrinkImage } from "../picker";
 import { Widget3D } from "../three/widget";
@@ -209,7 +209,7 @@ export function MissionCard({
         </span>
         <div className="min-w-0">
           <p className="ui-eyebrow">
-            แอร์ดรอป · {data.date}
+            แอร์ดรอป · <span className="whitespace-nowrap">{data.date}</span>
             {bangkokHour() < LATE_ROUND_UNTIL_HOUR ? " · 17–23 น. ยังนับเป็นของเมื่อคืน" : ""}
           </p>
           <h2 className="mission__title">
@@ -267,6 +267,7 @@ export function MissionCard({
             <Upload className="h-5 w-5" />
             {selected ? `ส่งหลักฐานรอบ ${round} ใหม่` : `ส่งหลักฐานรอบ ${round}`}
           </button>
+          {!image && <p className="form-hint">เลือกรูปหลักฐานก่อน แล้วปุ่มส่งจะกดได้</p>}
           <BatchUpload
             open={ROUNDS.filter((r) => !mine.get(r) || mine.get(r).status === "rejected")}
             onDone={onBatchDone}
@@ -295,7 +296,7 @@ export function AirdropHistory({ data }: { data: Data }) {
     <Panel
       label="AIRDROP LOG"
       title="ประวัติแอร์ดรอปของคุณ"
-      subtitle="เขียว ผ่าน · เหลือง รอตรวจ · แดง ไม่ผ่าน (แตะเพื่อดูรูป)"
+      subtitle="ติ๊กถูก = ผ่าน · นาฬิกา = รอตรวจ · กากบาท = ไม่ผ่าน · แตะรอบที่ยังไม่ผ่านเพื่อดูรูป"
       flush
     >
       {dates.length ? (
@@ -323,6 +324,7 @@ export function AirdropHistory({ data }: { data: Data }) {
                       const chip = (
                         <span className={`round-pill round-pill--${tone}`} title={`รอบ ${r} · ${label}`} aria-label={`รอบ ${r} ${label}`}>
                           {r.slice(0, 2)}
+                          {tone === "done" ? <Check aria-hidden="true" /> : tone === "pending" ? <Clock aria-hidden="true" /> : tone === "rejected" ? <X aria-hidden="true" /> : null}
                         </span>
                       );
                       // Approved photos are deleted to save space; the rest open.

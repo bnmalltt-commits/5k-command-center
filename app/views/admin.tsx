@@ -182,7 +182,7 @@ export function AdminCommandCenter({
   return (
     <>
       <Panel label="SQUAD COMMAND" flush>
-        <div className="space-y-3 p-4">
+        <div className="admin-tabs space-y-3 p-4">
           <Segmented
             label="จัดการแก๊ง"
             value={tab}
@@ -194,7 +194,7 @@ export function AdminCommandCenter({
               { id: "verify", label: "รอตรวจ", count: data.pending.length || undefined },
               { id: "attendance", label: "เช็กชื่อ", count: attCounts.missing },
               { id: "members", label: "สมาชิก", count: activeMembers.length },
-              { id: "parties", label: "ปาร์ตี้", count: data.adminParties.length },
+              { id: "parties", label: "ทีม", count: data.adminParties.length },
               { id: "points", label: "แต้ม" },
               { id: "audit", label: "ประวัติแก้แต้ม" },
               { id: "leave", label: "การลา", count: data.adminLeaves.length },
@@ -212,7 +212,7 @@ export function AdminCommandCenter({
               tab === "verify"
                 ? "ค้นหาผู้ส่งหรือรอบ"
                 : tab === "parties"
-                  ? "ค้นหาชื่อปาร์ตี้หรือสมาชิก"
+                  ? "ค้นหาชื่อทีมหรือสมาชิก"
                   : tab === "points"
                     ? "ค้นหาชื่อหรือเหตุผล"
                     : tab === "leave"
@@ -549,7 +549,7 @@ export function AdminCommandCenter({
                       }
                       className="ui-btn ui-btn--ghost ui-btn--sm"
                     >
-                      ยุบปาร์ตี้
+                      ยุบทีม
                     </button>
                   }
                 />
@@ -570,7 +570,7 @@ export function AdminCommandCenter({
                           })
                         }
                         className="admin-party__member"
-                        aria-label={`นำ ${member.name} ออกจากปาร์ตี้`}
+                        aria-label={`นำ ${member.name} ออกจากทีม`}
                       >
                         {member.name} <span aria-hidden="true">×</span>
                       </button>
@@ -582,7 +582,7 @@ export function AdminCommandCenter({
           ) : data.adminParties.length ? (
             noMatch
           ) : (
-            <EmptyState art="team" title="ไม่มีปาร์ตี้ที่กำลังใช้งาน" />
+            <EmptyState art="team" title="ไม่มีทีมที่กำลังใช้งาน" />
           ))}
 
         {tab === "points" &&

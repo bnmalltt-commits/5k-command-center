@@ -30,7 +30,7 @@
 
 /* With the live 3D arena behind, surfaces get a little more solid so bright
    hologram lines never pull text below contrast. */
-html[data-scene="on"] { --ui-glass: rgba(15, 15, 18, 0.86); }
+html[data-scene="on"] { --ui-glass: rgba(15, 15, 18, 0.93); }
 
 @media (prefers-reduced-motion: reduce) {
   *,

@@ -1,5 +1,9 @@
 /* ---- Points, leave, admin ----------------------------------------------------- */
 
+/* Eight admin tabs: wrap onto a second row rather than hide past the edge. */
+.admin-tabs .ui-segmented { flex-wrap: wrap; }
+.admin-tabs .ui-segmented__item { flex: 0 1 auto; }
+
 .points-split { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; }
 .points-split__cell { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--ui-line); border-radius: 14px; background: rgba(255, 255, 255, 0.03); }
 .points-split__cell span { color: var(--ui-text-2); font-size: 13px; }

@@ -11,7 +11,7 @@
   /* Ground and surfaces, darkest to lightest. */
   --ui-bg: #08080a;
   --ui-card: #111114;
-  --ui-glass: rgba(17, 17, 20, 0.78);
+  --ui-glass: rgba(17, 17, 20, 0.9);
   --ui-raised: #1d1d23;
   --ui-hover: rgba(255, 255, 255, 0.045);
   --ui-line: rgba(255, 255, 255, 0.075);

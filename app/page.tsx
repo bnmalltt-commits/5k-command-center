@@ -353,8 +353,8 @@ export default function Home() {
       member_delete: "ยืนยันเอาสมาชิกนี้ออกจากแก๊งใช่หรือไม่? สมาชิกจะออกจากระบบทันทีและจะไม่แสดงในรายชื่ออีก",
       member_discord_unlink: `ยืนยันยกเลิกผูก Discord ของ “${body.name}” ใช่หรือไม่?\n\nคนที่ใช้บัญชีนี้อยู่จะถูกออกจากระบบ แล้วเจ้าของตัวจริงเข้าด้วย Discord และเลือกชื่อนี้ใหม่ได้`,
       member_reactivate: `ยืนยันเอา “${body.name}” กลับเข้าแก๊งใช่หรือไม่? แต้มและประวัติเดิมจะกลับมาด้วย`,
-      admin_party_dissolve: `ยืนยันยุบปาร์ตี้ “${body.name}” ใช่หรือไม่? สมาชิกทุกคนจะออกจากทีมทันที`,
-      admin_party_remove_member: `ยืนยันนำ “${body.name}” ออกจากปาร์ตี้ “${body.partyName}” ใช่หรือไม่? ถ้าเป็นหัวหน้า ตำแหน่งจะส่งต่อให้สมาชิกคนถัดไป`,
+      admin_party_dissolve: `ยืนยันยุบทีม “${body.name}” ใช่หรือไม่? สมาชิกทุกคนจะออกจากทีมทันที`,
+      admin_party_remove_member: `ยืนยันนำ “${body.name}” ออกจากทีม “${body.partyName}” ใช่หรือไม่? ถ้าเป็นหัวหน้า ตำแหน่งจะส่งต่อให้สมาชิกคนถัดไป`,
       points_adjust: `ยืนยัน${Number(body.points) > 0 ? "เพิ่ม" : "หัก"} ${Math.abs(Number(body.points))} แต้ม ${Number(body.points) > 0 ? "ให้" : "จาก"} “${body.name}” ใช่หรือไม่?\n\nเหตุผล: ${body.reason}${body.shops ? `\nงัดร้านผ่านครบ ${body.shops} ร้าน ระบบคืน ${Math.abs(Number(body.points))} แต้มให้อัตโนมัติ` : ""}`,
       points_undo:
         body.source === "adjustment"
@@ -364,17 +364,17 @@ export default function Home() {
       admin_access: body.enabled
         ? "ยืนยันเพิ่มสิทธิ์แอดมินให้สมาชิกนี้ใช่หรือไม่?"
         : "ยืนยันถอนสิทธิ์แอดมินของสมาชิกนี้ใช่หรือไม่?",
-      party_create: `ยืนยันสร้างปาร์ตี้ “${body.name}” และเพิ่มสมาชิกที่เลือกเข้าทีมทันทีใช่หรือไม่?`,
-      party_update: `ยืนยันเปลี่ยนชื่อปาร์ตี้เป็น “${body.name}” ใช่หรือไม่?`,
-      party_lock: "ยืนยันล็อกปาร์ตี้ใช่หรือไม่? หลังล็อกจะไม่รับสมาชิกเพิ่ม",
-      party_leave: "ยืนยันออกจากปาร์ตี้ใช่หรือไม่?",
-      party_remove_member: "ยืนยันนำสมาชิกคนนี้ออกจากปาร์ตี้ใช่หรือไม่?",
-      party_invite: "ยืนยันเพิ่มสมาชิกคนนี้เข้าปาร์ตี้ทันทีใช่หรือไม่?",
-      party_join: "ยืนยันเข้าร่วมปาร์ตี้นี้ใช่หรือไม่?",
+      party_create: `ยืนยันสร้างทีม “${body.name}” และเพิ่มสมาชิกที่เลือกเข้าทีมทันทีใช่หรือไม่?`,
+      party_update: `ยืนยันเปลี่ยนชื่อทีมเป็น “${body.name}” ใช่หรือไม่?`,
+      party_lock: "ยืนยันล็อกทีมใช่หรือไม่? หลังล็อกจะไม่รับสมาชิกเพิ่ม",
+      party_leave: "ยืนยันออกจากทีมใช่หรือไม่?",
+      party_remove_member: "ยืนยันนำสมาชิกคนนี้ออกจากทีมใช่หรือไม่?",
+      party_invite: "ยืนยันเพิ่มสมาชิกคนนี้เข้าทีมทันทีใช่หรือไม่?",
+      party_join: "ยืนยันเข้าร่วมทีมนี้ใช่หรือไม่?",
       party_respond: body.accept
-        ? "ยืนยันรับคำเชิญและเข้าร่วมปาร์ตี้ใช่หรือไม่?"
-        : "ยืนยันปฏิเสธคำเชิญปาร์ตี้ใช่หรือไม่?",
-      party_dissolve: "ยืนยันยุบปาร์ตี้ใช่หรือไม่? การดำเนินการนี้ย้อนกลับไม่ได้",
+        ? "ยืนยันรับคำเชิญและเข้าร่วมทีมใช่หรือไม่?"
+        : "ยืนยันปฏิเสธคำเชิญทีมใช่หรือไม่?",
+      party_dissolve: "ยืนยันยุบทีมใช่หรือไม่? การดำเนินการนี้ย้อนกลับไม่ได้",
       leave_request: "ยืนยันบันทึกการแจ้งลานี้ใช่หรือไม่?",
     };
     return messages[action] || "ยืนยันดำเนินการนี้ใช่หรือไม่?";
@@ -562,7 +562,7 @@ export default function Home() {
       ["leave", "ห้องลา", CalendarOff, "แจ้งลาและดูประวัติการลา"],
       ["mine", "แต้มของฉัน", BarChart3, "แต้มรายวัน แยกว่าได้จากอะไร โดนหักเท่าไหร่"],
       ["log", "ประวัติการส่ง", History, "หลักฐานที่ส่งทั้งหมดและผลตรวจ"],
-      ["admin", "จัดการแก๊ง", ShieldCheck, "ตรวจหลักฐาน สมาชิก ปาร์ตี้ แต้ม"],
+      ["admin", "จัดการแก๊ง", ShieldCheck, "ตรวจหลักฐาน สมาชิก ทีม แต้ม"],
     ] as [string, string, any, string][]
   ).filter(([id]) => id !== "admin" || data.me.role === "admin");
   const inMore = view === "more" || moreNav.some(([id]) => id === view);
@@ -711,7 +711,7 @@ export default function Home() {
               {data.team?.mine && data.team.mine.debt > 0 && (
                 <button type="button" onClick={() => setView("mine")} className="topbar-stat topbar-stat--extra topbar-stat--warn">
                   <b>{data.team.mine.debt}</b>
-                  <span>ขาดทีมเดือนนี้</span>
+                  <span>คะแนนทีมที่ขาดเดือนนี้</span>
                 </button>
               )}
             </div>
