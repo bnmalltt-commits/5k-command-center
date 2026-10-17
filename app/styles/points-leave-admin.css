@@ -20,9 +20,9 @@
   justify-content: space-between;
   gap: 10px;
   padding: 12px 14px;
-  border: 1px solid rgba(255, 181, 71, 0.35);
+  border: 1px solid color-mix(in srgb, var(--ui-amber) 35%, transparent);
   border-radius: 14px;
-  background: rgba(255, 181, 71, 0.08);
+  background: color-mix(in srgb, var(--ui-amber) 8%, transparent);
 }
 .admin-warning p { margin: 0; flex: 1 1 200px; color: var(--ui-amber); font-size: 13.5px; line-height: 1.55; }
 .admin-points-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
