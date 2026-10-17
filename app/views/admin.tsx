@@ -22,7 +22,7 @@ export function AdminCommandCenter({
   onReviewTargetUsed,
 }: {
   data: Data;
-  call: (body: any) => Promise<boolean>;
+  call: (body: any, options?: { background?: boolean }) => Promise<boolean>;
   busy: boolean;
   // "airdrop-184" from a Discord "ตรวจเลย" link: open that item right away.
   reviewTarget?: string;
@@ -805,7 +805,7 @@ export function AdminCommandCenter({
           start={review.start}
           busy={busy}
           onAct={(item, action, reason) =>
-            call({ action, type: item.type, id: item.id, reason, confirmed: true })
+            call({ action, type: item.type, id: item.id, reason, confirmed: true }, { background: true })
           }
           onClose={() => setReview(null)}
         />

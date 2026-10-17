@@ -379,7 +379,9 @@ export default function Home() {
     };
     return messages[action] || "ยืนยันดำเนินการนี้ใช่หรือไม่?";
   };
-  const call = async (body: any) => {
+  // { background: true }: return as soon as the save lands and refresh the
+  // data quietly after, so the review dialog can move straight on.
+  const call = async (body: any, options?: { background?: boolean }) => {
     if (!body.confirmed && !(await confirmAsync(confirmationMessage(body))))
       return false;
     const { confirmed: _confirmed, ...payload } = body;
@@ -396,7 +398,8 @@ export default function Home() {
         x: any = await r.json();
       setNotice(x.error || x.notice || "บันทึกแล้ว");
       if (!x.error) {
-        await load();
+        if (options?.background) void load({ silent: true });
+        else await load();
         return true;
       }
       return false;

@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { db } from "./db";
 import { now, thaiDate } from "./auth";
 import { notifyApproval, notifyRejection, discordUserId } from "./notify";
@@ -70,7 +71,11 @@ export async function approveEvidence(admin: { id: unknown; display_name: string
       .bind(credited.map((r: any) => Number(r.member_id))).first<any>())?.n || "";
     await audit(admin, "approve", `ตรวจผ่าน ${kindLabel}${type === "airdrop" ? ` รอบ ${updated.round_time}` : ""} · ${updated.activity_date} · ${names}`, points);
   } catch {}
-  // The approval is committed; nothing in the Discord card may turn it into an error.
+  // The approval is committed. The Discord card, the penalty refund and the
+  // photo cleanup run after the response has gone out, so the admin moves on
+  // to the next item without waiting on Discord. Same order as before.
+  after(async () => {
+  // Nothing in the Discord card may turn the approval into an error.
   try {
     await notifyApproval({
       kind: type === "party"
@@ -111,6 +116,7 @@ export async function approveEvidence(admin: { id: unknown; display_name: string
   // Evidence is only needed until it's verified — delete it once approved
   // so storage doesn't fill up. Best-effort: never fail the approval over it.
   if (updated.image_key) await storage.delete(updated.image_key).catch(() => {});
+  });
   return { points, credited: credited.length };
 }
 
@@ -129,13 +135,14 @@ export async function rejectEvidence(admin: { id: unknown; display_name: string 
     "reject",
     `ไม่ผ่าน ${type === "party" ? (rejected.kind === "loop" ? "ลูป" : "งัดร้าน") : `แอร์ดรอปรอบ ${rejected.round_time}`} · ${rejected.activity_date} · ${people.map((p: any) => p.name).join(", ")}${reason ? ` · ${reason}` : ""}`,
   );
-  await notifyRejection({
+  // Tag the members on Discord after the response has gone out.
+  after(() => notifyRejection({
     reason,
     kind: type === "party"
       ? `${rejected.kind === "loop" ? "ลูป" : "งัดร้าน"} · ${rejected.activity_date} · ${sentAt(rejected.created_at)}`
       : `แอร์ดรอปรอบ ${rejected.round_time} · ${rejected.activity_date} · ${sentAt(rejected.created_at)}`,
     rejectedBy: admin.display_name,
     people: people.map((p: any) => ({ name: p.name, discordId: discordUserId(p.external_user_id) })),
-  });
+  }).catch((error) => console.error("rejection card failed", error)));
   return { reason };
 }
