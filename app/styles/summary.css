@@ -105,3 +105,33 @@
 .todo-table tfoot th,
 .todo-table tfoot td { border-top: 1px solid var(--ui-line-strong); border-bottom: 0; background-color: #1b1b1f; color: var(--ui-text); font-weight: 700; }
 .todo-legend { color: var(--ui-text-3); font-size: var(--ui-fs-13); line-height: 1.6; }
+
+/* Status tiles across the top of ภาพรวมแก๊ง. */
+.sum-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+@container (min-width: 720px) { .sum-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.sum-tile { display: flex; min-width: 0; flex-direction: column; gap: 2px; padding: 12px 14px; border: 1px solid var(--ui-line); border-left-width: 3px; border-radius: var(--ui-radius-md); background: rgba(255, 255, 255, 0.03); }
+.sum-tile__label { color: var(--ui-text-2); font-size: var(--ui-fs-13); font-weight: 600; }
+.sum-tile__value { color: var(--ui-text); font-family: var(--font-brush), var(--font-display), sans-serif; font-size: 28px; font-weight: 400; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.sum-tile__sub { color: var(--ui-text-2); font-size: var(--ui-fs-13); line-height: 1.4; }
+.sum-tile.is-good { border-left-color: var(--ui-green); }
+.sum-tile.is-good .sum-tile__value { color: var(--ui-green); }
+.sum-tile.is-warn { border-left-color: var(--ui-amber); }
+.sum-tile.is-warn .sum-tile__value { color: var(--ui-amber); }
+.sum-tile.is-bad { border-left-color: var(--ui-red); }
+.sum-tile.is-bad .sum-tile__value { color: var(--ui-red-light); }
+
+.sum-note { margin: 0 0 4px; color: var(--ui-text-2); font-size: var(--ui-fs-13); line-height: 1.5; }
+.sum-note--foot { padding: 0 4px; }
+.sum-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 10px 0 6px; font-size: var(--ui-fs-15); }
+.sum-line + .sum-line { border-top: 1px solid var(--ui-line); }
+.sum-line b { font-variant-numeric: tabular-nums; }
+.sum-line b.is-bad { color: var(--ui-red-light); }
+.sum-line b.is-good { color: var(--ui-green); }
+
+/* Who hasn't sent a round / is short on team points: tap to open the names. */
+.sum-missing { grid-column: 1 / -1; margin-top: -4px; }
+.sum-missing summary { display: inline-flex; min-height: 44px; align-items: center; color: var(--ui-red-light); font-size: var(--ui-fs-14); font-weight: 600; cursor: pointer; }
+.sum-missing--done { color: var(--ui-green); font-size: var(--ui-fs-13); font-weight: 600; }
+.sum-people { display: flex; flex-wrap: wrap; gap: 8px; margin: 2px 0 4px; padding: 0; list-style: none; }
+.sum-people li { display: inline-flex; max-width: 100%; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-pill); background: rgba(255, 255, 255, 0.03); color: var(--ui-text); font-size: var(--ui-fs-13); }
+.sum-people__note { color: var(--ui-red-light); font-weight: 600; white-space: nowrap; }

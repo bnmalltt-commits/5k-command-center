@@ -56,7 +56,9 @@ export async function buildSummary(date: string, isAdmin: boolean) {
   const from = [starts.week, starts.month, yesterday].sort()[0];
   const detail = pointsDetailSql(date);
 
-  const [daily, monthly, airdrops, parties, leaves, joins, team, monthRounds, monthParties] = await Promise.all([
+  // Today's rounds that have started (01:00 first: it's this date's early hours).
+  const startedRounds = ROUND_STARTS.filter((round) => round <= clock);
+  const [daily, monthly, airdrops, parties, leaves, joins, team, monthRounds, monthParties, missingToday] = await Promise.all([
     db.prepare(`SELECT d.member_id,d.day,d.category,SUM(d.points) AS points FROM (${detail}) d JOIN members m ON m.id=d.member_id WHERE m.active=1 AND d.day>=? AND d.day<=? GROUP BY 1,2,3`).bind(from, date).all<any>(),
     db.prepare(`SELECT substr(d.day,1,7) AS month,d.member_id,d.category,SUM(d.points) AS points FROM (${detail}) d JOIN members m ON m.id=d.member_id WHERE m.active=1 GROUP BY 1,2,3`).bind().all<any>(),
     db.prepare("SELECT a.activity_date AS day,a.round_time,a.status,COUNT(*) AS n FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE m.active=1 AND a.activity_date>=? AND a.activity_date<=? GROUP BY 1,2,3").bind(from, date).all<any>(),
@@ -68,7 +70,20 @@ export async function buildSummary(date: string, isAdmin: boolean) {
     // had all four rounds approved.
     db.prepare("SELECT month,member_id,SUM(n) AS rounds,COUNT(*) FILTER (WHERE n>=4) AS full_days FROM (SELECT substr(a.activity_date,1,7) AS month,a.member_id,a.activity_date,COUNT(*) AS n FROM airdrop_submissions a JOIN members m ON m.id=a.member_id WHERE m.active=1 AND a.status='approved' GROUP BY 1,2,3) x GROUP BY 1,2").bind().all<any>(),
     db.prepare("SELECT substr(activity_date,1,7) AS month,COUNT(*) AS n FROM party_activities WHERE status='approved' GROUP BY 1").bind().all<any>(),
+    // Who hasn't sent each started round today (nothing, or only a rejected
+    // photo), leaving out anyone on leave and anyone who joined after today.
+    startedRounds.length
+      ? db.prepare(
+          `SELECT r.round,m.id FROM members m CROSS JOIN unnest(?::text[]) AS r(round)
+           WHERE m.active=1 AND (m.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date<=?::date
+             AND NOT EXISTS (SELECT 1 FROM leave_requests l WHERE l.member_id=m.id AND l.leave_date=? AND l.reason<>?)
+             AND NOT EXISTS (SELECT 1 FROM airdrop_submissions a WHERE a.member_id=m.id AND a.activity_date=? AND a.round_time=r.round AND a.status<>'rejected')
+           ORDER BY m.display_name`,
+        ).bind(startedRounds, date, date, ABSENT_REASON, date).all<any>()
+      : Promise.resolve({ results: [] as any[] }),
   ]);
+  const missingBy = new Map<string, string[]>();
+  for (const row of missingToday.results) missingBy.set(row.round, [...(missingBy.get(row.round) || []), id(row.id)]);
 
   const joined = joins.results.map((row: any) => String(row.joined));
   // Leave filed by the member (or an admin) excuses the day; an automatic
@@ -127,8 +142,15 @@ export async function buildSummary(date: string, isAdmin: boolean) {
         .slice(0, 5)
         .map(([member, score]) => ({ id: member, score })),
       evidence,
-      // A round counts as sent once it's pending or approved.
-      rounds: ROUNDS.map((round) => ({ round, sent: sent.get(round) || 0, possible, due: due(round) })),
+      // A round counts as sent once it's pending or approved. Today's view
+      // lists rounds in the order they happen and who hasn't sent each.
+      rounds: (period === "day" ? ROUND_STARTS : ROUNDS).map((round) => ({
+        round,
+        sent: sent.get(round) || 0,
+        possible,
+        due: due(round),
+        ...(period === "day" && round <= clock && { missing: missingBy.get(round) || [] }),
+      })),
       leave: days.reduce((sum, day) => sum + (excused.get(day) || 0), 0),
       absent: days.reduce((sum, day) => sum + (absent.get(day) || 0), 0),
       team: { docked: docked.size, dockedDays },
@@ -152,6 +174,8 @@ export async function buildSummary(date: string, isAdmin: boolean) {
     done: quotaOn ? teamRows.filter((row) => row.short === 0).length : 0,
     owing: teamRows.filter((row) => row.debt > 0).length,
     owingTotal: teamRows.reduce((sum, row) => sum + row.debt, 0),
+    // Who still needs team points before today ends, most short first.
+    short: quotaOn ? teamRows.filter((row) => row.short > 0).sort((x, y) => y.short - x.short).map((row) => ({ id: row.id, n: row.short })) : [],
     dockedYesterday: new Set(
       daily.results.filter((row: any) => row.day === yesterday && row.category === "penalty").map((row: any) => id(row.member_id)),
     ).size,

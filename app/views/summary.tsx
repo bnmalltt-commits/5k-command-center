@@ -19,6 +19,21 @@ import {
 } from "../ui";
 import { type Data, ViewLoading, monthLabel, Meter, POINT_CATEGORIES, signed, SUMMARY_PERIODS, dayLabel, competitionRanks, memberNames } from "./shared";
 
+// One person as a small chip: picture and name, plus an optional note.
+function PersonChip({ data, id, names, note }: { data: Data; id: string; names: Map<string, string>; note?: string }) {
+  return (
+    <li className="name-with-avatar">
+      <Avatar url={data.avatars?.[id]} name={names.get(id) || "?"} size={22} />
+      <span className="truncate">{names.get(id) || "สมาชิก"}</span>
+      {note && <span className="sum-people__note">{note}</span>}
+    </li>
+  );
+}
+
+// "ภาพรวมแก๊ง": four status tiles that answer "how is the gang doing",
+// then airdrops by round (with who hasn't sent), team points (with who is
+// short), and the top earners. Colour carries meaning: green is fine, amber
+// is in progress, red needs someone to act.
 function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
   const [period, setPeriod] = useState("day");
   const p = summary.periods.find((x: any) => x.id === period) || summary.periods[0];
@@ -27,8 +42,6 @@ function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
   const label = SUMMARY_PERIODS.find((x) => x.id === p.id)!.label;
   const net = Object.values(p.points as Record<string, number>).reduce((a, b) => a + b, 0);
   const count = (status: string) => p.evidence.airdrop[status] + p.evidence.shop[status] + p.evidence.loop[status];
-  // Rounds that haven't started yet today don't count against anyone: "due"
-  // leaves them out (the server works it out per round).
   const started = (round: string) => round <= summary.clock;
   const sentAll = p.rounds.filter((r: any) => !isDay || started(r.round)).reduce((s: number, r: any) => s + r.sent, 0);
   const dueAll = p.rounds.reduce((s: number, r: any) => s + r.due, 0);
@@ -36,74 +49,53 @@ function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
   const ranks = competitionRanks(p.top);
   const t = summary.teamNow;
   const perDay = data.team?.perDay ?? 9;
+  const rate = (value: number) => (value >= 80 ? "good" : value >= 50 ? "warn" : "bad");
   const sources = POINT_CATEGORIES.filter(([id]) => p.points[id] && id !== "penalty" && id !== "refund")
     .map(([id, name]) => `${name} ${signed(p.points[id])}`)
     .join(" · ");
-  const rate = (value: number) => (value >= 80 ? "good" : value >= 50 ? "warn" : "bad");
-  // One fact per line: what it is on the left, the number on the right,
-  // green when it's good news and red when someone needs to act.
-  const facts: { label: string; value: string; tone?: string; sub?: string; meter?: [number, number] }[] = [
+  // Today: the latest round that has started is the one to watch.
+  const startedRounds = isDay ? p.rounds.filter((r: any) => started(r.round)) : [];
+  const latest = startedRounds[startedRounds.length - 1];
+  const pending = count("pending");
+
+  const tiles: { label: string; value: string; sub: string; tone?: string }[] = [
+    isDay
+      ? latest
+        ? {
+            label: `แอร์ดรอปรอบ ${latest.round}`,
+            value: `${latest.sent}/${latest.possible}`,
+            sub: latest.missing?.length ? `ยังไม่ส่ง ${latest.missing.length} คน` : "ส่งครบทุกคน",
+            tone: rate(latest.possible ? (latest.sent / latest.possible) * 100 : 100),
+          }
+        : { label: "แอร์ดรอป", value: "—", sub: "ยังไม่ถึงรอบแรกของวัน" }
+      : {
+          label: `ส่งแอร์ดรอป${label}`,
+          value: sentPct === null ? "—" : `${sentPct}%`,
+          sub: dueAll ? `${sentAll} จาก ${dueAll} ครั้ง` : "ยังไม่มีรอบ",
+          tone: sentPct === null ? undefined : rate(sentPct),
+        },
+    t.on && isDay
+      ? {
+          label: `คะแนนทีมครบ ${perDay}`,
+          value: `${t.done}/${t.subject}`,
+          sub: t.subject - t.done ? `ยังขาด ${t.subject - t.done} คน · ปิดเที่ยงคืน` : "ครบทุกคน",
+          tone: t.done === t.subject ? "good" : "warn",
+        }
+      : {
+          label: `โดนหักคะแนนทีม${label}`,
+          value: `${p.team.docked} คน`,
+          sub: p.team.docked ? `หักรวม ${-p.points.penalty} แต้ม` : "ไม่มีใครโดนหัก",
+          tone: p.team.docked ? "bad" : "good",
+        },
+    { label: `แต้มแก๊ง${label}`, value: signed(net), sub: sources || "ยังไม่มีแต้ม", tone: net < 0 ? "bad" : undefined },
     {
-      label: "ส่งแอร์ดรอปแล้ว",
-      value: sentPct === null ? "—" : `${sentPct}%`,
-      tone: sentPct === null ? undefined : rate(sentPct),
-      sub: dueAll ? `${sentAll} จาก ${dueAll} ครั้งที่ถึงรอบแล้ว` : "ยังไม่ถึงรอบแรกของวัน",
-      meter: dueAll ? [sentAll, dueAll] : undefined,
-    },
-    ...(t.on && isDay
-      ? [
-          {
-            label: `ทำคะแนนทีมครบ ${perDay} แล้ว`,
-            value: `${t.done}/${t.subject} คน`,
-            tone: rate(t.subject ? (t.done / t.subject) * 100 : 0),
-            sub: `งัดร้าน +${data.team?.points.shop ?? 3} · ลูป +${data.team?.points.loop ?? 1} · ไม่ครบโดนหักตอนเที่ยงคืน`,
-            meter: [t.done, t.subject] as [number, number],
-          },
-          {
-            label: "เมื่อวานโดนหักคะแนนทีม",
-            value: `${t.dockedYesterday} คน`,
-            tone: t.dockedYesterday ? "bad" : "good",
-          },
-        ]
-      : t.on
-        ? [
-            {
-              label: `โดนหักคะแนนทีม${label}`,
-              value: `${p.team.docked} คน`,
-              tone: p.team.docked ? "bad" : "good",
-              sub: `หักรวม ${-p.points.penalty} แต้ม`,
-            },
-          ]
-        : []),
-    ...(t.on
-      ? [
-          {
-            label: "ขาดคะแนนทีมเดือนนี้",
-            value: `${t.owing} คน`,
-            tone: t.owing ? "bad" : "good",
-            sub: t.owing ? `ขาดรวม ${t.owingTotal} คะแนน · ทำเกินชดแล้วได้คืน` : undefined,
-          },
-        ]
-      : []),
-    {
-      label: `แต้มที่แก๊งได้${label}`,
-      value: signed(net),
-      tone: net < 0 ? "bad" : undefined,
-      sub: sources || "ยังไม่มีแต้ม",
-    },
-    {
-      label: "หลักฐานตรวจผ่าน",
-      value: `${count("approved")} รายการ`,
-      sub: count("pending") || count("rejected") ? `รอตรวจ ${count("pending")} · ไม่ผ่าน ${count("rejected")}` : undefined,
-    },
-    { label: "ลา", value: `${p.leave} ครั้ง` },
-    {
-      label: "ขาด (ไม่ส่งอะไรเลยทั้งวัน)",
-      value: `${p.absent} ครั้ง`,
-      tone: p.absent ? "bad" : undefined,
-      sub: isDay ? "ของวันนี้จะนับหลังเที่ยงคืน" : undefined,
+      label: "หลักฐานรอตรวจ",
+      value: `${pending}`,
+      sub: `ผ่านแล้ว ${count("approved")} · ไม่ผ่าน ${count("rejected")}`,
+      tone: pending ? "warn" : "good",
     },
   ];
+
   return (
     <div className="space-y-4 p-4">
       <div className="sum-toolbar">
@@ -112,40 +104,92 @@ function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
           {isDay ? `${dayLabel(p.to)} · ถึง ${summary.clock} น.` : `${dayLabel(p.from)} – ${dayLabel(p.to)}`}
         </span>
       </div>
+
+      <ul className="sum-tiles">
+        {tiles.map((tile) => (
+          <li key={tile.label} className={`sum-tile ${tile.tone ? `is-${tile.tone}` : ""}`}>
+            <span className="sum-tile__label">{tile.label}</span>
+            <b className="sum-tile__value">{tile.value}</b>
+            <span className="sum-tile__sub">{tile.sub}</span>
+          </li>
+        ))}
+      </ul>
+
       <div className="sum-cols">
-        <section className="sum-card">
-          <h3 className="sum-title">สรุป{label}</h3>
-          <ul className="sum-facts">
-            {facts.map((fact) => (
-              <li key={fact.label} className={`sum-fact ${fact.tone ? `is-${fact.tone}` : ""}`}>
-                <span className="sum-fact__text">
-                  <span className="sum-fact__label">{fact.label}</span>
-                  {fact.sub && <span className="sum-fact__sub">{fact.sub}</span>}
-                </span>
-                <b className="sum-fact__value">{fact.value}</b>
-                {fact.meter && <Meter value={fact.meter[0]} max={fact.meter[1]} label={fact.label} />}
-              </li>
-            ))}
-          </ul>
-        </section>
         <div className="space-y-4">
           <section className="sum-card">
-            <h3 className="sum-title">ส่งแอร์ดรอปแต่ละรอบ</h3>
+            <h3 className="sum-title">แอร์ดรอป{label}</h3>
+            <p className="sum-note">
+              {isDay ? "เรียงตามเวลา · กด “ยังไม่ส่ง” เพื่อดูชื่อ" : "ส่งแล้วเทียบกับรอบที่ถึงแล้ว (ไม่นับคนที่ลา)"}
+            </p>
             <ul className="sum-bars">
               {p.rounds.map((r: any) => {
-                // Today: out of everyone expected. Week/month: out of what was due.
                 const of = isDay ? r.possible : r.due;
-                const waiting = isDay && !started(r.round) && r.sent === 0;
+                const waiting = isDay && !started(r.round);
                 return (
                   <li key={r.round} className={waiting ? "is-waiting" : ""}>
                     <span className="sum-bars__round">{r.round}</span>
                     <Meter value={r.sent} max={of} label={`รอบ ${r.round} ส่งแล้ว ${r.sent} จาก ${of}`} />
                     <span className="sum-bars__count">{waiting ? "ยังไม่ถึง" : `${r.sent}/${of}`}</span>
+                    {r.missing?.length > 0 && (
+                      <details className="sum-missing" open={r === latest}>
+                        <summary>ยังไม่ส่ง {r.missing.length} คน</summary>
+                        <ul className="sum-people">
+                          {r.missing.map((id: string) => (
+                            <PersonChip key={id} data={data} id={id} names={names} />
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                    {r.missing?.length === 0 && <span className="sum-missing sum-missing--done">ส่งครบทุกคน</span>}
                   </li>
                 );
               })}
             </ul>
           </section>
+
+          {t.on && (
+            <section className="sum-card">
+              <h3 className="sum-title">คะแนนทีม</h3>
+              <p className="sum-note">
+                วันละ {perDay} คะแนน · งัดร้าน +{data.team?.points.shop ?? 3} · ลูป +{data.team?.points.loop ?? 1} · ทำเกินวันไหนก็ชดวันที่ขาดในเดือนเดียวกันได้
+              </p>
+              {isDay && (
+                <>
+                  <div className="sum-line">
+                    <span>ครบแล้ววันนี้</span>
+                    <b>
+                      {t.done}/{t.subject} คน
+                    </b>
+                  </div>
+                  <Meter value={t.done} max={t.subject} label="คะแนนทีมครบวันนี้" />
+                  {t.short?.length > 0 && (
+                    <details className="sum-missing">
+                      <summary>ยังไม่ครบ {t.short.length} คน (ขาดอีกกี่คะแนน)</summary>
+                      <ul className="sum-people">
+                        {t.short.map((row: any) => (
+                          <PersonChip key={row.id} data={data} id={row.id} names={names} note={`ขาด ${row.n}`} />
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                </>
+              )}
+              <div className="sum-line">
+                <span>เดือนนี้ยังติดลบ</span>
+                <b className={t.owing ? "is-bad" : "is-good"}>{t.owing ? `${t.owing} คน · รวม ${t.owingTotal} คะแนน` : "ไม่มี"}</b>
+              </div>
+              {isDay && (
+                <div className="sum-line">
+                  <span>เมื่อวานโดนหัก</span>
+                  <b className={t.dockedYesterday ? "is-bad" : "is-good"}>{t.dockedYesterday ? `${t.dockedYesterday} คน` : "ไม่มี"}</b>
+                </div>
+              )}
+            </section>
+          )}
+        </div>
+
+        <div className="space-y-4">
           <section className="sum-card">
             <h3 className="sum-title">ได้แต้มเยอะสุด{label}</h3>
             {p.top.length ? (
@@ -168,6 +212,13 @@ function SummaryOverview({ data, summary }: { data: Data; summary: any }) {
               <p className="sum-empty">ยังไม่มีใครได้แต้ม{label}</p>
             )}
           </section>
+          {(p.leave > 0 || p.absent > 0) && (
+            <p className="sum-note sum-note--foot">
+              {p.leave > 0 && `ลา ${p.leave} ครั้ง`}
+              {p.leave > 0 && p.absent > 0 && " · "}
+              {p.absent > 0 && `ขาด (ไม่ส่งอะไรเลยทั้งวัน) ${p.absent} ครั้ง`}
+            </p>
+          )}
         </div>
       </div>
     </div>
