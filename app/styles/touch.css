@@ -1,0 +1,27 @@
+/* Touch and accessibility pass (second ui-ux-pro-max audit).
+   Phones: 16px text in fields so iOS doesn't zoom in on tap, and the
+   controls people tap most at least 44px tall. */
+@media (max-width: 639px), (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  select,
+  textarea { font-size: 16px !important; }
+  .ui-segmented__item,
+  .ui-btn--sm,
+  .ui-chip,
+  .present-chip,
+  .member-picks > button,
+  .picker-paste { min-height: 44px; }
+}
+
+/* Keyboard focus inside a rough-edged card: the card goes back to a smooth
+   edge so no focus ring is cut by the painted mask. */
+.ui-panel:has(:focus-visible),
+.mission:has(:focus-visible),
+.command-sidebar:has(:focus-visible),
+.ui-dialog:has(:focus-visible) { -webkit-mask-box-image-source: none; }
+
+/* Visible field labels (not just a placeholder that vanishes on typing). */
+.field-label { display: grid; gap: 6px; min-width: 0; flex: 1; }
+.field-label > span { color: var(--ui-text-2); font-size: var(--ui-fs-13); font-weight: 600; }
+.form-row > .field-label { min-width: 200px; }
+.admin-points-form { align-items: end; }

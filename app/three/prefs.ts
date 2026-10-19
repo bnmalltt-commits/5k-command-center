@@ -22,6 +22,10 @@ export function getSceneMode(): SceneMode {
     const saved = localStorage.getItem(KEY);
     if (saved === "full" || saved === "calm" || saved === "off") return saved;
   } catch {}
+  // Until someone picks, a device set to reduce motion gets the still scene.
+  try {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return "calm";
+  } catch {}
   return "full";
 }
 

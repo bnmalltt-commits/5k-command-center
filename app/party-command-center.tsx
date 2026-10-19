@@ -360,16 +360,18 @@ export function PartyCommandCenter({ data, members, call, busy, onSubmit }: Prop
             }}
           >
             <div className="form-row">
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                required
-                minLength={2}
-                maxLength={40}
-                placeholder="ตั้งชื่อทีม"
-                aria-label="ชื่อทีม"
-                className="ui-input"
-              />
+              <label className="field-label">
+                <span>ชื่อทีม</span>
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  required
+                  minLength={2}
+                  maxLength={40}
+                  placeholder="เช่น ทีมแดงเดือด"
+                  className="ui-input"
+                />
+              </label>
               <button disabled={busy} className="ui-btn ui-btn--primary">
                 สร้างทีม
               </button>

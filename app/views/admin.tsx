@@ -328,56 +328,59 @@ export function AdminCommandCenter({
                 });
               }}
             >
-              <select
-                required
-                value={pointMember}
-                onChange={(event) => setPointMember(event.target.value)}
-                className="ui-input"
-                aria-label="สมาชิก"
-              >
-                <option value="">เลือกสมาชิก</option>
-                {activeMembers.map((member: any) => (
-                  <option key={member.id} value={String(member.id)}>
-                    {member.display_name}
-                  </option>
-                ))}
-              </select>
-              <input
-                required
-                type="number"
-                inputMode="numeric"
-                min={-100}
-                max={100}
-                step={1}
-                value={pointValue}
-                onChange={(event) => setPointValue(event.target.value)}
-                placeholder="แต้ม เช่น 3 หรือ -3"
-                className="ui-input"
-                aria-label="จำนวนแต้ม"
-              />
-              <input
-                required
-                minLength={2}
-                maxLength={100}
-                value={pointReason}
-                onChange={(event) => setPointReason(event.target.value)}
-                placeholder="เหตุผล"
-                className="ui-input"
-                aria-label="เหตุผล"
-              />
-              {Number(pointValue) < 0 && (
+              <label className="field-label">
+                <span>สมาชิก</span>
+                <select required value={pointMember} onChange={(event) => setPointMember(event.target.value)} className="ui-input">
+                  <option value="">เลือกสมาชิก</option>
+                  {activeMembers.map((member: any) => (
+                    <option key={member.id} value={String(member.id)}>
+                      {member.display_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field-label">
+                <span>แต้ม (ติดลบ = หัก)</span>
                 <input
+                  required
                   type="number"
                   inputMode="numeric"
-                  min={1}
-                  max={50}
+                  min={-100}
+                  max={100}
                   step={1}
-                  value={pointShops}
-                  onChange={(event) => setPointShops(event.target.value)}
-                  placeholder="คืนแต้มเมื่องัดร้านครบ…ร้าน (ไม่ใส่ = ไม่คืน)"
+                  value={pointValue}
+                  onChange={(event) => setPointValue(event.target.value)}
+                  placeholder="เช่น 3 หรือ -3"
                   className="ui-input"
-                  aria-label="จำนวนร้านที่ต้องงัดเพื่อได้แต้มคืน"
                 />
+              </label>
+              <label className="field-label">
+                <span>เหตุผล</span>
+                <input
+                  required
+                  minLength={2}
+                  maxLength={100}
+                  value={pointReason}
+                  onChange={(event) => setPointReason(event.target.value)}
+                  placeholder="เช่น ลงโทษ หรือ ช่วยงานแก๊ง"
+                  className="ui-input"
+                />
+              </label>
+              {Number(pointValue) < 0 && (
+                <label className="field-label">
+                  <span>คืนแต้มเมื่องัดร้านครบ (ร้าน) · ไม่ใส่ = ไม่คืน</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={50}
+                    step={1}
+                    value={pointShops}
+                    onChange={(event) => setPointShops(event.target.value)}
+                    placeholder="เช่น 5"
+                    className="ui-input"
+                  />
+                </label>
               )}
               <button disabled={busy} className="ui-btn ui-btn--primary">
                 บันทึกแต้ม
