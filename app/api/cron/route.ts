@@ -96,6 +96,42 @@ async function roundReminders(nowMs: number) {
   return done;
 }
 
+// An hour after the 20:00 and 23:00 rounds start (until 90 minutes in):
+// tag who hasn't sent any evidence for that round yet. Anyone on leave that
+// day, or who joined after it, is left out. The 23:00 card lands after
+// midnight, so the round's date is worked out from its start time.
+const MISSED_AFTER_MIN = 60;
+async function missedRounds(nowMs: number) {
+  const done: string[] = [];
+  for (const date of [bkkDateOf(nowMs), bkkDateOf(nowMs - 86400_000)]) {
+    for (const round of REMINDED_ROUNDS) {
+      const due = bkkTime(date, round) + MISSED_AFTER_MIN * 60_000;
+      if (nowMs < due || nowMs >= due + 30 * 60_000) continue;
+      const missed = (await db.prepare(
+        `SELECT m.display_name,m.external_user_id FROM members m
+         WHERE m.active=1 AND (m.created_at::timestamptz AT TIME ZONE 'Asia/Bangkok')::date <= ?::date
+           AND NOT EXISTS (SELECT 1 FROM leave_requests l WHERE l.member_id=m.id AND l.leave_date=?)
+           AND NOT EXISTS (SELECT 1 FROM airdrop_submissions a WHERE a.member_id=m.id AND a.activity_date=? AND a.round_time=?)
+         ORDER BY m.display_name`
+      ).bind(date, date, date, round).all<any>()).results;
+      if (!missed.length) continue;
+      const sent = await send(`missed:${date}:${round}`, {
+        title: `🚨 ยังไม่ส่งแอร์ดรอปรอบ ${round}`,
+        lines: [
+          ["วันที่", date],
+          ["ยังไม่ส่ง", `${missed.length} คน`],
+          ...nameLines("รายชื่อ", missed.map((m: any) => m.display_name)),
+          ["ส่งตอนนี้ยังทัน", "ส่งรูปหลักฐานรอบนี้ในเว็บได้ · ติดธุระแจ้งลาในห้องลา"],
+        ],
+        color: BRAND_RED,
+        mention: mentions(missed),
+      });
+      if (sent) done.push(`missed ${date} ${round}: ${missed.length}`);
+    }
+  }
+  return done;
+}
+
 // 21:45–23:45: tag who still needs team points to avoid tonight's deduction.
 async function shopReminder(nowMs: number) {
   const date = bkkDateOf(nowMs);
@@ -346,6 +382,7 @@ export async function GET(request: Request) {
   // stop the ones after it from running on this tick.
   const jobs: [string, (ms: number) => Promise<string[]>][] = [
     ["rounds", roundReminders],
+    ["missed", missedRounds],
     ["shop", shopReminder],
     ["winners", monthlyWinners],
     ["absent", autoAbsence],
